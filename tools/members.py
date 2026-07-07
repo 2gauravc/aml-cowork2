@@ -2,6 +2,11 @@
 """
 Fetch and clean company members from the KYC Public API.
 
+Use this tool for the concise compliance view: direct controlling members,
+shareholders / beneficial owners, ultimate beneficial owners, KYC status,
+AML flags, addresses, and source registry details. For a deeper recursive
+ownership chain that expands corporate shareholders, use tools/orgchart.py.
+
 The main callable for future LLM tool binding is:
     get_company_members_by_name(company_name, jurisdiction)
 
@@ -58,6 +63,11 @@ def get_company_members_by_name(
     Creates a company KYC case by company name and jurisdiction, waits for the
     case to be ready, then returns the company's controlling members,
     shareholders / beneficial owners, and ultimate beneficial owners.
+
+    Use this when the user needs a concise KYC / AML review list. It focuses on
+    members and compliance details, not the full recursive ownership tree. Use
+    get_company_org_chart_by_name when the user asks who owns the owners, wants
+    an ownership chain, or needs a more detailed corporate structure.
 
     Args:
         company_name (str): The company name to search for in the registry.

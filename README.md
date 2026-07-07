@@ -32,15 +32,69 @@ The LLM-facing function is:
 get_company_members_by_name(company_name, jurisdiction)
 ```
 
+## Org Chart Tool
+
+`tools/orgchart.py` creates a KYC company case from a company name and
+jurisdiction, waits for the case to become ready, then prints cleaned recursive
+ownership tree JSON for the company org chart.
+
+The LLM-facing function is:
+
+```python
+get_company_org_chart_by_name(company_name, jurisdiction)
+```
+
+## Customer Static Tool
+
+`tools/customer_static.py` creates a KYC company case from a company name and
+jurisdiction, waits for the case to become ready, then prints cleaned static
+company profile JSON. Use it for company type, registration number, company
+status, registration/incorporation dates, total shares, share capital, activity
+type, previous names, and registered address.
+
+The tool normalizes common registry field names into stable output keys and
+also includes the raw `registry_properties` block, so registry-specific fields
+are still available when a jurisdiction uses different labels.
+
+The LLM-facing function is:
+
+```python
+get_customer_static_by_name(company_name, jurisdiction)
+```
+
+## Case Finder Tool
+
+`tools/case_finder.py` helps inspect the sandbox case list without dumping the
+entire JSON file. It returns summary counts, a small set of selected cases, and
+notes when more matches are available.
+
+The LLM-facing function is:
+
+```python
+find_test_cases(query=None, jurisdiction=None, country=None, origin=None)
+```
+
+Examples:
+
+```bash
+python tools/case_finder.py
+python tools/case_finder.py --jurisdiction HK
+python tools/case_finder.py --query ubizense
+python tools/case_finder.py --origin golden
+```
+
 ## Run
 
 Live API call:
 
 ```bash
 python tools/members.py --company-name "Ubizense Limited" --jurisdiction HK
+python tools/orgchart.py --company-name "Ubizense Limited" --jurisdiction HK
+python tools/customer_static.py --company-name "Ubizense Limited" --jurisdiction HK
 ```
 
-By default, the tool waits up to 5 minutes for the created case to become ready:
+By default, the API-backed tools wait up to 5 minutes for the created case to
+become ready:
 
 ```text
 60 attempts x 5 seconds = 300 seconds
@@ -54,16 +108,33 @@ python tools/members.py \
   --jurisdiction HK \
   --poll-attempts 120 \
   --poll-interval-seconds 5
+
+python tools/orgchart.py \
+  --company-name "Ubizense Limited" \
+  --jurisdiction HK \
+  --poll-attempts 120 \
+  --poll-interval-seconds 5
+
+python tools/customer_static.py \
+  --company-name "Ubizense Limited" \
+  --jurisdiction HK \
+  --poll-attempts 120 \
+  --poll-interval-seconds 5
 ```
 
 Offline cleanup test using the saved sample response:
 
 ```bash
 python tools/members.py --from-file notebooks/members.json
+python tools/orgchart.py --from-file notebooks/org-chart.json
+python tools/customer_static.py --from-file company-detail.json
 ```
 
 ## Output
 
-The command prints JSON to the screen. On success, it includes cleaned member
-lists and case metadata. On failure, it returns a JSON object with an `error`
-field and context so an LLM can explain or recover from the issue.
+The commands print JSON to the screen. On success, the members tool includes
+cleaned member lists and case metadata, the org-chart tool includes a cleaned
+recursive ownership tree and case metadata, and the customer-static tool
+includes cleaned static company profile fields and case metadata. On failure,
+they return a JSON object with an `error` field and context so an LLM can
+explain or recover from the issue.
