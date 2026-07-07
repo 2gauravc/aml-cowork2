@@ -1,0 +1,2480 @@
+[
+  {
+    "name": "CROPWELL BISHOP CREAMERY LIMITED",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "00364890",
+    "origin": "golden"
+  },
+  {
+    "name": "Ubizense Limited",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "69293323",
+    "origin": "golden"
+  },
+  {
+    "name": "SC ENGINEERING PRIVATE LIMITED",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "200815219G",
+    "origin": "golden"
+  },
+  {
+    "name": "Yangtze River Manufacturing Co Ltd",
+    "jurisdiction": "CN",
+    "countryName": "China",
+    "registrationNumber": "91310000MA1FL0XY2B",
+    "origin": "synthetic"
+  },
+  {
+    "name": "Thames Valley Logistics Ltd",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "08123456",
+    "origin": "synthetic"
+  },
+  {
+    "name": "Dragon Pearl Holdings Limited",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "0987654",
+    "origin": "synthetic"
+  },
+  {
+    "name": "Victoria Harbour Trading Co Limited",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "1122334",
+    "origin": "synthetic"
+  },
+  {
+    "name": "HYTEC INTERNATIONAL (L.L.C.)",
+    "jurisdiction": "AE",
+    "countryName": "United Arab Emirates",
+    "registrationNumber": "10784991",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MUBADALA TREASURY HOLDING COMPANY L.L.C.",
+    "jurisdiction": "AE",
+    "countryName": "United Arab Emirates",
+    "registrationNumber": "11074646",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DRAGON OIL SANDUQLI LIMITED",
+    "jurisdiction": "AF",
+    "countryName": "Afghanistan",
+    "registrationNumber": "71072",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PARADISE HOLDING COMPANY LTD.",
+    "jurisdiction": "AI",
+    "countryName": "Anguilla",
+    "registrationNumber": "1010013",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AIR ALBANIA",
+    "jurisdiction": "AL",
+    "countryName": "Albania",
+    "registrationNumber": "L82113028I",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "«ԳԵՈՆ» Սահմանափակ պատասխանատվությամբ ընկերություն",
+    "jurisdiction": "AM",
+    "countryName": "Armenia",
+    "registrationNumber": "264.110.1245150",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BD CINE S.R.L.",
+    "jurisdiction": "AR",
+    "countryName": "Argentina",
+    "registrationNumber": "30707403493",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SPELTIBUS GMBH",
+    "jurisdiction": "AT",
+    "countryName": "Austria",
+    "registrationNumber": "287847 f",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MACQUARIE FINANCIAL HOLDINGS PTY LIMITED",
+    "jurisdiction": "AU",
+    "countryName": "Australia",
+    "registrationNumber": "124 071 398",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MACQUARIE GROUP LIMITED",
+    "jurisdiction": "AU",
+    "countryName": "Australia",
+    "registrationNumber": "122 169 279",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MACQUARIE PRINCIPAL FINANCE PTY LIMITED",
+    "jurisdiction": "AU",
+    "countryName": "Australia",
+    "registrationNumber": "629 759 600",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PRICEWATERHOUSECOOPERS",
+    "jurisdiction": "AU",
+    "countryName": "Australia",
+    "registrationNumber": "0238281P",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ANTRACO ARUBA GROUP",
+    "jurisdiction": "AW",
+    "countryName": "Aruba",
+    "registrationNumber": "H5956.0",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MAC4U IT SERVICES VBA",
+    "jurisdiction": "AW",
+    "countryName": "Aruba",
+    "registrationNumber": "H45746.0",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "\"CASPİAN FİSH CO AZERBAİJAN\" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ",
+    "jurisdiction": "AZ",
+    "countryName": "Azerbaijan",
+    "registrationNumber": "3100064091",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "\"AGROKOMERC\" d.o.o. za proizvodnju, trgovinu i usluge Brčko distrikt BiH",
+    "jurisdiction": "BA",
+    "countryName": "Bosnia and Herzegovina",
+    "registrationNumber": "96-01-0055-18",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EARTH TECH INTERNATIONAL LTD.",
+    "jurisdiction": "BD",
+    "countryName": "Bangladesh",
+    "registrationNumber": "C-22543",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "JVG MANAGEMENT",
+    "jurisdiction": "BE",
+    "countryName": "Belgium",
+    "registrationNumber": "0764.938.733",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "СУИКС БИОФАРМА",
+    "jurisdiction": "BG",
+    "countryName": "Bulgaria",
+    "registrationNumber": "204684989",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "INVESTCORP GO COMPANY 2 W.L.L",
+    "jurisdiction": "BH",
+    "countryName": "Bahrain",
+    "registrationNumber": "66848-1",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "3D TECHLOGIS",
+    "jurisdiction": "BJ",
+    "countryName": "Benin",
+    "registrationNumber": "RB/COT/16 B 17030",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CISCO WORLDWIDE HOLDINGS LTD.",
+    "jurisdiction": "BM",
+    "countryName": "Bermuda",
+    "registrationNumber": "44370",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "INTEGROGEN LTD.",
+    "jurisdiction": "BM",
+    "countryName": "Bermuda",
+    "registrationNumber": "202100203",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TECHBRU SOLUTION (B) SDN BHD",
+    "jurisdiction": "BN",
+    "countryName": "Brunei",
+    "registrationNumber": "RC20000974",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "INDUSTRIAS QUANTUM MOTORS S.A.",
+    "jurisdiction": "BO",
+    "countryName": "Bolivia",
+    "registrationNumber": "382413024",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Top Serviss B.V.",
+    "jurisdiction": "BQ",
+    "countryName": "Bonaire, Sint Eustatius and Saba",
+    "registrationNumber": "1819",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TANGLEWOOD GROUP LIMITED ADMINISTRACAO DE ATIVOS LTDA",
+    "jurisdiction": "BR",
+    "countryName": "Brazil",
+    "registrationNumber": "35225401320",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LENO CORPORATE SERVICES LIMITED",
+    "jurisdiction": "BS",
+    "countryName": "Bahamas",
+    "registrationNumber": "58697",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LENO GROUP OF COMPANIES LIMITED",
+    "jurisdiction": "BS",
+    "countryName": "Bahamas",
+    "registrationNumber": "62315",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CANREE (PTY) LTD PROPRIETARY LIMITED",
+    "jurisdiction": "BW",
+    "countryName": "Botswana",
+    "registrationNumber": "BW00000149594",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Общество с ограниченной ответственностью \"Мозырский нефтеперерабатывающий завод плюс\"",
+    "jurisdiction": "BY",
+    "countryName": "Belarus",
+    "registrationNumber": "400316799",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "NORTHWESTERN MANAGEMENT SERVICES (BELIZE) LIMITED",
+    "jurisdiction": "BZ",
+    "countryName": "Belize",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TIMELESS TECH LTD.",
+    "jurisdiction": "BZ",
+    "countryName": "Belize",
+    "registrationNumber": "000010837",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "H & M HENNES & MAURITZ INC.",
+    "jurisdiction": "CA",
+    "countryName": "Canada",
+    "registrationNumber": "887634400RC0001",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BLUEROCK GROUP AG",
+    "jurisdiction": "CH",
+    "countryName": "Switzerland",
+    "registrationNumber": "CHE-143.563.602",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BLUEROCK SWITZERLAND GMBH",
+    "jurisdiction": "CH",
+    "countryName": "Switzerland",
+    "registrationNumber": "CHE-449.572.759",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Cisco Systems International Sàrl",
+    "jurisdiction": "CH",
+    "countryName": "Switzerland",
+    "registrationNumber": "CHE-112.248.702",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DELOITTE AG",
+    "jurisdiction": "CH",
+    "countryName": "Switzerland",
+    "registrationNumber": "CHE-101.377.666",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PRICEWATERHOUSECOOPERS SA",
+    "jurisdiction": "CH",
+    "countryName": "Switzerland",
+    "registrationNumber": "CHE-497.306.752",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SWIXX BIOPHARMA AG",
+    "jurisdiction": "CH",
+    "countryName": "Switzerland",
+    "registrationNumber": "CHE-147.465.430",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "INGENIERÍA YTH SPA",
+    "jurisdiction": "CL",
+    "countryName": "Chile",
+    "registrationNumber": "77.275.443-4",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "嘉腾控股有限公司",
+    "jurisdiction": "CN",
+    "countryName": "China",
+    "registrationNumber": "91510100MA61XQC30E",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CDFP CARILUX DUTY FREE PANAMERICANA S.A.S.",
+    "jurisdiction": "CO",
+    "countryName": "Colombia",
+    "registrationNumber": "47917912",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DE COSTA A COSTA TICA LLC LIMITADA",
+    "jurisdiction": "CR",
+    "countryName": "Costa Rica",
+    "registrationNumber": "3-102-718307",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ALLYANT GROUP B.V.",
+    "jurisdiction": "CW",
+    "countryName": "Curaçao",
+    "registrationNumber": "151273",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ABACUS LIMITED",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "114414",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ALBARS LIMITED",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "214447",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ALT SECRETARIAL LTD",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "448286",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KESEA HOLDINGS LIMITED",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "142823",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KIKIS TREPPIDES & CO",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "8181",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "RAMMENA PROPERTIES LIMITED",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "375862",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "STIRN ADVISORS LTD",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "419771",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TARGET WEALTH OPPORTUNITIES LTD",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "427401",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "THE ALTERNATIVE GMI LTD",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "427401",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "THE ALTERNATIVE PUBLIC TECH OPPORTUNITIES RAIF V.C.I.C. PLC",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "443341",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TIRIAC ASSET HOLDINGS LTD",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "350392",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ΦΡΟΥΤΑΡΙΑ ΕΔΕΜ",
+    "jurisdiction": "CY",
+    "countryName": "Cyprus",
+    "registrationNumber": "8181",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "IDEA STATICA S.R.O.",
+    "jurisdiction": "CZ",
+    "countryName": "Czech Republic",
+    "registrationNumber": "28356586",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ŠABATKA RS S.R.O.",
+    "jurisdiction": "CZ",
+    "countryName": "Czech Republic",
+    "registrationNumber": "28345584",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ACONDIS GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Freiburg HRB 719007",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ADESSO SE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Dortmund HRB 20663",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ALTANA MANAGEMENT SERVICES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Duisburg HRB 19705",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ALTANA NEW TECHNOLOGIES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Duisburg HRB 26564",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "APRIMA (DEUTSCHLAND) GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Mannheim HRB 9423",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Altländer Fleisch- und Wurstwaren John Quast e.K.",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hamburg HRA 98813",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "B. BRAUN MELSUNGEN AKTIENGESELLSCHAFT",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Fritzlar HRB 11000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BASF VENTURE CAPITAL GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Ludwigshafen a.Rhein (Ludwigshafen) HRB 4659",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BERNHARDT VENTURES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bad Homburg v.d.H. HRB 15697",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BERT WILDEN NEW TRENDS GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Regensburg HRB 10552",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BOEHRINGER INGELHEIM VENTURE FUND GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Mainz HRB 42763",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BRÜCKNER GROUP GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Traunstein HRB 9697",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BUNDESREPUBLIK DEUTSCHLAND VERTRETEN DURCH DAS BUNDESMINISTERIUM FÜR WIRTSCHAFT UND ENERGIE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BUNDESREPUBLIK DEUTSCHLAND, ERP-SONDERVERMÖGEN, VERTRETEN DURCH DAS BUNDESMINISTERIUM FÜR WIRTSCHAFT UND KLIMASCHUTZ",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Bayer Aktiengesellschaft",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Köln HRB 48248",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BÜFA GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Oldenburg (Oldenburg) HRA 3103",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CEWE Stiftung & Co. KGaA",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Oldenburg (Oldenburg) HRB 208214",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CFO Verwaltungs-GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Osnabrück HRB 212758",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Claas Beteiligungsgesellschaft Ostwestfalen mbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Gütersloh HRB 8411",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Claas Family Office GmbH & Co. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Osnabrück HRA 206135",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Claas Kommanditgesellschaft auf Aktien mbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Gütersloh HRB 3027",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DDA Europe GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRB 116742",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DEUTSCHE BANK AKTIENGESELLSCHAFT",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRB 30000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DEUTSCHE DIGITAL ASSETS GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRB 109756",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DEUTSCHE POST DHL RESEARCH AND INNOVATION GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bonn HRB 9000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DRILLISCH ONLINE GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hanau HRB 96603",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Drägerwerk AG & Co. KGaA",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Lübeck HRB 7903 HL",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Drägerwerk Verwaltungs AG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Lübeck HRB 7395 HL",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DÜRR DENTAL SE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 763587",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EHT HOLDING GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Iserlohn HRB 10307",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EPPENDORF SE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hamburg HRB 171526",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ERNST KLETT AKTIENGESELLSCHAFT",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 17521",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EVONIK VENTURE CAPITAL GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hanau HRB 94453",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EWE Aktiengesellschaft",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Oldenburg (Oldenburg) HRB 33",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EWE Urbanisation Dienstleistungs GmbH (UDG)",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bremen HRB 27462 HB",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "F. O. VENTURES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Köln HRB 78206",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "FINLAB AG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRB 58865",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "FRAUNHOFER-GESELLSCHAFT ZUR FÖRDERUNG DER ANGEWANDTEN FORSCHUNG EINGETRAGENER VEREIN",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "München VR 4461",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GBU GESELLSCHAFT FÜR BETEILIGUNGEN AN MITTELSTÄNDISCHEN UNTERNEHMEN MBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Oldenburg (Oldenburg) HRB 527",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GC GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Gelsenkirchen HRB 9339",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GEBR. KNAUF KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Würzburg HRA 2771",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GOLF ACQUISITION GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Neuss HRB 16359",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Günther Claas Beteiligungs-GmbH & Co. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Osnabrück HRA 206209",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Günther Claas Verwaltungs-GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Osnabrück HRB 211288",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HANIEL BETEILIGUNGS-GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Duisburg HRB 28439",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HARTMANN HOLDING GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 721532",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HETTICH HOLDING GMBH & CO. OHG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bad Oeynhausen HRA 4728",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HIGH-TECH GRÜNDERFONDS MANAGEMENT GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bonn HRB 13863",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Helmut Claas GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Gütersloh HRB 2980",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "High-Tech Gründerfonds III GmbH & Co. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bonn HRA 8800",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "High-Tech Gründerfonds IV GmbH & Co. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bonn HRA 9754",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "High-Tech Gründerfonds Komplementär GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Bonn HRB 18934",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HÜBNER HOLDING GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Kassel HRB 2748",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ICG MANAGEMENT GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hamburg HRA 129181",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "IGUS VENTURES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Köln HRB 100171",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Infratech/comcross Holding GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 783567",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "JUNGHEINRICH AKTIENGESELLSCHAFT",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hamburg HRB 44885",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KARL MAYER VERWALTUNGSGESELLSCHAFT MBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Offenbach am Main HRB 42030",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KFW CAPITAL GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRA 50371",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KÖRBER BETEILIGUNGEN GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hamburg HRB 117694",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LANXESS DEUTSCHLAND GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Köln HRB 52600",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LDN CAPITAL GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRB 113304",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MAPA MUNDI HOLDING GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Mannheim HRB 720426",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MASCHINENRINGE DEUTSCHLAND GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Ingolstadt HRB 101578",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MEDIA + MORE VENTURE BETEILIGUNGS GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRA 728083",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MEDIA + MORE VENTURE II BETEILIGUNGS GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRA 739226",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MEDICE ARZNEIMITTEL PÜTTER GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Iserlohn HRA 1037",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Max Lautenschläger Beteiligungs GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Mannheim HRB 711872",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "NEUMÜLLER CEWE COLOR STIFTUNG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ORCA VENTURE GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Ingolstadt HRB 8575",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PHOENIX CONTACT INNOVATION VENTURES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Lemgo HRB 8475",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "QIAGEN DEUTSCHLAND HOLDING GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Düsseldorf HRB 54349",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "R-BIOPHARM AG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Darmstadt HRB 8321",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ROBERT BOSCH GESELLSCHAFT MIT BESCHRÄNKTER HAFTUNG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 14000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "RWE GENERATION SE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Essen HRB 24353",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SAP SE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Mannheim HRB 719915",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SCHUFA HOLDING AG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Wiesbaden HRB 12286",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SCHUNK INVESTMENT GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Gießen HRB 10674",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SDL LAMBDA BETEILIGUNGS-GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 756806",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SEGENIA CAPITAL FUND OF FUNDS 1 GMBH & CO. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Frankfurt am Main HRA 51934",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "STIHL VENTURES GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 743536",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Talpa Holding GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Hamburg HRB 169540",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Thüga Aktiengesellschaft",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "München HRB 59888",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VANTAGE VALUE GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "München HRB 229593",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VECTOR VENTURE CAPITAL GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 757760",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VIBRO IMMOBILIEN GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Mönchengladbach HRB 4323",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VOCO GMBH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Tostedt HRB 110134 früher Amtsgericht Langen",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VOLKSBANK EG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Freiburg GnR 600001",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VOLKSBANK MITTWEIDA EG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Chemnitz GnR 5",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "WACKER CHEMIE AG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "München HRB 159705",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "WIKA Alexander Wiegand Beteiligungs- und Verwaltungs-SE & Co. KG",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Aschaffenburg HRA 5161",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "WIKA Beteiligungs-SE",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Aschaffenburg HRB 17106",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "comcross Holding GmbH",
+    "jurisdiction": "DE",
+    "countryName": "Germany",
+    "registrationNumber": "Stuttgart HRB 784037",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BEIERHOLM, STATSAUTORISERET REVISIONSPARTNERSELSKAB",
+    "jurisdiction": "DK",
+    "countryName": "Denmark",
+    "registrationNumber": "32895468",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KLARAVIK APS",
+    "jurisdiction": "DK",
+    "countryName": "Denmark",
+    "registrationNumber": "36920882",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AGENCIA TECNICO MARITIMA TECNISEA C. LTDA.",
+    "jurisdiction": "EC",
+    "countryName": "Ecuador",
+    "registrationNumber": "28175",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SAFE VOUCHER OÜ",
+    "jurisdiction": "EE",
+    "countryName": "Estonia",
+    "registrationNumber": "12184365",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TITANIA SEA OÜ",
+    "jurisdiction": "EE",
+    "countryName": "Estonia",
+    "registrationNumber": "14482528",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "POSA REALTY ES SL",
+    "jurisdiction": "ES",
+    "countryName": "Spain",
+    "registrationNumber": "B42644112",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AMER SPORTS INTERNATIONAL OY",
+    "jurisdiction": "FI",
+    "countryName": "Finland",
+    "registrationNumber": "1044793-0",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "57 DIVE PLACE FANTASY BODY CORPORATE PTE LIMITED",
+    "jurisdiction": "FJ",
+    "countryName": "Fiji",
+    "registrationNumber": "2020RC000489",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AJAX ENGINEERING LIMITED",
+    "jurisdiction": "FK",
+    "countryName": "Falkland Islands",
+    "registrationNumber": "15897",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SP/F ARCTIC IMPORT",
+    "jurisdiction": "FO",
+    "countryName": "Faroe Islands",
+    "registrationNumber": "2097",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ETABLISSEMENTS J BLONDEAU",
+    "jurisdiction": "FR",
+    "countryName": "France",
+    "registrationNumber": "572 820 629",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SCHNEIDER ELECTRIC INDUSTRIES SAS ",
+    "jurisdiction": "FR",
+    "countryName": "France",
+    "registrationNumber": "954 503 439",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ADWATCH, SOCIEDAD LIMITADA",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "FC039529",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BROOKSIDE HOLDINGS UNLIMITED",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "12214214",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "COCO & AJ INVESTMENTS LTD",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "12837655",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "COLC FINANCE PLC",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "12213963",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DELIBES HOLDINGS LIMITED",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "BR019829",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LEASEGUARD GREEN LLP",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "OC353437",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LIFECYCLE MANAGEMENT GROUP LIMITED",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "6390313",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "RETHINK MANAGEMENT GROUP LIMITED",
+    "jurisdiction": "GB",
+    "countryName": "United Kingdom",
+    "registrationNumber": "11398491",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "შპს სილკნეტი",
+    "jurisdiction": "GE",
+    "countryName": "Georgia",
+    "registrationNumber": "204952685",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PATRON CAPITAL GENERAL PARTNER IV LIMITED",
+    "jurisdiction": "GG",
+    "countryName": "Guernsey",
+    "registrationNumber": "59761",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "W. F. CLARKE (GHANA) LTD",
+    "jurisdiction": "GH",
+    "countryName": "Ghana",
+    "registrationNumber": "CS054422018",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Insight Tech Limited",
+    "jurisdiction": "GI",
+    "countryName": "Gibraltar",
+    "registrationNumber": "122223",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PREMIER INTERNATIONAL CORPORATE SERVICES LIMITED",
+    "jurisdiction": "GI",
+    "countryName": "Gibraltar",
+    "registrationNumber": "22547",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "FITNESSGL NUUK APS",
+    "jurisdiction": "GL",
+    "countryName": "Greenland",
+    "registrationNumber": "40683577",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "NVG CONSULTING Ι.Κ.Ε.",
+    "jurisdiction": "GR",
+    "countryName": "Greece",
+    "registrationNumber": "154409837000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CATHAY PACIFIC AIRWAYS LIMITED",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "2672",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GAR WING HUNG KEE CONST CO",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "03720833",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LAUNDRY ASSOCIATION OF HONG KONG LIMITED -THE-",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "763236",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SBC CORPORATE SERVICES LIMITED",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "618863",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SBC INTERNATIONAL BUSINESS MANAGEMENT LIMITED",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "1001103",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Twins Kitchen Company Limited",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "1679244",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ZILYDIAM",
+    "jurisdiction": "HK",
+    "countryName": "Hong Kong",
+    "registrationNumber": "54304575",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GRUPO VANGUARDIA, SOCIEDAD ANONIMA DE CAPITAL VARIABLE",
+    "jurisdiction": "HN",
+    "countryName": "Honduras",
+    "registrationNumber": "0000045402 - 00000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BRAVEL društvo s ograničenom odgovornošću za trgovinu i usluge",
+    "jurisdiction": "HR",
+    "countryName": "Croatia",
+    "registrationNumber": "080402634",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CATSKILL ENTERPRISES KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG \"KÉNYSZERTÖRLÉS ALATT\"",
+    "jurisdiction": "HU",
+    "countryName": "Hungary",
+    "registrationNumber": "01-09-330792",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PT. BINA PUTRA SADAYA",
+    "jurisdiction": "ID",
+    "countryName": "Indonesia",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AODH RUADH C.L.G. CUIDEACHTA FAOI THEORAINN RATHAIOCHTA",
+    "jurisdiction": "IE",
+    "countryName": "Ireland",
+    "registrationNumber": "510112",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GECKO CRESTED PUBLIC LIMITED COMPANY",
+    "jurisdiction": "IE",
+    "countryName": "Ireland",
+    "registrationNumber": "744994",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MATHESON SERVICES LIMITED",
+    "jurisdiction": "IE",
+    "countryName": "Ireland",
+    "registrationNumber": "313326",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MATSACK NOMINEES LIMITED",
+    "jurisdiction": "IE",
+    "countryName": "Ireland",
+    "registrationNumber": "172157",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MATSACK TRUST LIMITED",
+    "jurisdiction": "IE",
+    "countryName": "Ireland",
+    "registrationNumber": "30090",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "WINROY LIMITED",
+    "jurisdiction": "IE",
+    "countryName": "Ireland",
+    "registrationNumber": "121227",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "OPTIVAL LTD",
+    "jurisdiction": "IL",
+    "countryName": "Israel",
+    "registrationNumber": "515430080",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CHESTERFIELD NOMINEES LIMITED",
+    "jurisdiction": "IM",
+    "countryName": "Isle of Man",
+    "registrationNumber": "084765C",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LINKITES INFOTECH PRIVATE LIMITED",
+    "jurisdiction": "IN",
+    "countryName": "India",
+    "registrationNumber": "U72200MP2012PTC029498",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "الجزيرة العالمية للتجارة والخدمات والتجهيز العام المحدودة",
+    "jurisdiction": "IQ",
+    "countryName": "Iraq",
+    "registrationNumber": "87523",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "گروه مپنا",
+    "jurisdiction": "IR",
+    "countryName": "Iran",
+    "registrationNumber": "99134",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AMICAST ehf.",
+    "jurisdiction": "IS",
+    "countryName": "Iceland",
+    "registrationNumber": "5212130350",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Quick Light Food S.R.L.",
+    "jurisdiction": "IT",
+    "countryName": "Italy",
+    "registrationNumber": "04891070288",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VELOCITY SPORTS LTD",
+    "jurisdiction": "JE",
+    "countryName": "Jersey",
+    "registrationNumber": "132376",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TECHME LIMITED",
+    "jurisdiction": "JM",
+    "countryName": "Jamaica",
+    "registrationNumber": "120129",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "الاقوى للمقاولات",
+    "jurisdiction": "JO",
+    "countryName": "Jordan",
+    "registrationNumber": "58513",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "株式会社ブルーキャピタルマネジメント",
+    "jurisdiction": "JP",
+    "countryName": "Japan",
+    "registrationNumber": "０１０４０１０９６７２２",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ASUACHI TRADING LIMITED",
+    "jurisdiction": "KE",
+    "countryName": "Kenya",
+    "registrationNumber": "PVT-PJUVDY9",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ ФИРМА \"ЖИБЕК-ЖОЛУ\"",
+    "jurisdiction": "KG",
+    "countryName": "Kyrgyzstan",
+    "registrationNumber": "98393-3304-ООО",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SOKIMEX CAMBODIA INVESTMENT CO., LTD.",
+    "jurisdiction": "KH",
+    "countryName": "Cambodia",
+    "registrationNumber": "00006370",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "RBW Inc.",
+    "jurisdiction": "KR",
+    "countryName": "South Korea",
+    "registrationNumber": "110111-4297944",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CALI UNITED REAL ESTATE RENTAL & MANAGEMENT CO. WLL",
+    "jurisdiction": "KW",
+    "countryName": "Kuwait",
+    "registrationNumber": "237369",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "MARKATO INC",
+    "jurisdiction": "KY",
+    "countryName": "Cayman Islands",
+    "registrationNumber": "398047",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Xayya Construction & Renovation Sole Co.,Ltd",
+    "jurisdiction": "LA",
+    "countryName": "Laos",
+    "registrationNumber": "1300006428",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BLUEROCK GROUP INVESTMENTS AG PCC",
+    "jurisdiction": "LI",
+    "countryName": "Liechtenstein",
+    "registrationNumber": "FL-0002.532.233-6",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LIREX AG",
+    "jurisdiction": "LI",
+    "countryName": "Liechtenstein",
+    "registrationNumber": "FL-0001.081.133-2",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TIRIAC INTERNATIONAL FOUNDATION",
+    "jurisdiction": "LI",
+    "countryName": "Liechtenstein",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CISCO LANKA HOLDINGS (PVT) LTD",
+    "jurisdiction": "LK",
+    "countryName": "Sri Lanka",
+    "registrationNumber": "PV00221985",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AGRI FOODS AFRICA PTY LTD",
+    "jurisdiction": "LS",
+    "countryName": "Lesotho",
+    "registrationNumber": "73965",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "UAB \"Alberija\"",
+    "jurisdiction": "LT",
+    "countryName": "Lithuania",
+    "registrationNumber": "305913769",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BVK-EUROPA I-IMMOBILIENFONDS",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B213653",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DELOITTE AUDIT",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B67895",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "EUROPA Management S.à r.l.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B213535",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "H.I.G. Luxembourg GP S.à r.l.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B262368",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KKR Asia III S.à r.l.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B209755",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Residential Europe AcquiCo S.à r.l.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B273577",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Tribus Holdings 1 S.à r.l.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B253455",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Tribus Holdings 2 S.à r.l.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B254158",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Tribus Holdings, SCSp",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B263151",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "UNIVERSAL-INVESTMENT-LUXEMBOURG S.A.",
+    "jurisdiction": "LU",
+    "countryName": "Luxembourg",
+    "registrationNumber": "B75014",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SIA FINNO",
+    "jurisdiction": "LV",
+    "countryName": "Latvia",
+    "registrationNumber": "40103919184",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CASH PLUS",
+    "jurisdiction": "MA",
+    "countryName": "Morocco",
+    "registrationNumber": "129325",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "LEVCO",
+    "jurisdiction": "MC",
+    "countryName": "Monaco",
+    "registrationNumber": "15S06756",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SOCIETATEA CU RĂSPUNDERE LIMITATĂ ACTUAL-AUTO",
+    "jurisdiction": "MD",
+    "countryName": "Moldova",
+    "registrationNumber": "1011600004436",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DRUŠTVO SA OGRANIČENOM ODGOVORNOŠĆU ZA PROMET I USLUGE \"PROFIN PROJE\" BUDVA",
+    "jurisdiction": "ME",
+    "countryName": "Montenegro",
+    "registrationNumber": "50833519",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KVALITATES ALLIANCE GMBH",
+    "jurisdiction": "MH",
+    "countryName": "Marshall Islands",
+    "registrationNumber": "74028",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "THE TRUST COMPANY OF THE MARSHALL ISLANDS, INC.",
+    "jurisdiction": "MH",
+    "countryName": "Marshall Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ОЦЕАН ЕНГИНЕЕРИНГ ТЕЦХНОЛОГИ ДОО Скопje",
+    "jurisdiction": "MK",
+    "countryName": "Macedonia",
+    "registrationNumber": "7509340",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BRIGHTER ENERGY RETAIL COMPANY LIMITED",
+    "jurisdiction": "MM",
+    "countryName": "Myanmar",
+    "registrationNumber": "108649526",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "新濠博亞(咖啡)有限公司",
+    "jurisdiction": "MO",
+    "countryName": "Macau",
+    "registrationNumber": "27811",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ALPHA IMAGE PARTNERSHIP",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "P COMM 319",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ARIADNE CAPITAL ECO2 VC LIMITED PARTNERSHIP",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "P COMM 203",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ARIADNE CAPITAL MALTA LIMITED",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "C 49720",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DDA SICAV P.L.C.",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "SV 521",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HELP4YOU LTD",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "C 81515",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SAMARA ASSET GROUP PLC",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "C 84355",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TRIDENT CORPORATE SERVICES (MALTA) LIMITED",
+    "jurisdiction": "MT",
+    "countryName": "Malta",
+    "registrationNumber": "C 58816",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AMICORP (MAURITIUS) LIMITED",
+    "jurisdiction": "MU",
+    "countryName": "Mauritius",
+    "registrationNumber": "C106679",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "NEXIA BAKER & ARENSON LTD",
+    "jurisdiction": "MU",
+    "countryName": "Mauritius",
+    "registrationNumber": "C26538",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "THE HAWKS PVT LTD",
+    "jurisdiction": "MV",
+    "countryName": "Maldives",
+    "registrationNumber": "C-0109/2007",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CREASINETWORK, SOCIEDAD POR ACCIONES SIMPLIFICADA DE CAPITAL VARIABLE",
+    "jurisdiction": "MX",
+    "countryName": "Mexico",
+    "registrationNumber": "N-2016040119",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ADOPSANDADTECH SDN. BHD.",
+    "jurisdiction": "MY",
+    "countryName": "Malaysia",
+    "registrationNumber": "202301000382(1494301-U)",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AGRO GREEN INVESTORS PLANET LTD",
+    "jurisdiction": "NG",
+    "countryName": "Nigeria",
+    "registrationNumber": "1767241",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Cisco Systems Netherlands Holdings B.V.",
+    "jurisdiction": "NL",
+    "countryName": "Netherlands",
+    "registrationNumber": "34146659",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "OK-2 B.V.",
+    "jurisdiction": "NL",
+    "countryName": "Netherlands",
+    "registrationNumber": "37108748",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Whitford B.V.",
+    "jurisdiction": "NL",
+    "countryName": "Netherlands",
+    "registrationNumber": "33145574",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ERNST & YOUNG AS",
+    "jurisdiction": "NO",
+    "countryName": "Norway",
+    "registrationNumber": "976 389 387",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ØRN SOFTWARE AS",
+    "jurisdiction": "NO",
+    "countryName": "Norway",
+    "registrationNumber": "979 443 471",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "A ONE TECHNOLOGY",
+    "jurisdiction": "NP",
+    "countryName": "Nepal",
+    "registrationNumber": "132211",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CWM TRUSTEE HOLDINGS LIMITED",
+    "jurisdiction": "NZ",
+    "countryName": "New Zealand",
+    "registrationNumber": "9429041173671",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PACIFIC SETTLEMENTS NOMINEES LIMITED",
+    "jurisdiction": "NZ",
+    "countryName": "New Zealand",
+    "registrationNumber": "9429046289087",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BEN MALIK AL MAHROUKI EST L L C",
+    "jurisdiction": "OM",
+    "countryName": "Oman",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HYTEC & CO",
+    "jurisdiction": "OM",
+    "countryName": "Oman",
+    "registrationNumber": "1583670",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "مؤسسة بن مالك المحروقي",
+    "jurisdiction": "OM",
+    "countryName": "Oman",
+    "registrationNumber": "1136046",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CISCO SYSTEMS PANAMA S. DE R.L.",
+    "jurisdiction": "PA",
+    "countryName": "Panama",
+    "registrationNumber": "255",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TECH DRILL SOCIEDAD COMERCIAL DE RESPONSABILIDAD LIMITADA - TECH DRILL S.R.L.",
+    "jurisdiction": "PE",
+    "countryName": "Peru",
+    "registrationNumber": "20603115121",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PARADISE TV TAHITI",
+    "jurisdiction": "PF",
+    "countryName": "French Polynesia",
+    "registrationNumber": "B26331",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AVENELL ENGINEERING SYSTEM LIMITED",
+    "jurisdiction": "PG",
+    "countryName": "Papua New Guinea",
+    "registrationNumber": "1-28319",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "JG AGROVENTURES INC.",
+    "jurisdiction": "PH",
+    "countryName": "Philippines",
+    "registrationNumber": "2021090026381-30",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AVENIR CONSULTING LLP",
+    "jurisdiction": "PK",
+    "countryName": "Pakistan",
+    "registrationNumber": "0175836",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AERO A T SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ",
+    "jurisdiction": "PL",
+    "countryName": "Poland",
+    "registrationNumber": "0000145534",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PENTIUM SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ",
+    "jurisdiction": "PL",
+    "countryName": "Poland",
+    "registrationNumber": "0000570580",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "FIRSTBANK INSURANCE AGENCY, LLC",
+    "jurisdiction": "PR",
+    "countryName": "Puerto Rico",
+    "registrationNumber": "110116",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "شركة مجموعة مورجانتي - فر ع غزة THE MORGANTI GROUP INC",
+    "jurisdiction": "PS",
+    "countryName": "Palestine",
+    "registrationNumber": "563601624",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ZTECH TECHNOLOGIES, LDA",
+    "jurisdiction": "PT",
+    "countryName": "Portugal",
+    "registrationNumber": "513817735",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ASTRO TECH SRL",
+    "jurisdiction": "PY",
+    "countryName": "Paraguay",
+    "registrationNumber": "80034731 - 5",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GOLYV LLC",
+    "jurisdiction": "QA",
+    "countryName": "Qatar",
+    "registrationNumber": "01968",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ITH MANAGEMENT OFFICE SRL",
+    "jurisdiction": "RO",
+    "countryName": "Romania",
+    "registrationNumber": "6435918",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "PHYTOS INTELLIGENT SOLUTIONS S.R.L.",
+    "jurisdiction": "RO",
+    "countryName": "Romania",
+    "registrationNumber": "39076233",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CISCO SRBIJA DOO, BEOGRAD",
+    "jurisdiction": "RS",
+    "countryName": "Serbia",
+    "registrationNumber": "20232196",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ \"ЛАБКЛАССИКА\"",
+    "jurisdiction": "RU",
+    "countryName": "Russia",
+    "registrationNumber": "1145047012923",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "شركة تقنية مشرقة للاتصالات و تقنية المعلومات",
+    "jurisdiction": "SA",
+    "countryName": "Saudi Arabia",
+    "registrationNumber": "1010553131",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "G.R. TECH LIMITED",
+    "jurisdiction": "SB",
+    "countryName": "Solomon Islands",
+    "registrationNumber": "201415274",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AERO NEXUS AVIATION (SEYCHELLES) LTD",
+    "jurisdiction": "SC",
+    "countryName": "Seychelles",
+    "registrationNumber": "C8424071",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "COREM AB",
+    "jurisdiction": "SE",
+    "countryName": "Sweden",
+    "registrationNumber": " 556731-4231 ",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ERNST & YOUNG AKTIEBOLAG",
+    "jurisdiction": "SE",
+    "countryName": "Sweden",
+    "registrationNumber": " 556053-5873 ",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KLARAVIK AB",
+    "jurisdiction": "SE",
+    "countryName": "Sweden",
+    "registrationNumber": " 556881-8693 ",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ACUMEN ASSOCIATES LLP",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "T17LL0527D",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "KPMG LLP",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "T08LL1267L",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "STARHUB LTD.",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "199802208C",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "T RAVI & CO.",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "T03PF0795J",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VISUALNETWORK LIMITED PARTNERSHIP",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "T16LP0072J",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "WHITFORD PTE LTD",
+    "jurisdiction": "SG",
+    "countryName": "Singapore",
+    "registrationNumber": "199103553E",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ISL ONLINE, INTERNETNE KOMUNIKACIJE, D.O.O.",
+    "jurisdiction": "SI",
+    "countryName": "Slovenia",
+    "registrationNumber": "3302369000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "XLAB RAZVOJ PROGRAMSKE OPREME IN SVETOVANJE D.O.O.",
+    "jurisdiction": "SI",
+    "countryName": "Slovenia",
+    "registrationNumber": "1639714000",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GT CONCEPT S.R.O.",
+    "jurisdiction": "SK",
+    "countryName": "Slovakia",
+    "registrationNumber": "45 404 917",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HOMESTEAD S.R.O.",
+    "jurisdiction": "SK",
+    "countryName": "Slovakia",
+    "registrationNumber": "51 690 560",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "HONESTY SPOL. S R.O.",
+    "jurisdiction": "SK",
+    "countryName": "Slovakia",
+    "registrationNumber": "36 497 703",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Maladinovo - Huty, s. r. o",
+    "jurisdiction": "SK",
+    "countryName": "Slovakia",
+    "registrationNumber": "36 436 551",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "OTTAM S.R.O.",
+    "jurisdiction": "SK",
+    "countryName": "Slovakia",
+    "registrationNumber": "35 933 968",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ROSETTA S.R.L.",
+    "jurisdiction": "SM",
+    "countryName": "San Marino",
+    "registrationNumber": "8717",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BRAINTECH",
+    "jurisdiction": "SN",
+    "countryName": "Senegal",
+    "registrationNumber": "010155580",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "UNION ETOILE INTERNATIONALE",
+    "jurisdiction": "TG",
+    "countryName": "Togo",
+    "registrationNumber": "TGLFW01-2021-B12-00455",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "โตโยต้า มอเตอร์ ประเทศไทย จำกัด",
+    "jurisdiction": "TH",
+    "countryName": "Thailand",
+    "registrationNumber": "0105505001679",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TECH WISE TUNISIAN Sté الشركة التونسية للتكنولوجيات الحكيمة",
+    "jurisdiction": "TN",
+    "countryName": "Tunisia",
+    "registrationNumber": "1097121W",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DIAMOND HOLDINGS LIMITED",
+    "jurisdiction": "TO",
+    "countryName": "Tonga",
+    "registrationNumber": "9000135",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DT SAMOA TRUSTEE CO. LIMITED",
+    "jurisdiction": "TO",
+    "countryName": "Tonga",
+    "registrationNumber": "9006290",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "JETSAVE TAUFONUA TRAVEL LIMITED",
+    "jurisdiction": "TO",
+    "countryName": "Tonga",
+    "registrationNumber": "9000719",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AEROSPACE DANIŞMANLIK LİMİTED ŞİRKETİ",
+    "jurisdiction": "TR",
+    "countryName": "Turkey",
+    "registrationNumber": "359313-5",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "BYTE INN LIMITED",
+    "jurisdiction": "TT",
+    "countryName": "Trinidad and Tobago",
+    "registrationNumber": "B3608(95)",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "遊戲橘子數位科技股份有限公司",
+    "jurisdiction": "TW",
+    "countryName": "Taiwan",
+    "registrationNumber": "89550029",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "00095 ADDIS ROAD NORTH LIMITED DIVIDEND HOUSING ASSOCIATION LIMITED PARTNERSHIP",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "801921579",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "AGRIAN IMPEX LLC",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "7165845",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ARCTIC SUNSHINE LLC",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "10080475",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "COFFEE MIDWEST",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "1342039700029",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CORPORATION SERVICE COMPANY",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "101330",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DELAWARE BUSINESS INCORPORATORS, INC.",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "2100534",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "INCORP SERVICES, INC.",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "C632-1998",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "READEN HOLDING CORP.",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "C27204-1997",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SALEM FARMS, INC.",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "0467712",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "WHITFORD WORLDWIDE COMPANY, LLC",
+    "jurisdiction": "US",
+    "countryName": "United States",
+    "registrationNumber": "7188443",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "\"DEVHUB\" Mas'uliyati cheklangan jamiyat",
+    "jurisdiction": "UZ",
+    "countryName": "Uzbekistan",
+    "registrationNumber": "740286",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "APPOLO HOLDINGS INC.",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "537052",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DIAMONDVILLE GROUP LIMITED",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "2075680",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "H.I.G. GLOBAL CAPITAL PARTNERS GP (BVI), LTD.",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ILS FIDUCIARY (BVI) LIMITED",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "OGIER GLOBAL (BVI) LIMITED",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "OVERSEAS COMPANY SERVICES LIMITED",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SINGULAR INTERNATIONAL LTD",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "Sleekflow Technologies Inc.",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "2054854",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "THE PLUTUNO PARTNERSHIP L.P.",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "LP908",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TRIDENT TRUST COMPANY (B.V.I.) LIMITED",
+    "jurisdiction": "VG",
+    "countryName": "British Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ACTIVE DNF AGENT FOR SERVICE OF PROCESS INC",
+    "jurisdiction": "VI",
+    "countryName": "U.S. Virgin Islands",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DNF AGENT FOR SERVICE OF PROCESS INC.",
+    "jurisdiction": "VI",
+    "countryName": "U.S. Virgin Islands",
+    "registrationNumber": "585462",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "DNF AGENT FOR SERVICE OF PROCESS INCs",
+    "jurisdiction": "VI",
+    "countryName": "U.S. Virgin Islands",
+    "registrationNumber": "585462",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "SL TECHNOLOGY & CONSULTING, LLC",
+    "jurisdiction": "VI",
+    "countryName": "U.S. Virgin Islands",
+    "registrationNumber": "DC0120960",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "STREAMLINE CAPITAL, LLC",
+    "jurisdiction": "VI",
+    "countryName": "U.S. Virgin Islands",
+    "registrationNumber": "DC0114528",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "STREAMLINE CAPITAL, LLC",
+    "jurisdiction": "VI",
+    "countryName": "U.S. Virgin Islands",
+    "registrationNumber": "DC0114528",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CÔNG TY TNHH LINXHQ VIỆT NAM",
+    "jurisdiction": "VN",
+    "countryName": "Vietnam",
+    "registrationNumber": "0102805691",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CREDIT FACILITIES LIMITED",
+    "jurisdiction": "VU",
+    "countryName": "Vanuatu",
+    "registrationNumber": "220",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "GLOBAL NOMINEES LIMITED",
+    "jurisdiction": "VU",
+    "countryName": "Vanuatu",
+    "registrationNumber": "2408",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "VANUATU NONI LIFE TECHNOLOGY LIMITED",
+    "jurisdiction": "VU",
+    "countryName": "Vanuatu",
+    "registrationNumber": "36632",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "OVERSEAS COMPANY SERVICES LIMITED",
+    "jurisdiction": "WS",
+    "countryName": "Samoa",
+    "registrationNumber": "201606507",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "ONUTECH SH.P.K.",
+    "jurisdiction": "XK",
+    "countryName": "Kosovo",
+    "registrationNumber": "812075449",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "شركة زنترك لانظمة التكنولوجيا المحدودة",
+    "jurisdiction": "YE",
+    "countryName": "Yemen",
+    "registrationNumber": "",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "CISCO TECHNOLOGY AND SERVICES (SOUTH AFRICA)",
+    "jurisdiction": "ZA",
+    "countryName": "South Africa",
+    "registrationNumber": "M2007005362",
+    "origin": "registry-harvest"
+  },
+  {
+    "name": "TICKET EXPRESS TECHNOLOGY LIMITED",
+    "jurisdiction": "ZM",
+    "countryName": "Zambia",
+    "registrationNumber": "120220040389",
+    "origin": "registry-harvest"
+  }
+]
