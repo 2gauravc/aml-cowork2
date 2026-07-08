@@ -72,14 +72,28 @@ def run_cdd_agent(
     jurisdiction: str | None = None,
     case_id: int | str | None = None,
 ) -> dict[str, Any]:
+    result = run_cdd_agent_state(
+        customer_name=customer_name,
+        jurisdiction=jurisdiction,
+        case_id=case_id,
+    )
+    return result.get("cdd", {})
+
+
+def run_cdd_agent_state(
+    *,
+    customer_name: str | None = None,
+    jurisdiction: str | None = None,
+    case_id: int | str | None = None,
+) -> dict[str, Any]:
+    """Run the CDD graph and return the full final LangGraph state."""
     app = build_cdd_graph()
     state = new_cdd_state(
         customer_name=customer_name,
         jurisdiction=jurisdiction,
         case_id=case_id,
     )
-    result = app.invoke(state)
-    return result.get("cdd", {})
+    return app.invoke(state)
 
 
 def main() -> None:

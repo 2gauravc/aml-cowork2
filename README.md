@@ -145,9 +145,25 @@ Then open:
 http://localhost:8000
 ```
 
-The backend keeps the KYC and OpenAI API keys server-side through `.env`. The
-current CDD graph remains deterministic; the chat UI collects inputs and invokes
-the graph through `/api/chat`.
+The backend keeps the KYC and OpenAI API keys server-side through `.env`.
+
+The UI separates two modes:
+
+- Open-ended chat: always available through `/api/chat`. The LLM router can use
+  the LLM-facing tools directly: `find_test_cases`,
+  `get_customer_static_by_name`, `get_company_members_by_name`, and
+  `get_company_org_chart_by_name`. This lets a user ask for test entities or
+  partial KYC data before running a full case.
+- Deterministic CDD pipeline: launched from the workspace panel through
+  `/api/pipeline/run`, or by asking the chat to run full CDD. This executes the
+  LangGraph nodes and writes the final `CDD` JSON into the session.
+
+After a CDD run, follow-up questions are answered from the full graph session
+state: the final `CDD` JSON, risk flags, tagged evidence captured from the
+underlying KYC tool calls, and any previous individual tool results. OpenAI is
+used automatically for richer natural-language explanations when
+`OPENAI_API_KEY` is configured; set `OPENAI_QA_ENABLED=false` to force
+deterministic CDD/evidence lookup.
 
 ## Run
 

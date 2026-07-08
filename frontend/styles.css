@@ -159,8 +159,8 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) 78px;
 }
 
-.quick-form input,
-.quick-form select,
+.pipeline-form input,
+.pipeline-form select,
 .composer textarea {
   border: 1px solid var(--line);
   min-height: 38px;
@@ -250,12 +250,40 @@ th {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
 }
 
 .secondary {
   background: #334155;
+}
+
+.pipeline-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 2fr) 90px minmax(130px, 1fr) auto auto;
+}
+
+.tool-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tool-result {
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.tool-result summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tool-result .json-view {
+  margin: 10px 0 0;
+  max-height: 300px;
 }
 
 .risk-list {
@@ -308,7 +336,8 @@ th {
   }
 
   .grid,
-  .quick-form {
+  .quick-form,
+  .pipeline-form {
     grid-template-columns: 1fr;
   }
 }

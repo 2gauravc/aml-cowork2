@@ -3,14 +3,21 @@ const { useMemo, useState } = React;
 function App() {
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Which company would you like to onboard?" },
+    {
+      role: "assistant",
+      content:
+        "Ask me about test cases, company profiles, members, org charts, or the current CDD.",
+    },
   ]);
   const [customerName, setCustomerName] = useState("");
   const [jurisdiction, setJurisdiction] = useState("GB");
+  const [caseId, setCaseId] = useState("");
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
+  const [toolResults, setToolResults] = useState([]);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [error, setError] = useState(null);
 
@@ -18,14 +25,24 @@ function App() {
   const ownership = cdd?.ownership_and_control || {};
   const risks = useMemo(() => riskFlags(cdd), [cdd]);
 
-  async function sendChat({ generatePdf = false } = {}) {
+  function applyResponse(data) {
+    setSessionId(data.session_id);
+    setMessages(data.messages || []);
+    setCdd(data.cdd || null);
+    setToolResults(data.tool_results || []);
+    setPdfUrl(data.pdf_url || null);
+    if (data.customer_name) setCustomerName(data.customer_name);
+    if (data.jurisdiction) setJurisdiction(data.jurisdiction);
+    if (data.case_id) setCaseId(String(data.case_id));
+    if (data.error) setError(data.error);
+  }
+
+  async function sendChat() {
     const outgoing = message.trim();
-    if (!outgoing && !customerName.trim()) return;
+    if (!outgoing) return;
     setLoading(true);
     setError(null);
-    if (outgoing) {
-      setMessages((current) => [...current, { role: "user", content: outgoing }]);
-    }
+    setMessages((current) => [...current, { role: "user", content: outgoing }]);
     setMessage("");
 
     try {
@@ -35,20 +52,11 @@ function App() {
         body: JSON.stringify({
           session_id: sessionId,
           message: outgoing,
-          customer_name: customerName.trim() || null,
-          jurisdiction: jurisdiction.trim() || null,
-          generate_pdf: generatePdf,
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "CDD request failed");
-      setSessionId(data.session_id);
-      setMessages(data.messages || []);
-      setCdd(data.cdd || null);
-      setPdfUrl(data.pdf_url || null);
-      if (data.customer_name) setCustomerName(data.customer_name);
-      if (data.jurisdiction) setJurisdiction(data.jurisdiction);
-      if (data.error) setError(data.error);
+      if (!response.ok) throw new Error(data.detail || "Chat request failed");
+      applyResponse(data);
     } catch (err) {
       setError(err.message);
       setMessages((current) => [
@@ -57,6 +65,36 @@ function App() {
       ]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runPipeline({ generatePdf = false } = {}) {
+    if (!customerName.trim() || !jurisdiction.trim()) return;
+    setPipelineLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/pipeline/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          customer_name: customerName.trim(),
+          jurisdiction: jurisdiction.trim(),
+          case_id: caseId.trim() || null,
+          generate_pdf: generatePdf,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "CDD pipeline failed");
+      applyResponse(data);
+    } catch (err) {
+      setError(err.message);
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: `Something went wrong: ${err.message}` },
+      ]);
+    } finally {
+      setPipelineLoading(false);
     }
   }
 
@@ -98,7 +136,7 @@ function App() {
         <aside className="chat">
           <div className="chat-head">
             <h1>Onboarding Chat</h1>
-            <p>Provide a company name and jurisdiction to start CDD.</p>
+            <p>Open-ended chat can search test cases, run tools, explain evidence, or trigger full CDD.</p>
           </div>
 
           <div className="messages">
@@ -107,11 +145,37 @@ function App() {
                 {item.content}
               </div>
             ))}
-            {loading && <div className="message assistant">Running checks...</div>}
+            {loading && (
+              <div className="message assistant">
+                Thinking...
+              </div>
+            )}
           </div>
 
           <div className="composer">
-            <div className="quick-form">
+            <textarea
+              aria-label="Message"
+              placeholder='Try "what test cases are available in GB?" or "fetch the org chart for Cropwell Bishop Creamery Limited, GB"'
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  sendChat();
+                }
+              }}
+            />
+            <div className="send-row">
+              <button disabled={loading} onClick={() => sendChat()}>
+                Ask
+              </button>
+            </div>
+            {error && <div className="risk">{error}</div>}
+          </div>
+        </aside>
+
+        <main className="main">
+          <Section title="Run Deterministic Pipeline">
+            <div className="pipeline-form">
               <input
                 aria-label="Company name"
                 placeholder="Company name"
@@ -128,31 +192,29 @@ function App() {
                 <option value="US">US</option>
                 <option value="SG">SG</option>
               </select>
-            </div>
-            <textarea
-              aria-label="Message"
-              placeholder='Ask, or type "CROPWELL BISHOP CREAMERY LIMITED, GB"'
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                  sendChat();
-                }
-              }}
-            />
-            <div className="send-row">
-              <button className="secondary" disabled={loading} onClick={() => sendChat({ generatePdf: true })}>
+              <input
+                aria-label="Case ID"
+                placeholder="Case ID optional"
+                value={caseId}
+                onChange={(event) => setCaseId(event.target.value)}
+              />
+              <button
+                disabled={pipelineLoading || !customerName.trim()}
+                onClick={() => runPipeline()}
+              >
+                Run Full CDD
+              </button>
+              <button
+                className="secondary"
+                disabled={pipelineLoading || !customerName.trim()}
+                onClick={() => runPipeline({ generatePdf: true })}
+              >
                 Run + PDF
               </button>
-              <button disabled={loading} onClick={() => sendChat()}>
-                Start CDD
-              </button>
             </div>
-            {error && <div className="risk">{error}</div>}
-          </div>
-        </aside>
+            {pipelineLoading && <p className="empty">Running the deterministic graph...</p>}
+          </Section>
 
-        <main className="main">
           <div className="actions">
             <button disabled={!cdd || loading} onClick={generatePdf}>Generate PDF</button>
             {pdfUrl && (
@@ -222,6 +284,21 @@ function App() {
               </div>
             ) : (
               <p className="empty">No open risk flags in the current CDD object.</p>
+            )}
+          </Section>
+
+          <Section title="Tool Results">
+            {toolResults.length ? (
+              <div className="tool-list">
+                {toolResults.slice().reverse().map((item, index) => (
+                  <details className="tool-result" key={`${item.tool}-${index}`}>
+                    <summary>{item.tool}</summary>
+                    <pre className="json-view">{JSON.stringify(item.data, null, 2)}</pre>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <p className="empty">No individual tool calls in this session yet.</p>
             )}
           </Section>
 

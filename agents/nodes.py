@@ -85,6 +85,7 @@ def create_or_reuse_case(state: CDDState) -> dict[str, Any]:
                 tool="create_company_case",
                 description="Created or reused KYC company case",
                 data=case_result,
+                relevance_tags=["case", "registry_match", "kyc_case"],
             )
         ],
     }
@@ -99,6 +100,14 @@ def fetch_customer_static(state: CDDState) -> dict[str, Any]:
                 tool="get_customer_static_by_case_id",
                 description="Fetched static company profile",
                 data=result,
+                relevance_tags=[
+                    "customer_static",
+                    "company_profile",
+                    "address",
+                    "registration",
+                    "status",
+                    "activity",
+                ],
             )
         ]
     }
@@ -113,6 +122,14 @@ def fetch_org_chart(state: CDDState) -> dict[str, Any]:
                 tool="get_company_org_chart_by_case_id",
                 description="Fetched recursive ownership org chart",
                 data=result,
+                relevance_tags=[
+                    "org_chart",
+                    "ownership",
+                    "shareholders",
+                    "ubos",
+                    "related_parties",
+                    "officers",
+                ],
             )
         ]
     }
@@ -127,6 +144,15 @@ def fetch_members(state: CDDState) -> dict[str, Any]:
                 tool="get_company_members_by_case_id",
                 description="Fetched company members",
                 data=result,
+                relevance_tags=[
+                    "members",
+                    "directors",
+                    "controlling_members",
+                    "shareholders",
+                    "aml",
+                    "addresses",
+                    "nationality",
+                ],
             )
         ]
     }
@@ -250,11 +276,18 @@ def _case_id(state: CDDState) -> int | str:
     return case_id
 
 
-def _evidence(*, tool: str, description: str, data: dict[str, Any]) -> dict[str, Any]:
+def _evidence(
+    *,
+    tool: str,
+    description: str,
+    data: dict[str, Any],
+    relevance_tags: list[str],
+) -> dict[str, Any]:
     return {
         "source": "KYC API",
         "tool": tool,
         "description": description,
+        "relevance_tags": relevance_tags,
         "data": data,
         "collected_at": datetime.now(UTC).isoformat(),
     }

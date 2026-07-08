@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -14,7 +12,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from agents.graph import run_cdd_agent
+from agents.graph import run_cdd_agent_state
+from agents.qa import answer_cdd_question
+from agents.router import route_user_message
+from tools.case_finder import find_test_cases
+from tools.customer_static import get_customer_static_by_name
+from tools.members import get_company_members_by_name
+from tools.orgchart import get_company_org_chart_by_name
 from utils.pdf import render_cdd_pdf
 
 
@@ -41,65 +45,104 @@ class PdfRequest(BaseModel):
     session_id: str
 
 
+class PipelineRequest(BaseModel):
+    session_id: str | None = None
+    customer_name: str
+    jurisdiction: str
+    case_id: str | None = None
+    generate_pdf: bool = False
+
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest) -> dict[str, Any]:
     session = _session(request.session_id)
     if request.message:
         session["messages"].append({"role": "user", "content": request.message})
 
-    customer_name = request.customer_name or session.get("customer_name")
-    jurisdiction = _clean_jurisdiction(request.jurisdiction or session.get("jurisdiction"))
-    case_id = request.case_id or session.get("case_id")
-
-    inferred = _infer_customer_and_jurisdiction(request.message)
-    customer_name = customer_name or inferred.get("customer_name")
-    jurisdiction = jurisdiction or inferred.get("jurisdiction")
-
-    if not customer_name or not jurisdiction:
-        missing = []
-        if not customer_name:
-            missing.append("company name")
-        if not jurisdiction:
-            missing.append("jurisdiction")
-        content = (
-            "I can start the CDD onboarding once I have the "
-            f"{' and '.join(missing)}. For example: "
-            '"CROPWELL BISHOP CREAMERY LIMITED, GB".'
-        )
-        session["messages"].append({"role": "assistant", "content": content})
-        return _response(session, status="needs_input")
-
-    session["customer_name"] = customer_name
-    session["jurisdiction"] = jurisdiction
-    if case_id:
-        session["case_id"] = case_id
-
-    session["messages"].append(
-        {
-            "role": "assistant",
-            "content": f"Running CDD checks for {customer_name} ({jurisdiction}).",
-        }
+    decision = route_user_message(
+        message=request.message,
+        session_context=_session_context(session),
     )
+    action = decision.get("action", "answer_from_context")
+    args = _merge_session_args(decision.get("arguments", {}), session)
+
     try:
-        cdd = await asyncio.to_thread(
-            run_cdd_agent,
-            customer_name=customer_name,
-            jurisdiction=jurisdiction,
-            case_id=case_id,
+        if action == "generate_pdf":
+            return await _generate_pdf_for_session(session)
+        if action == "run_full_cdd_pipeline":
+            return await _run_pipeline_for_session(
+                session,
+                customer_name=args.get("company_name") or args.get("customer_name"),
+                jurisdiction=args.get("jurisdiction"),
+                case_id=args.get("case_id"),
+                generate_pdf=request.generate_pdf,
+            )
+        if action == "find_test_cases":
+            return await _run_tool_for_session(
+                session,
+                tool_name="find_test_cases",
+                result=find_test_cases(
+                    query=args.get("query"),
+                    jurisdiction=args.get("jurisdiction"),
+                    country=args.get("country"),
+                    origin=args.get("origin"),
+                    limit=int(args.get("limit") or 10),
+                ),
+            )
+        if action == "get_customer_static_by_name":
+            return await _run_named_company_tool(
+                session,
+                tool_name="get_customer_static_by_name",
+                tool_func=get_customer_static_by_name,
+                args=args,
+            )
+        if action == "get_company_members_by_name":
+            return await _run_named_company_tool(
+                session,
+                tool_name="get_company_members_by_name",
+                tool_func=get_company_members_by_name,
+                args=args,
+            )
+        if action == "get_company_org_chart_by_name":
+            return await _run_named_company_tool(
+                session,
+                tool_name="get_company_org_chart_by_name",
+                tool_func=get_company_org_chart_by_name,
+                args=args,
+            )
+        if action == "ask_missing_inputs":
+            content = decision.get("response") or "What company name and jurisdiction should I use?"
+            session["messages"].append({"role": "assistant", "content": content})
+            return _response(session, status="needs_input")
+        if action == "answer_from_context" and decision.get("response") and not session.get("cdd"):
+            content = decision["response"]
+            session["messages"].append({"role": "assistant", "content": content})
+            return _response(session, status="llm_unavailable")
+
+        answer = answer_cdd_question(
+            question=request.message,
+            cdd=session.get("cdd", {}),
+            evidence=session.get("evidence", []),
+            risk_flags=session.get("risk_flags", []),
         )
+        session["messages"].append({"role": "assistant", "content": answer})
+        return _response(session, status="answered")
     except Exception as exc:
-        content = f"CDD checks failed: {exc}"
+        content = f"Request failed: {exc}"
         session["messages"].append({"role": "assistant", "content": content})
         return _response(session, status="error", error=str(exc))
 
-    session["cdd"] = cdd
-    session["messages"].append({"role": "assistant", "content": _summary(cdd)})
 
-    if request.generate_pdf:
-        pdf_path = await asyncio.to_thread(render_cdd_pdf, cdd)
-        session["pdf_path"] = str(pdf_path)
-
-    return _response(session, status="complete")
+@app.post("/api/pipeline/run")
+async def run_pipeline(request: PipelineRequest) -> dict[str, Any]:
+    session = _session(request.session_id)
+    return await _run_pipeline_for_session(
+        session,
+        customer_name=request.customer_name,
+        jurisdiction=request.jurisdiction,
+        case_id=request.case_id,
+        generate_pdf=request.generate_pdf,
+    )
 
 
 @app.post("/api/pdf")
@@ -108,7 +151,7 @@ async def generate_pdf(request: PdfRequest) -> dict[str, Any]:
     if not session or not session.get("cdd"):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
 
-    pdf_path = await asyncio.to_thread(render_cdd_pdf, session["cdd"])
+    pdf_path = render_cdd_pdf(session["cdd"])
     session["pdf_path"] = str(pdf_path)
     return {"pdf_url": f"/api/pdf/{request.session_id}"}
 
@@ -166,6 +209,9 @@ def _response(
         "jurisdiction": session.get("jurisdiction"),
         "case_id": session.get("case_id"),
         "cdd": session.get("cdd"),
+        "risk_flags": session.get("risk_flags", []),
+        "final_recommendation": session.get("final_recommendation"),
+        "tool_results": session.get("tool_results", []),
         "pdf_url": pdf_url,
         "error": error,
     }
@@ -192,21 +238,191 @@ def _clean_jurisdiction(value: str | None) -> str | None:
     return value.strip().upper()
 
 
-def _infer_customer_and_jurisdiction(message: str) -> dict[str, str]:
-    text = (message or "").strip()
-    if not text:
-        return {}
+async def _generate_pdf_for_session(session: dict[str, Any]) -> dict[str, Any]:
+    if not session.get("cdd"):
+        session["messages"].append(
+            {
+                "role": "assistant",
+                "content": "Run the full CDD pipeline before generating a PDF.",
+            }
+        )
+        return _response(session, status="needs_input")
+    pdf_path = render_cdd_pdf(session["cdd"])
+    session["pdf_path"] = str(pdf_path)
+    session["messages"].append(
+        {"role": "assistant", "content": "PDF generated and ready to download."}
+    )
+    return _response(session, status="complete")
 
-    match = re.search(r"\b([A-Z]{2})\b\s*$", text, flags=re.IGNORECASE)
-    if not match:
-        return {}
 
-    jurisdiction = match.group(1).upper()
-    name = text[: match.start()].strip(" ,.-")
-    name = re.sub(r"^(onboard|start cdd for|run cdd for|company)\s+", "", name, flags=re.I)
-    if not name:
-        return {"jurisdiction": jurisdiction}
-    return {"customer_name": name, "jurisdiction": jurisdiction}
+async def _run_pipeline_for_session(
+    session: dict[str, Any],
+    *,
+    customer_name: str | None,
+    jurisdiction: str | None,
+    case_id: str | None = None,
+    generate_pdf: bool = False,
+) -> dict[str, Any]:
+    if not customer_name or not jurisdiction:
+        session["messages"].append(
+            {
+                "role": "assistant",
+                "content": "Please provide a company name and jurisdiction to run the full CDD pipeline.",
+            }
+        )
+        return _response(session, status="needs_input")
+
+    jurisdiction = _clean_jurisdiction(jurisdiction)
+    session["customer_name"] = customer_name
+    session["jurisdiction"] = jurisdiction
+    if case_id:
+        session["case_id"] = case_id
+
+    session["messages"].append(
+        {
+            "role": "assistant",
+            "content": f"Running full CDD pipeline for {customer_name} ({jurisdiction}).",
+        }
+    )
+    graph_state = run_cdd_agent_state(
+        customer_name=customer_name,
+        jurisdiction=jurisdiction,
+        case_id=case_id,
+    )
+    cdd = graph_state.get("cdd", {})
+    session["cdd"] = cdd
+    session["graph_state"] = graph_state
+    session["evidence"] = graph_state.get("evidence", [])
+    session["risk_flags"] = graph_state.get("risk_flags", [])
+    session["final_recommendation"] = graph_state.get("final_recommendation")
+    session["messages"].append({"role": "assistant", "content": _summary(cdd)})
+
+    if generate_pdf:
+        pdf_path = render_cdd_pdf(cdd)
+        session["pdf_path"] = str(pdf_path)
+
+    return _response(session, status="complete")
+
+
+async def _run_named_company_tool(
+    session: dict[str, Any],
+    *,
+    tool_name: str,
+    tool_func,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    company_name = args.get("company_name") or args.get("customer_name")
+    jurisdiction = _clean_jurisdiction(args.get("jurisdiction"))
+    if not company_name or not jurisdiction:
+        session["messages"].append(
+            {
+                "role": "assistant",
+                "content": f"I need company name and jurisdiction to run {tool_name}.",
+            }
+        )
+        return _response(session, status="needs_input")
+
+    result = tool_func(company_name, jurisdiction)
+    session["customer_name"] = company_name
+    session["jurisdiction"] = jurisdiction
+    return await _run_tool_for_session(session, tool_name=tool_name, result=result)
+
+
+async def _run_tool_for_session(
+    session: dict[str, Any],
+    *,
+    tool_name: str,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    tool_result = {
+        "tool": tool_name,
+        "data": result,
+    }
+    session.setdefault("tool_results", []).append(tool_result)
+    session.setdefault("evidence", []).append(
+        {
+            "source": "tool",
+            "tool": tool_name,
+            "description": f"Result from {tool_name}",
+            "relevance_tags": [tool_name],
+            "data": result,
+        }
+    )
+    session["messages"].append(
+        {"role": "assistant", "content": _tool_summary(tool_name, result)}
+    )
+    return _response(session, status="tool_complete")
+
+
+def _tool_summary(tool_name: str, result: dict[str, Any]) -> str:
+    if result.get("error"):
+        return f"{tool_name} failed: {result['error'].get('message')}"
+    if tool_name == "find_test_cases":
+        lines = []
+        summary = result.get("summary", {}).get("summary_text")
+        if summary:
+            lines.append(summary)
+        cases = result.get("returned_cases", [])
+        lines.append("Available entities:")
+        for case in cases:
+            parts = [
+                case.get("name"),
+                case.get("jurisdiction"),
+                case.get("country_name"),
+                case.get("registration_number"),
+            ]
+            lines.append(" - " + " | ".join(str(part) for part in parts if part))
+        if result.get("note"):
+            lines.append(result["note"])
+        return "\n".join(lines)
+    if tool_name == "get_customer_static_by_name":
+        static = result.get("customer_static", {})
+        return (
+            f"Static profile fetched for {static.get('name', 'the company')}. "
+            f"Status: {static.get('company_status', '-')}; "
+            f"registration number: {static.get('registration_number', '-')}."
+        )
+    if tool_name == "get_company_members_by_name":
+        counts = result.get("counts", {})
+        return (
+            "Members fetched. "
+            f"Controlling members: {counts.get('controlling_members', 0)}; "
+            f"shareholders/beneficial owners: {counts.get('shareholders_and_beneficial_owners', 0)}; "
+            f"UBOs: {counts.get('ultimate_beneficial_owners', 0)}."
+        )
+    if tool_name == "get_company_org_chart_by_name":
+        counts = result.get("counts", {})
+        return (
+            "Org chart fetched. "
+            f"Nodes: {counts.get('nodes', 0)}; "
+            f"shareholders: {counts.get('shareholders', 0)}; "
+            f"officers: {counts.get('officers', 0)}."
+        )
+    return f"{tool_name} completed."
+
+
+def _session_context(session: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "customer_name": session.get("customer_name"),
+        "jurisdiction": session.get("jurisdiction"),
+        "case_id": session.get("case_id"),
+        "has_cdd": bool(session.get("cdd")),
+        "has_pdf": bool(session.get("pdf_path")),
+        "tool_results": [
+            {"tool": item.get("tool")} for item in session.get("tool_results", [])[-5:]
+        ],
+    }
+
+
+def _merge_session_args(args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(args or {})
+    if not merged.get("company_name") and not merged.get("customer_name"):
+        merged["company_name"] = session.get("customer_name")
+    if not merged.get("jurisdiction"):
+        merged["jurisdiction"] = session.get("jurisdiction")
+    if not merged.get("case_id"):
+        merged["case_id"] = session.get("case_id")
+    return merged
 
 
 if FRONTEND_DIR.exists():

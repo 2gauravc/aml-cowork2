@@ -102,6 +102,7 @@ class EvidenceItem(TypedDict, total=False):
     source: str
     tool: str
     description: str
+    relevance_tags: list[str]
     data: dict[str, Any] | list[Any]
     collected_at: str
 
