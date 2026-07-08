@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from operator import add
 from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import AnyMessage
@@ -116,9 +117,9 @@ class RiskFlag(TypedDict, total=False):
 class CDDState(TypedDict, total=False):
     metadata: Metadata
     cdd: CDD
-    documents: list[CaseDocument]
-    evidence: list[EvidenceItem]
-    risk_flags: list[RiskFlag]
+    documents: Annotated[list[CaseDocument], add]
+    evidence: Annotated[list[EvidenceItem], add]
+    risk_flags: Annotated[list[RiskFlag], add]
     final_recommendation: FinalRecommendation | None
     messages: Annotated[list[AnyMessage], add_messages]
 

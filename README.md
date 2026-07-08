@@ -83,6 +83,32 @@ python tools/case_finder.py --query ubizense
 python tools/case_finder.py --origin golden
 ```
 
+## LangGraph CDD Agent
+
+`agents/graph.py` runs the full CDD graph. It creates or reuses one KYC case,
+fetches customer static data, org-chart data, and members data, then returns the
+final `CDD` JSON object from graph state.
+
+Run the full graph with a company name and jurisdiction:
+
+```bash
+python agents/graph.py \
+  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
+  --jurisdiction GB
+```
+
+Reuse an existing KYC case to avoid creating and polling a new case:
+
+```bash
+python agents/graph.py \
+  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
+  --jurisdiction GB \
+  --case-id 1000000690
+```
+
+If customer name or jurisdiction is missing, the graph returns an incomplete
+CDD JSON object showing the missing required inputs instead of calling the API.
+
 ## Run
 
 Live API call:
