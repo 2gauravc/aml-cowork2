@@ -1,7 +1,9 @@
+fastapi
 jinja2
 langchain-core
 langchain-openai
 langgraph
 python-dotenv
 requests
+uvicorn
 xhtml2pdf

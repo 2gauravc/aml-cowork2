@@ -128,6 +128,27 @@ python agents/graph.py \
 If customer name or jurisdiction is missing, the graph returns an incomplete
 CDD JSON object showing the missing required inputs instead of calling the API.
 
+## Chatbot Web App
+
+The chatbot UI is served by FastAPI from `backend/app.py`. It provides a React
+chat panel, structured CDD workspace, PDF generation, and PDF download.
+
+Start the web app:
+
+```bash
+python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000
+```
+
+Then open:
+
+```text
+http://localhost:8000
+```
+
+The backend keeps the KYC and OpenAI API keys server-side through `.env`. The
+current CDD graph remains deterministic; the chat UI collects inputs and invokes
+the graph through `/api/chat`.
+
 ## Run
 
 Live API call:
