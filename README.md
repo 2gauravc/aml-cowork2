@@ -97,6 +97,15 @@ python agents/graph.py \
   --jurisdiction GB
 ```
 
+Generate a PDF report in `outputs/` while running the graph:
+
+```bash
+python agents/graph.py \
+  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
+  --jurisdiction GB \
+  --generate-pdf true
+```
+
 Reuse an existing KYC case to avoid creating and polling a new case:
 
 ```bash
@@ -104,6 +113,16 @@ python agents/graph.py \
   --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
   --jurisdiction GB \
   --case-id 1000000690
+```
+
+You can combine `--case-id` and `--generate-pdf true`:
+
+```bash
+python agents/graph.py \
+  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
+  --jurisdiction GB \
+  --case-id 1000000690 \
+  --generate-pdf true
 ```
 
 If customer name or jurisdiction is missing, the graph returns an incomplete

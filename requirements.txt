@@ -1,5 +1,7 @@
+jinja2
 langchain-core
 langchain-openai
 langgraph
 python-dotenv
 requests
+xhtml2pdf

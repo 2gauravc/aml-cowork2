@@ -28,6 +28,7 @@ from agents.nodes import (  # noqa: E402
     has_required_inputs,
 )
 from agents.state import CDDState, new_cdd_state  # noqa: E402
+from utils.pdf import render_cdd_pdf  # noqa: E402
 
 
 load_dotenv()
@@ -86,6 +87,13 @@ def main() -> None:
     parser.add_argument("--customer-name", help="Customer company name")
     parser.add_argument("--jurisdiction", help='Jurisdiction code, e.g. "HK" or "GB"')
     parser.add_argument("--case-id", help="Existing KYC case ID to reuse")
+    parser.add_argument(
+        "--generate-pdf",
+        nargs="?",
+        const="true",
+        default="false",
+        help='Generate a PDF report in outputs/. Use "--generate-pdf" or "--generate-pdf true".',
+    )
     args = parser.parse_args()
 
     cdd = run_cdd_agent(
@@ -93,8 +101,18 @@ def main() -> None:
         jurisdiction=args.jurisdiction,
         case_id=args.case_id,
     )
+    if _as_bool(args.generate_pdf):
+        pdf_path = render_cdd_pdf(cdd)
+        print(f"PDF saved to {pdf_path}", file=sys.stderr)
+
     json.dump(cdd, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
+
+
+def _as_bool(value: str | bool | None) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "y", "on"}
 
 
 if __name__ == "__main__":

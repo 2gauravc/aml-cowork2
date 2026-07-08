@@ -1,0 +1,273 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>WBL Bank CDD</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 22mm 16mm 18mm 16mm;
+      @frame footer {
+        -pdf-frame-content: footer;
+        bottom: 8mm;
+        margin-left: 16mm;
+        margin-right: 16mm;
+        height: 8mm;
+      }
+    }
+
+    body {
+      color: #172033;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    h1 {
+      color: #10213f;
+      font-size: 24px;
+      margin: 0 0 4px 0;
+    }
+
+    h2 {
+      border-bottom: 1px solid #ccd5e3;
+      color: #10213f;
+      font-size: 14px;
+      margin: 18px 0 8px 0;
+      padding-bottom: 4px;
+    }
+
+    h3 {
+      color: #24385f;
+      font-size: 11px;
+      margin: 12px 0 6px 0;
+    }
+
+    table {
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      width: 100%;
+    }
+
+    th {
+      background: #eaf0f8;
+      border: 1px solid #c8d2e1;
+      color: #10213f;
+      font-size: 9px;
+      padding: 5px;
+      text-align: left;
+    }
+
+    td {
+      border: 1px solid #d9e0ea;
+      padding: 5px;
+      vertical-align: top;
+    }
+
+    .header {
+      background: #10213f;
+      color: white;
+      padding: 18px;
+    }
+
+    .header h1 {
+      color: white;
+    }
+
+    .subtitle {
+      color: #d9e5f5;
+      font-size: 11px;
+    }
+
+    .summary-grid td {
+      width: 25%;
+    }
+
+    .label {
+      color: #5f6f86;
+      font-size: 8px;
+      text-transform: uppercase;
+    }
+
+    .value {
+      font-size: 11px;
+      font-weight: bold;
+      margin-top: 2px;
+    }
+
+    .status {
+      background: #f4f7fb;
+      border: 1px solid #ccd5e3;
+      margin: 12px 0;
+      padding: 8px;
+    }
+
+    .status strong {
+      color: #10213f;
+    }
+
+    .muted {
+      color: #66758d;
+    }
+
+    .empty {
+      color: #66758d;
+      font-style: italic;
+    }
+
+    #footer {
+      color: #66758d;
+      font-size: 8px;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  {% set profile = cdd.get("company_business_profile", {}) %}
+  {% set static = profile.get("customer_static", {}) %}
+  {% set ownership = cdd.get("ownership_and_control", {}) %}
+
+  <div class="header">
+    <h1>WBL Bank CDD</h1>
+    <div class="subtitle">Customer Due Diligence Report</div>
+  </div>
+
+  <div class="status">
+    <strong>Customer:</strong> {{ static.get("name")|blank }}<br>
+    <strong>CDD status:</strong> {{ cdd.get("status")|blank }}<br>
+    <strong>Generated:</strong> {{ generated_at|date }}
+  </div>
+
+  <h2>Company Business Profile</h2>
+  <table class="summary-grid">
+    <tr>
+      <td>
+        <div class="label">Company Type</div>
+        <div class="value">{{ static.get("company_type")|blank }}</div>
+      </td>
+      <td>
+        <div class="label">Registration Number</div>
+        <div class="value">{{ static.get("registration_number")|blank }}</div>
+      </td>
+      <td>
+        <div class="label">Company Status</div>
+        <div class="value">{{ static.get("company_status")|blank }}</div>
+      </td>
+      <td>
+        <div class="label">Jurisdiction</div>
+        <div class="value">{{ static.get("jurisdiction")|blank }}</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div class="label">Activity Type</div>
+        <div class="value">{{ static.get("activity_type")|blank }}</div>
+      </td>
+      <td>
+        <div class="label">Registration Date</div>
+        <div class="value">{{ static.get("registration_date")|blank }}</div>
+      </td>
+      <td>
+        <div class="label">Incorporation Date</div>
+        <div class="value">{{ static.get("incorporation_date")|blank }}</div>
+      </td>
+      <td>
+        <div class="label">Share Capital</div>
+        <div class="value">{{ static.get("share_capital")|blank }}</div>
+      </td>
+    </tr>
+  </table>
+
+  {% set address = static.get("registered_address", {}) %}
+  <h3>Registered Address</h3>
+  <p>{{ address.get("full_address")|blank }}</p>
+
+  <h3>Additional Registry Properties</h3>
+  {% if static.get("registry_properties") %}
+  <table>
+    <tr>
+      <th>Field</th>
+      <th>Value</th>
+    </tr>
+    {% for key, value in static.get("registry_properties", {}).items() %}
+    <tr>
+      <td>{{ key }}</td>
+      <td>{{ value|blank }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">No registry properties available.</p>
+  {% endif %}
+
+  <h2>Ownership &amp; Control</h2>
+  <div class="status">
+    <strong>Section status:</strong> {{ ownership.get("status")|blank }}
+  </div>
+
+  <h3>UBOs</h3>
+  {% if ownership.get("ubos") %}
+  <table>
+    <tr>
+      <th>Name</th>
+      <th>Effective Shareholding</th>
+    </tr>
+    {% for row in ownership.get("ubos", []) %}
+    <tr>
+      <td>{{ row.get("name")|blank }}</td>
+      <td>{{ row.get("effective_shareholding_percent")|percent }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">None identified.</p>
+  {% endif %}
+
+  <h3>Shareholders &gt; 10%</h3>
+  {% if ownership.get("shareholders_over_10_percent") %}
+  <table>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Effective Shareholding</th>
+    </tr>
+    {% for row in ownership.get("shareholders_over_10_percent", []) %}
+    <tr>
+      <td>{{ row.get("name")|blank }}</td>
+      <td>{{ row.get("type")|blank }}</td>
+      <td>{{ row.get("effective_shareholding_percent")|percent }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">None identified.</p>
+  {% endif %}
+
+  <h3>Related Parties</h3>
+  {% if ownership.get("related_parties") %}
+  <table>
+    <tr>
+      <th>Name</th>
+      <th>Role</th>
+      <th>Related Entity</th>
+      <th>Reason</th>
+    </tr>
+    {% for row in ownership.get("related_parties", []) %}
+    <tr>
+      <td>{{ row.get("name")|blank }}</td>
+      <td>{{ row.get("role")|blank }}</td>
+      <td>{{ row.get("related_entity")|blank }}</td>
+      <td>{{ row.get("reason")|blank }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">None identified.</p>
+  {% endif %}
+
+  <h2>Risk Flags</h2>
+  <p class="muted">Risk flags are evaluated by the graph and retained in graph state. This CDD template focuses on the final CDD object.</p>
+
+  <div id="footer">WBL Bank CDD</div>
+</body>
+</html>
