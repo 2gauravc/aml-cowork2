@@ -27,6 +27,11 @@ function App() {
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
   const risks = useMemo(() => riskFlags(cdd), [cdd]);
+  const cddMetadata = {
+    customer: profile.name || customerName || "-",
+    date: formatDateTime(cdd?.completed_at || cdd?.started_at),
+    status: cdd ? cddStatusLabel(cdd.status) : "-",
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -261,7 +266,22 @@ function App() {
             </button>
           </div>
 
-          <Section title="Customer">
+          <section className="cdd-metadata" aria-label="CDD metadata">
+            <div className="metadata-item">
+              <span>Customer</span>
+              <strong>{cddMetadata.customer}</strong>
+            </div>
+            <div className="metadata-item">
+              <span>CDD Date</span>
+              <strong>{cddMetadata.date}</strong>
+            </div>
+            <div className="metadata-item">
+              <span>CDD Status</span>
+              <strong>{cddMetadata.status}</strong>
+            </div>
+          </section>
+
+          <Section title="About the Customer">
             <div className="grid">
               <Field label="Name" value={profile.name} />
               <Field label="Jurisdiction" value={profile.jurisdiction || jurisdiction} />
@@ -391,6 +411,23 @@ function percent(value) {
   if (value === undefined || value === null || value === "") return "-";
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(2)}%` : value;
+}
+
+function cddStatusLabel(status) {
+  return status === "complete" ? "Complete" : "Incomplete";
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 async function readJsonResponse(response, fallbackMessage) {
