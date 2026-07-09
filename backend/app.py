@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
+SANDBOX_CASES_PATH = PROJECT_ROOT / "data" / "kyc-sandbox-test-cases.json"
 
 app = FastAPI(title="WBL Bank CDD Chatbot")
 SESSIONS: dict[str, dict[str, Any]] = {}
@@ -187,6 +189,21 @@ async def get_session(session_id: str) -> dict[str, Any]:
         status=session.get("pipeline_status") or "ok",
         error=session.get("pipeline_error"),
     )
+
+
+@app.get("/api/jurisdictions")
+async def get_jurisdictions() -> dict[str, Any]:
+    with SANDBOX_CASES_PATH.open(encoding="utf-8") as fh:
+        cases = json.load(fh)
+
+    jurisdictions = sorted(
+        {
+            str(case.get("jurisdiction")).strip().upper()
+            for case in cases
+            if isinstance(case, dict) and case.get("jurisdiction")
+        }
+    )
+    return {"jurisdictions": jurisdictions}
 
 
 def _session(session_id: str | None) -> dict[str, Any]:

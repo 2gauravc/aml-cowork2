@@ -1,4 +1,6 @@
-const { useMemo, useState } = React;
+const { useEffect, useMemo, useState } = React;
+
+const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
 
 function App() {
   const [sessionId, setSessionId] = useState(null);
@@ -11,6 +13,7 @@ function App() {
   ]);
   const [customerName, setCustomerName] = useState("");
   const [jurisdiction, setJurisdiction] = useState("GB");
+  const [jurisdictions, setJurisdictions] = useState(FALLBACK_JURISDICTIONS);
   const [caseId, setCaseId] = useState("");
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
@@ -24,6 +27,30 @@ function App() {
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
   const risks = useMemo(() => riskFlags(cdd), [cdd]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadJurisdictions() {
+      try {
+        const response = await fetch("/api/jurisdictions");
+        const data = await readJsonResponse(response, "Jurisdictions request failed");
+        if (!ignore && Array.isArray(data.jurisdictions) && data.jurisdictions.length) {
+          setJurisdictions(data.jurisdictions);
+          if (!data.jurisdictions.includes(jurisdiction)) {
+            setJurisdiction(data.jurisdictions[0]);
+          }
+        }
+      } catch (err) {
+        if (!ignore) setError(err.message);
+      }
+    }
+
+    loadJurisdictions();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   function applyResponse(data) {
     setSessionId(data.session_id);
@@ -202,10 +229,9 @@ function App() {
                 value={jurisdiction}
                 onChange={(event) => setJurisdiction(event.target.value)}
               >
-                <option value="GB">GB</option>
-                <option value="HK">HK</option>
-                <option value="US">US</option>
-                <option value="SG">SG</option>
+                {jurisdictions.map((code) => (
+                  <option value={code} key={code}>{code}</option>
+                ))}
               </select>
               <input
                 aria-label="Case ID"
