@@ -14,9 +14,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from agents.chat_graph import run_chat_graph
 from agents.graph import run_cdd_agent_state
 from agents.qa import answer_cdd_question
-from agents.router import route_user_message
 from tools.case_finder import find_test_cases
 from tools.customer_static import get_customer_static_by_name
 from tools.members import get_company_members_by_name
@@ -65,75 +65,20 @@ async def chat(
     if request.message:
         session["messages"].append({"role": "user", "content": request.message})
 
-    decision = route_user_message(
-        message=request.message,
-        session_context=_session_context(session),
-    )
-    action = decision.get("action", "answer_from_context")
-    args = _merge_session_args(decision.get("arguments", {}), session)
-
     try:
-        if action == "generate_pdf":
-            return await _generate_pdf_for_session(session)
-        if action == "run_full_cdd_pipeline":
-            return await _run_pipeline_for_session(
-                session,
-                customer_name=args.get("company_name") or args.get("customer_name"),
-                jurisdiction=args.get("jurisdiction"),
-                case_id=args.get("case_id"),
-                generate_pdf=request.generate_pdf,
-                background_tasks=background_tasks,
-            )
-        if action == "find_test_cases":
-            return await _run_tool_for_session(
-                session,
-                tool_name="find_test_cases",
-                result=find_test_cases(
-                    query=args.get("query"),
-                    jurisdiction=args.get("jurisdiction"),
-                    country=args.get("country"),
-                    origin=args.get("origin"),
-                    limit=int(args.get("limit") or 10),
-                ),
-            )
-        if action == "get_customer_static_by_name":
-            return await _run_named_company_tool(
-                session,
-                tool_name="get_customer_static_by_name",
-                tool_func=get_customer_static_by_name,
-                args=args,
-            )
-        if action == "get_company_members_by_name":
-            return await _run_named_company_tool(
-                session,
-                tool_name="get_company_members_by_name",
-                tool_func=get_company_members_by_name,
-                args=args,
-            )
-        if action == "get_company_org_chart_by_name":
-            return await _run_named_company_tool(
-                session,
-                tool_name="get_company_org_chart_by_name",
-                tool_func=get_company_org_chart_by_name,
-                args=args,
-            )
-        if action == "ask_missing_inputs":
-            content = decision.get("response") or "What company name and jurisdiction should I use?"
-            session["messages"].append({"role": "assistant", "content": content})
-            return _response(session, status="needs_input")
-        if action == "answer_from_context" and decision.get("response") and not session.get("cdd"):
-            content = decision["response"]
-            session["messages"].append({"role": "assistant", "content": content})
-            return _response(session, status="llm_unavailable")
-
-        answer = answer_cdd_question(
-            question=request.message,
-            cdd=session.get("cdd", {}),
-            evidence=session.get("evidence", []),
-            risk_flags=session.get("risk_flags", []),
+        result = await asyncio.to_thread(
+            run_chat_graph,
+            session=session,
+            user_message=request.message,
+            generate_pdf=request.generate_pdf,
         )
-        session["messages"].append({"role": "assistant", "content": answer})
-        return _response(session, status="answered")
+        session.clear()
+        session.update(result["session"])
+        return _response(
+            session,
+            status=result.get("status", "answered"),
+            error=result.get("error"),
+        )
     except Exception as exc:
         content = f"Request failed: {exc}"
         session["messages"].append({"role": "assistant", "content": content})
@@ -438,7 +383,26 @@ def _tool_summary(tool_name: str, result: dict[str, Any]) -> str:
         summary = result.get("summary", {}).get("summary_text")
         if summary:
             lines.append(summary)
+        if result.get("view") == "jurisdiction_counts":
+            rows = result.get("jurisdiction_counts", [])
+            lines.append("")
+            lines.append("Entities by jurisdiction:")
+            lines.append("Jurisdiction | Count")
+            lines.append("--- | ---")
+            for row in rows:
+                lines.append(f"{row.get('value')} | {row.get('count')}")
+            return "\n".join(lines)
         cases = result.get("returned_cases", [])
+        if not cases:
+            filters = result.get("filters", {})
+            filter_text = ", ".join(
+                f"{key}: {value}" for key, value in filters.items()
+            )
+            lines.append(
+                "No matching sandbox entities found"
+                + (f" for {filter_text}." if filter_text else ".")
+            )
+            return "\n".join(lines)
         lines.append("Available entities:")
         for case in cases:
             parts = [

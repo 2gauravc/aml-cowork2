@@ -22,6 +22,15 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES_PATH = PROJECT_ROOT / "data" / "kyc-sandbox-test-cases.json"
 MAX_LIMIT = 25
+COUNTRY_ALIASES = {
+    "britain": {"jurisdiction": "GB"},
+    "england": {"jurisdiction": "GB"},
+    "great britain": {"jurisdiction": "GB"},
+    "scotland": {"jurisdiction": "GB"},
+    "uk": {"jurisdiction": "GB"},
+    "united kingdom": {"country": "united kingdom"},
+    "wales": {"jurisdiction": "GB"},
+}
 
 
 def find_test_cases(
@@ -29,6 +38,7 @@ def find_test_cases(
     jurisdiction: str | None = None,
     country: str | None = None,
     origin: str | None = None,
+    view: str | None = None,
     *,
     limit: int = 5,
     include_summary: bool = True,
@@ -44,6 +54,9 @@ def find_test_cases(
             "Hong Kong".
         origin (str | None): Optional case source filter, for example "golden",
             "synthetic", or "registry-harvest".
+        view (str | None): Optional output shape. Use "jurisdiction_counts" to
+            aggregate matching cases by jurisdiction instead of returning entity
+            rows. Defaults to "entities".
         limit (int): Maximum number of matching cases to return. Defaults to 5
             and is capped at 25 to avoid dumping the full dataset.
         include_summary (bool): Whether to include dataset counts and top
@@ -60,22 +73,32 @@ def find_test_cases(
     try:
         cases = _load_cases(cases_path)
         filters = _normalise_filters(query, jurisdiction, country, origin)
+        view = _normalise_view(view)
         matches = _filter_cases(cases, filters)
         ranked = _rank_cases(matches, filters["query"])
         limit = max(1, min(limit, MAX_LIMIT))
 
         result = {
             "filters": _drop_empty(filters),
+            "view": view,
             "total_matching_cases": len(matches),
-            "returned_cases": [_clean_case(case) for case in ranked[:limit]],
-            "returned_count": min(len(matches), limit),
-            "limit": limit,
         }
+
+        if view == "jurisdiction_counts":
+            result["jurisdiction_counts"] = _jurisdiction_count_rows(matches)
+        else:
+            result.update(
+                {
+                    "returned_cases": [_clean_case(case) for case in ranked[:limit]],
+                    "returned_count": min(len(matches), limit),
+                    "limit": limit,
+                }
+            )
 
         if include_summary:
             result["summary"] = _summary(cases, matches)
 
-        if len(matches) > limit:
+        if view != "jurisdiction_counts" and len(matches) > limit:
             result["note"] = (
                 f"{len(matches) - limit} additional cases matched. Narrow the "
                 "filters or increase limit to inspect more."
@@ -89,6 +112,7 @@ def find_test_cases(
             jurisdiction=jurisdiction,
             country=country,
             origin=origin,
+            view=view,
             cases_path=str(cases_path),
         )
 
@@ -109,12 +133,26 @@ def _normalise_filters(
     country: str | None,
     origin: str | None,
 ) -> dict[str, str | None]:
+    normalized_country = country.strip().casefold() if country else None
+    normalized_jurisdiction = jurisdiction.strip().upper() if jurisdiction else None
+    alias = COUNTRY_ALIASES.get(normalized_country or "")
+    if alias and not normalized_jurisdiction:
+        normalized_jurisdiction = alias.get("jurisdiction")
+        normalized_country = alias.get("country")
+
     return {
         "query": query.strip().casefold() if query else None,
-        "jurisdiction": jurisdiction.strip().upper() if jurisdiction else None,
-        "country": country.strip().casefold() if country else None,
+        "jurisdiction": normalized_jurisdiction,
+        "country": normalized_country,
         "origin": origin.strip().casefold() if origin else None,
     }
+
+
+def _normalise_view(view: str | None) -> str:
+    normalized = str(view or "entities").strip().casefold()
+    if normalized in {"jurisdiction_counts", "jurisdiction_count", "counts_by_jurisdiction"}:
+        return "jurisdiction_counts"
+    return "entities"
 
 
 def _filter_cases(
@@ -152,6 +190,11 @@ def _rank_cases(cases: list[dict[str, Any]], query: str | None) -> list[dict[str
     return sorted(cases, key=score)
 
 
+def _jurisdiction_count_rows(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts = Counter(case.get("jurisdiction") for case in cases)
+    return _counter_items(counts, limit=None)
+
+
 def _summary(
     all_cases: list[dict[str, Any]],
     matches: list[dict[str, Any]],
@@ -178,12 +221,13 @@ def _summary(
     }
 
 
-def _counter_items(counter: Counter, *, limit: int) -> list[dict[str, Any]]:
-    return [
+def _counter_items(counter: Counter, *, limit: int | None) -> list[dict[str, Any]]:
+    items = [
         {"value": value, "count": count}
         for value, count in counter.most_common(limit)
         if value not in (None, "")
     ]
+    return sorted(items, key=lambda item: (-item["count"], item["value"]))
 
 
 def _clean_case(case: dict[str, Any]) -> dict[str, Any]:
@@ -233,6 +277,12 @@ def main() -> None:
     parser.add_argument("--country", help='Country name, e.g. "Hong Kong"')
     parser.add_argument("--origin", help='Case origin, e.g. "golden"')
     parser.add_argument(
+        "--view",
+        choices=("entities", "jurisdiction_counts"),
+        default="entities",
+        help="Return entity rows or aggregate counts by jurisdiction",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=5,
@@ -250,6 +300,7 @@ def main() -> None:
         jurisdiction=args.jurisdiction,
         country=args.country,
         origin=args.origin,
+        view=args.view,
         limit=args.limit,
         include_summary=not args.no_summary,
     )
