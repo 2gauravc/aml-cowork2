@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -54,7 +55,10 @@ class PipelineRequest(BaseModel):
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest) -> dict[str, Any]:
+async def chat(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     session = _session(request.session_id)
     if request.message:
         session["messages"].append({"role": "user", "content": request.message})
@@ -76,6 +80,7 @@ async def chat(request: ChatRequest) -> dict[str, Any]:
                 jurisdiction=args.get("jurisdiction"),
                 case_id=args.get("case_id"),
                 generate_pdf=request.generate_pdf,
+                background_tasks=background_tasks,
             )
         if action == "find_test_cases":
             return await _run_tool_for_session(
@@ -134,7 +139,10 @@ async def chat(request: ChatRequest) -> dict[str, Any]:
 
 
 @app.post("/api/pipeline/run")
-async def run_pipeline(request: PipelineRequest) -> dict[str, Any]:
+async def run_pipeline(
+    request: PipelineRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     session = _session(request.session_id)
     return await _run_pipeline_for_session(
         session,
@@ -142,6 +150,7 @@ async def run_pipeline(request: PipelineRequest) -> dict[str, Any]:
         jurisdiction=request.jurisdiction,
         case_id=request.case_id,
         generate_pdf=request.generate_pdf,
+        background_tasks=background_tasks,
     )
 
 
@@ -173,7 +182,11 @@ async def get_session(session_id: str) -> dict[str, Any]:
     session = SESSIONS.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return _response(session, status="ok")
+    return _response(
+        session,
+        status=session.get("pipeline_status") or "ok",
+        error=session.get("pipeline_error"),
+    )
 
 
 def _session(session_id: str | None) -> dict[str, Any]:
@@ -214,6 +227,7 @@ def _response(
         "tool_results": session.get("tool_results", []),
         "pdf_url": pdf_url,
         "error": error,
+        "pipeline_status": session.get("pipeline_status"),
     }
 
 
@@ -262,6 +276,7 @@ async def _run_pipeline_for_session(
     jurisdiction: str | None,
     case_id: str | None = None,
     generate_pdf: bool = False,
+    background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
     if not customer_name or not jurisdiction:
         session["messages"].append(
@@ -273,8 +288,13 @@ async def _run_pipeline_for_session(
         return _response(session, status="needs_input")
 
     jurisdiction = _clean_jurisdiction(jurisdiction)
+    if session.get("pipeline_status") == "running":
+        return _response(session, status="running")
+
     session["customer_name"] = customer_name
     session["jurisdiction"] = jurisdiction
+    session["pipeline_status"] = "running"
+    session["pipeline_error"] = None
     if case_id:
         session["case_id"] = case_id
 
@@ -284,24 +304,63 @@ async def _run_pipeline_for_session(
             "content": f"Running full CDD pipeline for {customer_name} ({jurisdiction}).",
         }
     )
-    graph_state = run_cdd_agent_state(
-        customer_name=customer_name,
-        jurisdiction=jurisdiction,
-        case_id=case_id,
-    )
-    cdd = graph_state.get("cdd", {})
-    session["cdd"] = cdd
-    session["graph_state"] = graph_state
-    session["evidence"] = graph_state.get("evidence", [])
-    session["risk_flags"] = graph_state.get("risk_flags", [])
-    session["final_recommendation"] = graph_state.get("final_recommendation")
-    session["messages"].append({"role": "assistant", "content": _summary(cdd)})
 
-    if generate_pdf:
-        pdf_path = render_cdd_pdf(cdd)
-        session["pdf_path"] = str(pdf_path)
+    task_kwargs = {
+        "customer_name": customer_name,
+        "jurisdiction": jurisdiction,
+        "case_id": case_id,
+        "generate_pdf": generate_pdf,
+    }
+    if background_tasks is not None:
+        background_tasks.add_task(
+            _complete_pipeline_for_session,
+            session,
+            **task_kwargs,
+        )
+    else:
+        asyncio.create_task(
+            _complete_pipeline_for_session(
+                session,
+                **task_kwargs,
+            )
+        )
+    return _response(session, status="running")
 
-    return _response(session, status="complete")
+
+async def _complete_pipeline_for_session(
+    session: dict[str, Any],
+    *,
+    customer_name: str,
+    jurisdiction: str | None,
+    case_id: str | None = None,
+    generate_pdf: bool = False,
+) -> None:
+    try:
+        graph_state = await asyncio.to_thread(
+            run_cdd_agent_state,
+            customer_name=customer_name,
+            jurisdiction=jurisdiction,
+            case_id=case_id,
+        )
+        cdd = graph_state.get("cdd", {})
+        session["cdd"] = cdd
+        session["graph_state"] = graph_state
+        session["evidence"] = graph_state.get("evidence", [])
+        session["risk_flags"] = graph_state.get("risk_flags", [])
+        session["final_recommendation"] = graph_state.get("final_recommendation")
+        session["messages"].append({"role": "assistant", "content": _summary(cdd)})
+
+        if generate_pdf:
+            pdf_path = render_cdd_pdf(cdd)
+            session["pdf_path"] = str(pdf_path)
+
+        session["pipeline_status"] = "complete"
+    except Exception as exc:
+        session["pipeline_status"] = "error"
+        session["pipeline_error"] = str(exc)
+        session["messages"].append(
+            {"role": "assistant", "content": f"CDD pipeline failed: {exc}"}
+        )
 
 
 async def _run_named_company_tool(

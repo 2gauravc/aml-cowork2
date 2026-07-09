@@ -6,7 +6,7 @@ function App() {
     {
       role: "assistant",
       content:
-        "Ask me about test cases, company profiles, members, org charts, or the current CDD.",
+        "Ask me to explain evidence, run specific tasks, run full CDD pipeline or search for accounts in sandbox scope.",
     },
   ]);
   const [customerName, setCustomerName] = useState("");
@@ -54,9 +54,11 @@ function App() {
           message: outgoing,
         }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Chat request failed");
+      const data = await readJsonResponse(response, "Chat request failed");
       applyResponse(data);
+      if (data.status === "running") {
+        await pollSession(data.session_id);
+      }
     } catch (err) {
       setError(err.message);
       setMessages((current) => [
@@ -84,9 +86,11 @@ function App() {
           generate_pdf: generatePdf,
         }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "CDD pipeline failed");
+      const data = await readJsonResponse(response, "CDD pipeline failed");
       applyResponse(data);
+      if (data.status === "running") {
+        await pollSession(data.session_id);
+      }
     } catch (err) {
       setError(err.message);
       setMessages((current) => [
@@ -108,8 +112,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "PDF generation failed");
+      const data = await readJsonResponse(response, "PDF generation failed");
       setPdfUrl(data.pdf_url);
     } catch (err) {
       setError(err.message);
@@ -118,10 +121,23 @@ function App() {
     }
   }
 
+  async function pollSession(activeSessionId) {
+    while (activeSessionId) {
+      await delay(2000);
+      const response = await fetch(`/api/session/${activeSessionId}`);
+      const data = await readJsonResponse(response, "CDD pipeline failed");
+      applyResponse(data);
+      if (data.status !== "running") {
+        if (data.error) throw new Error(data.error);
+        return data;
+      }
+    }
+  }
+
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">WBL Bank CDD</div>
+        <div className="brand">WBL Bank Onboarding CDD</div>
         <div className="top-status">
           <span className={`badge ${cdd?.status === "complete" ? "complete" : "review"}`}>
             CDD: {cdd?.status || "Draft"}
@@ -135,8 +151,7 @@ function App() {
       <div className="workspace">
         <aside className="chat">
           <div className="chat-head">
-            <h1>Onboarding Chat</h1>
-            <p>Open-ended chat can search test cases, run tools, explain evidence, or trigger full CDD.</p>
+            <h1>Onboarding Chat - for deeper probing</h1>
           </div>
 
           <div className="messages">
@@ -174,7 +189,7 @@ function App() {
         </aside>
 
         <main className="main">
-          <Section title="Run Deterministic Pipeline">
+          <Section title="Run Full CDD Pipeline">
             <div className="pipeline-form">
               <input
                 aria-label="Company name"
@@ -202,17 +217,10 @@ function App() {
                 disabled={pipelineLoading || !customerName.trim()}
                 onClick={() => runPipeline()}
               >
-                Run Full CDD
-              </button>
-              <button
-                className="secondary"
-                disabled={pipelineLoading || !customerName.trim()}
-                onClick={() => runPipeline({ generatePdf: true })}
-              >
-                Run + PDF
+                Run Full CDD Pipeline
               </button>
             </div>
-            {pipelineLoading && <p className="empty">Running the deterministic graph...</p>}
+            {pipelineLoading && <p className="empty">Running the full CDD pipeline. Please wait</p>}
           </Section>
 
           <div className="actions">
@@ -357,6 +365,29 @@ function percent(value) {
   if (value === undefined || value === null || value === "") return "-";
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(2)}%` : value;
+}
+
+async function readJsonResponse(response, fallbackMessage) {
+  const text = await response.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      throw new Error(`${fallbackMessage}: unexpected server response`);
+    }
+  }
+  if (!response.ok) {
+    throw new Error(data.detail || data.error || fallbackMessage);
+  }
+  if (!text) {
+    throw new Error(`${fallbackMessage}: empty response from server`);
+  }
+  return data;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function riskFlags(cdd) {
