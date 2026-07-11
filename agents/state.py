@@ -58,6 +58,7 @@ class CustomerStaticCDD(CDDSection, total=False):
     jurisdiction: str
     registered_address: dict[str, Any]
     registry_properties: dict[str, Any]
+    source: dict[str, Any]
 
 
 class MembersCDD(CDDSection, total=False):

@@ -28,6 +28,7 @@ function App() {
   const ownership = cdd?.ownership_and_control || {};
   const risks = useMemo(() => riskFlags(cdd), [cdd]);
   const capital = capitalDisplay(profile);
+  const fieldSources = profile.source || {};
   const cddMetadata = {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
@@ -284,15 +285,31 @@ function App() {
 
           <Section title="About the Customer">
             <div className="grid">
-              <Field label="Name" value={profile.name} />
-              <Field label="Jurisdiction" value={profile.jurisdiction || jurisdiction} />
-              <Field label="Status" value={profile.company_status} />
-              <Field label="Registration No" value={profile.registration_number} />
-              <Field label="Company Type" value={profile.company_type} />
-              <Field label={capital.label} value={capital.value} detail={capital.detail} />
-              <Field label="Activity" value={profile.activity_type} />
-              <Field label="Incorporation" value={profile.incorporation_date} />
-              <Field label="Address" value={profile.registered_address?.full_address} />
+              <Field label="Name" value={profile.name} source={fieldSources.name} />
+              <Field
+                label="Jurisdiction"
+                value={profile.jurisdiction || jurisdiction}
+                source={fieldSources.jurisdiction}
+              />
+              <Field label="Status" value={profile.company_status} source={fieldSources.company_status} />
+              <Field
+                label="Registration No"
+                value={profile.registration_number}
+                source={fieldSources.registration_number}
+              />
+              <Field label="Company Type" value={profile.company_type} source={fieldSources.company_type} />
+              <Field label={capital.label} value={capital.value} source={capital.source} />
+              <Field label="Activity" value={profile.activity_type} source={fieldSources.activity_type} />
+              <Field
+                label="Incorporation"
+                value={profile.incorporation_date}
+                source={fieldSources.incorporation_date}
+              />
+              <Field
+                label="Address"
+                value={profile.registered_address?.full_address}
+                source={fieldSources.registered_address}
+              />
             </div>
           </Section>
 
@@ -378,12 +395,20 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, value, detail }) {
+function Field({ label, value, source }) {
+  const sourceText = sourceTooltip(source);
   return (
     <div className="field">
-      <div className="label">{label}</div>
+      <div className="label-row">
+        <div className="label">{label}</div>
+        {sourceText && (
+          <span className="source-tip" tabIndex="0" aria-label={sourceText}>
+            i
+            <span className="source-tooltip" role="tooltip">{sourceText}</span>
+          </span>
+        )}
+      </div>
       <div className="value">{value || "-"}</div>
-      {detail && <div className="field-detail">{detail}</div>}
     </div>
   );
 }
@@ -419,14 +444,25 @@ function percent(value) {
 function capitalDisplay(profile) {
   const display = profile.display_capital;
   if (display?.value) {
-    const source = display.source_label ? `Source: ${display.source_label}` : null;
     return {
-      label: display.label || "Capital",
+      label: "Paid-up Capital",
       value: display.value,
-      detail: source,
+      source: display.source || profile.source?.paid_up_capital || null,
     };
   }
-  return { label: "Capital", value: "-", detail: null };
+  return {
+    label: "Paid-up Capital",
+    value: "-",
+    source: profile.source?.paid_up_capital || null,
+  };
+}
+
+function sourceTooltip(source) {
+  if (!source) return null;
+  const lines = [];
+  if (source.api) lines.push(`API: ${source.api}`);
+  if (source.field) lines.push(`Field: ${source.field}`);
+  return lines.length ? lines.join("\n") : null;
 }
 
 function cddStatusLabel(status) {

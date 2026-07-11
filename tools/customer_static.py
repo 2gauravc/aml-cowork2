@@ -88,6 +88,10 @@ FIELD_ALIASES = {
         "Share capital",
         "Share Capital",
         "Capital",
+        "Capital Amount",
+        "Capital amount",
+        "Ordinary Share Capital",
+        "Share capital amount",
     ),
     "paid_up_capital": (
         "Paid Up Capital",
@@ -95,6 +99,11 @@ FIELD_ALIASES = {
         "Paid up capital",
         "Paid-up share capital",
         "Paid Up Share Capital",
+        "Paid Up Share Capital Amount",
+        "Paid-up Share Capital Amount",
+        "Paid up share capital amount",
+        "Paid-up capital amount",
+        "Paid up capital amount",
     ),
     "registration_date": (
         "Registration Date",
@@ -135,6 +144,11 @@ CAPITAL_FIELD_MAPPINGS = (
             "Paid up capital",
             "Paid-up share capital",
             "Paid Up Share Capital",
+            "Paid Up Share Capital Amount",
+            "Paid-up Share Capital Amount",
+            "Paid up share capital amount",
+            "Paid-up capital amount",
+            "Paid up capital amount",
         ),
     },
     {
@@ -145,6 +159,9 @@ CAPITAL_FIELD_MAPPINGS = (
             "Issued Share Capital",
             "Issued Capital",
             "Total Issued Share Capital",
+            "Issued Share Capital Amount",
+            "Issued capital amount",
+            "Total Issued Capital",
         ),
     },
     {
@@ -155,6 +172,10 @@ CAPITAL_FIELD_MAPPINGS = (
             "Share capital",
             "Share Capital",
             "Capital",
+            "Capital Amount",
+            "Capital amount",
+            "Ordinary Share Capital",
+            "Share capital amount",
         ),
     },
 )
@@ -285,9 +306,19 @@ def clean_customer_static_response(
     address = details.get("caseAddress") or {}
     properties = _clean_properties(company.get("properties"))
     capital_fields = _capital_fields(properties)
+    case_source = _case_source(case_id, common, company)
+    display_capital = _display_capital(capital_fields, case_source=case_source)
+    source = _source_map(
+        properties,
+        common=common,
+        company=company,
+        address=address,
+        case_source=case_source,
+        display_capital=display_capital,
+    )
 
     cleaned = {
-        "case_id": case_id or common.get("caseCommonId") or company.get("caseCommonId"),
+        "case_id": case_source.get("case_id"),
         "customer_static": {
             "name": company.get("entityName"),
             "company_type": _first_value(
@@ -308,7 +339,7 @@ def clean_customer_static_response(
             "share_capital": _property_value(properties, "share_capital"),
             "paid_up_capital": _property_value(properties, "paid_up_capital"),
             "capital_fields": capital_fields,
-            "display_capital": _display_capital(capital_fields),
+            "display_capital": display_capital,
             "registration_date": _property_value(properties, "registration_date"),
             "incorporation_date": _first_value(
                 _property_value(properties, "incorporation_date"),
@@ -320,6 +351,7 @@ def clean_customer_static_response(
             or address.get("countryCodeISO31662"),
             "registered_address": _address(address),
             "registry_properties": properties,
+            "source": source,
             "sources": _company_identity_sources(details.get("stepDataSource")),
         },
     }
@@ -353,7 +385,11 @@ def _capital_fields(properties: dict[str, Any] | None) -> list[dict[str, Any]]:
     return fields
 
 
-def _display_capital(capital_fields: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _display_capital(
+    capital_fields: list[dict[str, Any]],
+    *,
+    case_source: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     if not capital_fields:
         return None
 
@@ -361,13 +397,128 @@ def _display_capital(capital_fields: list[dict[str, Any]]) -> dict[str, Any] | N
         capital_fields,
         key=lambda item: CAPITAL_DISPLAY_PRIORITY.get(item.get("canonical_type"), 99),
     )
+    source = _source_info(
+        field_name=selected.get("source_label"),
+        case_source=case_source,
+    )
     return {
-        "label": selected.get("label") or selected.get("source_label") or "Capital",
+        "label": "Paid-up Capital",
         "source_label": selected.get("source_label"),
+        "source": source,
         "value": selected.get("value"),
         "canonical_type": selected.get("canonical_type"),
         "confidence": selected.get("confidence"),
     }
+
+
+def _source_map(
+    properties: dict[str, Any] | None,
+    *,
+    common: dict[str, Any],
+    company: dict[str, Any],
+    address: dict[str, Any],
+    case_source: dict[str, Any],
+    display_capital: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "name": _source_info(field_name="entityName", case_source=case_source),
+            "company_type": _source_info(
+                field_name="type"
+                if company.get("type") not in (None, "", "-", [], {})
+                else _property_source(properties, "company_type"),
+                case_source=case_source,
+            ),
+            "registration_number": _source_info(
+                field_name=_property_source(properties, "registration_number"),
+                case_source=case_source,
+            ),
+            "company_status": _source_info(
+                field_name=_first_value(
+                    _property_source(properties, "company_status"),
+                    "statusName"
+                    if common.get("statusName") not in (None, "", "-", [], {})
+                    else None,
+                    "status" if common.get("status") not in (None, "", "-", [], {}) else None,
+                ),
+                case_source=case_source,
+            ),
+            "activity_type": _source_info(
+                field_name=_property_source(properties, "activity_type"),
+                case_source=case_source,
+            ),
+            "total_shares": _source_info(
+                field_name=_property_source(properties, "total_shares"),
+                case_source=case_source,
+            ),
+            "paid_up_capital": display_capital.get("source")
+            if display_capital
+            else None,
+            "registration_date": _source_info(
+                field_name=_property_source(properties, "registration_date"),
+                case_source=case_source,
+            ),
+            "incorporation_date": _source_info(
+                field_name=_first_value(
+                    _property_source(properties, "incorporation_date"),
+                    _property_source(properties, "creation_date"),
+                ),
+                case_source=case_source,
+            ),
+            "jurisdiction": _source_info(
+                field_name="countryCodeISO31662"
+                if company.get("countryCodeISO31662") not in (None, "", "-", [], {})
+                else "caseAddress.countryCodeISO31662"
+                if address.get("countryCodeISO31662") not in (None, "", "-", [], {})
+                else None,
+                case_source=case_source,
+            ),
+            "registered_address": _source_info(
+                field_name="caseAddress.address"
+                if address.get("address") not in (None, "", "-", [], {})
+                else "caseAddress.rawAddress"
+                if address.get("rawAddress") not in (None, "", "-", [], {})
+                else None,
+                case_source=case_source,
+            ),
+        }
+    )
+
+
+def _case_source(
+    case_id: int | str | None,
+    common: dict[str, Any],
+    company: dict[str, Any],
+) -> dict[str, Any]:
+    resolved_case_id = case_id or common.get("caseCommonId") or company.get("caseCommonId")
+    api = "KYC.com GET /v2/Companies"
+    if resolved_case_id:
+        api = f"{api}/{resolved_case_id}"
+    return _drop_empty({"api": api, "case_id": resolved_case_id})
+
+
+def _source_info(
+    *,
+    field_name: str | None,
+    case_source: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not field_name:
+        return None
+    source = dict(case_source or {})
+    source["field"] = field_name
+    return _drop_empty(source)
+
+
+def _property_source(properties: dict[str, Any] | None, field: str) -> str | None:
+    if not isinstance(properties, dict):
+        return None
+
+    aliases = FIELD_ALIASES.get(field, (field,))
+    for alias in aliases:
+        value, source_label = _property_with_source(properties, alias)
+        if value not in (None, "", "-", [], {}):
+            return source_label
+    return None
 
 
 def _property_value(properties: dict[str, Any] | None, field: str) -> Any:

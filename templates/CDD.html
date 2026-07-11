@@ -172,8 +172,8 @@
         <div class="value">{{ static.get("incorporation_date")|blank }}</div>
       </td>
       <td>
-        <div class="label">Share Capital</div>
-        <div class="value">{{ static.get("share_capital")|blank }}</div>
+        <div class="label">Paid-up Capital</div>
+        <div class="value">{{ static.get("display_capital", {}).get("value")|blank }}</div>
       </td>
     </tr>
   </table>
