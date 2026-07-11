@@ -31,6 +31,7 @@ from agents.nodes import (  # noqa: E402
     has_required_inputs,
 )
 from agents.state import CDDState, new_cdd_state  # noqa: E402
+from utils.langgraph_debug import maybe_debug_node  # noqa: E402
 from utils.pdf import render_cdd_pdf  # noqa: E402
 
 
@@ -39,18 +40,48 @@ load_dotenv()
 
 def build_cdd_graph():
     graph = StateGraph(CDDState)
-    graph.add_node("collect_required_inputs", collect_required_inputs)
-    graph.add_node("create_or_reuse_case", create_or_reuse_case)
-    graph.add_node("fetch_customer_static", fetch_customer_static)
-    graph.add_node("fetch_org_chart", fetch_org_chart)
-    graph.add_node("fetch_members", fetch_members)
-    graph.add_node("build_company_business_profile", build_company_business_profile)
-    graph.add_node("generate_registry_document", generate_registry_document_node)
-    graph.add_node("extract_registry_document", extract_registry_document)
-    graph.add_node("enrich_cdd_from_registry_document", enrich_cdd_from_registry_document)
-    graph.add_node("build_ownership_and_control", build_ownership_and_control)
-    graph.add_node("evaluate_risk_flags", evaluate_risk_flags)
-    graph.add_node("finalize_cdd", finalize_cdd)
+    graph.add_node(
+        "collect_required_inputs",
+        maybe_debug_node("collect_required_inputs", collect_required_inputs),
+    )
+    graph.add_node(
+        "create_or_reuse_case",
+        maybe_debug_node("create_or_reuse_case", create_or_reuse_case),
+    )
+    graph.add_node(
+        "fetch_customer_static",
+        maybe_debug_node("fetch_customer_static", fetch_customer_static),
+    )
+    graph.add_node("fetch_org_chart", maybe_debug_node("fetch_org_chart", fetch_org_chart))
+    graph.add_node("fetch_members", maybe_debug_node("fetch_members", fetch_members))
+    graph.add_node(
+        "build_company_business_profile",
+        maybe_debug_node("build_company_business_profile", build_company_business_profile),
+    )
+    graph.add_node(
+        "generate_registry_document",
+        maybe_debug_node("generate_registry_document", generate_registry_document_node),
+    )
+    graph.add_node(
+        "extract_registry_document",
+        maybe_debug_node("extract_registry_document", extract_registry_document),
+    )
+    graph.add_node(
+        "enrich_cdd_from_registry_document",
+        maybe_debug_node(
+            "enrich_cdd_from_registry_document",
+            enrich_cdd_from_registry_document,
+        ),
+    )
+    graph.add_node(
+        "build_ownership_and_control",
+        maybe_debug_node("build_ownership_and_control", build_ownership_and_control),
+    )
+    graph.add_node(
+        "evaluate_risk_flags",
+        maybe_debug_node("evaluate_risk_flags", evaluate_risk_flags),
+    )
+    graph.add_node("finalize_cdd", maybe_debug_node("finalize_cdd", finalize_cdd))
 
     graph.set_entry_point("collect_required_inputs")
     graph.add_conditional_edges(
