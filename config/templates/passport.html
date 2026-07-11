@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Passport</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm;
+    }
+
+    body {
+      color: #172033;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    h1 {
+      color: #10213f;
+      font-size: 22px;
+      margin: 0 0 4px;
+    }
+
+    .subtitle {
+      color: #5f6f86;
+      margin-bottom: 18px;
+    }
+
+    .notice {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #7c2d12;
+      margin: 14px 0;
+      padding: 8px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th {
+      background: #eaf0f8;
+      color: #10213f;
+      text-align: left;
+    }
+
+    th,
+    td {
+      border: 1px solid #c8d2e1;
+      padding: 7px;
+      vertical-align: top;
+    }
+  </style>
+</head>
+<body>
+  <h1>Passport</h1>
+  <div class="subtitle">Synthetic demo identity document</div>
+  <div class="notice">Synthetic demo document - not an official identity document.</div>
+
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Full Name</td><td>{{ document.full_name }}</td></tr>
+    <tr><td>Passport Number</td><td>{{ document.document_number }}</td></tr>
+    <tr><td>Nationality</td><td>{{ document.nationality }}</td></tr>
+    <tr><td>Date of Birth</td><td>{{ document.date_of_birth }}</td></tr>
+    <tr><td>Expiry Date</td><td>{{ document.expiry_date }}</td></tr>
+    <tr><td>Issuing Country</td><td>{{ document.issuing_country }}</td></tr>
+  </table>
+</body>
+</html>

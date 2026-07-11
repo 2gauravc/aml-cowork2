@@ -26,6 +26,7 @@ function App() {
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
+  const idv = cdd?.individual_identity_verification || {};
   const risks = useMemo(() => riskFlags(cdd), [cdd]);
   const capital = capitalDisplay(profile);
   const fieldSources = profile.source || {};
@@ -350,6 +351,34 @@ function App() {
             />
           </Section>
 
+          <Section title="ID&V">
+            <SubTable
+              empty="No ID&V requirements established"
+              columns={[
+                "Name",
+                "Role(s)",
+                "Required",
+                "Document",
+                "Document No",
+                "Nationality",
+                "DOB",
+                "Expiry",
+                "Status",
+              ]}
+              rows={(idv.required_individuals || []).map((row) => [
+                row.name,
+                joinList(row.roles),
+                joinList(row.required_documents?.map(documentLabel)),
+                documentLabel(row.document?.document_type || row.selected_document_type),
+                row.document?.document_number,
+                row.document?.nationality,
+                row.document?.date_of_birth,
+                row.document?.expiry_date,
+                statusLabel(row.status),
+              ])}
+            />
+          </Section>
+
           <Section title="Risk Flags">
             {risks.length ? (
               <div className="risk-list">
@@ -441,6 +470,26 @@ function percent(value) {
   if (value === undefined || value === null || value === "") return "-";
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(2)}%` : value;
+}
+
+function joinList(values) {
+  return (values || []).filter(Boolean).join(", ");
+}
+
+function documentLabel(value) {
+  const labels = {
+    passport: "Passport",
+    national_id: "National ID",
+  };
+  return labels[value] || value || "-";
+}
+
+function statusLabel(value) {
+  if (!value) return "-";
+  return String(value)
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function capitalDisplay(profile) {

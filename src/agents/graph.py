@@ -24,12 +24,15 @@ from src.agents.nodes import (  # noqa: E402
     collect_required_inputs,
     create_or_reuse_case,
     enrich_cdd_from_registry_document,
+    establish_idv_requirements,
     evaluate_risk_flags,
+    extract_idv_documents,
     extract_registry_document,
     fetch_customer_static,
     fetch_members,
     fetch_org_chart,
     finalize_cdd,
+    generate_idv_documents_node,
     generate_registry_document_node,
     has_required_inputs,
 )
@@ -81,6 +84,18 @@ def build_cdd_graph():
         maybe_debug_node("build_ownership_and_control", build_ownership_and_control),
     )
     graph.add_node(
+        "establish_idv_requirements",
+        maybe_debug_node("establish_idv_requirements", establish_idv_requirements),
+    )
+    graph.add_node(
+        "generate_idv_documents",
+        maybe_debug_node("generate_idv_documents", generate_idv_documents_node),
+    )
+    graph.add_node(
+        "extract_idv_documents",
+        maybe_debug_node("extract_idv_documents", extract_idv_documents),
+    )
+    graph.add_node(
         "evaluate_risk_flags",
         maybe_debug_node("evaluate_risk_flags", evaluate_risk_flags),
     )
@@ -103,7 +118,10 @@ def build_cdd_graph():
     graph.add_edge("generate_registry_document", "extract_registry_document")
     graph.add_edge("extract_registry_document", "enrich_cdd_from_registry_document")
     graph.add_edge("enrich_cdd_from_registry_document", "build_ownership_and_control")
-    graph.add_edge("build_ownership_and_control", "evaluate_risk_flags")
+    graph.add_edge("build_ownership_and_control", "establish_idv_requirements")
+    graph.add_edge("establish_idv_requirements", "generate_idv_documents")
+    graph.add_edge("generate_idv_documents", "extract_idv_documents")
+    graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")
     graph.add_edge("finalize_cdd", END)
     return graph.compile()

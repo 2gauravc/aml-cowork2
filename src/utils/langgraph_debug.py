@@ -28,6 +28,9 @@ NODE_FUNCTIONS = {
         "apply_document_extract_to_cdd",
     ],
     "build_ownership_and_control": ["_latest_evidence_data", "build_ownership_tables"],
+    "establish_idv_requirements": ["interpret_idv_policy", "establish_idv_requirements"],
+    "generate_idv_documents": ["generate_idv_documents"],
+    "extract_idv_documents": ["classify_document", "extract_document"],
     "evaluate_risk_flags": [],
     "finalize_cdd": [],
 }

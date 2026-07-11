@@ -85,12 +85,18 @@ class CompanyBusinessProfileCDD(CDDSection, total=False):
     customer_static: CustomerStaticCDD
 
 
+class IndividualIdentityVerificationCDD(CDDSection, total=False):
+    policy: dict[str, Any]
+    required_individuals: list[dict[str, Any]]
+
+
 class CDD(TypedDict, total=False):
     status: SectionStatus
     started_at: str
     completed_at: str
     ownership_and_control: OwnershipAndControlCDD
     company_business_profile: CompanyBusinessProfileCDD
+    individual_identity_verification: IndividualIdentityVerificationCDD
     documents: list[dict[str, Any]]
 
 
@@ -167,6 +173,12 @@ def new_cdd_state(
                 "status": "incomplete",
                 "missing_items": [],
                 "notes": [],
+            },
+            "individual_identity_verification": {
+                "status": "incomplete",
+                "missing_items": [],
+                "notes": [],
+                "required_individuals": [],
             },
         },
         "documents": [],

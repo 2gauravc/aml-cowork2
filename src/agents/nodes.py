@@ -16,10 +16,13 @@ from src.tools.cdd_enrichment import (
 )
 from src.tools.customer_static import _fetch_customer_static
 from src.tools.document_extraction import classify_document, extract_document
+from src.tools.idv_policy import interpret_idv_policy
+from src.tools.idv_requirements import establish_idv_requirements as apply_idv_requirements
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
 from src.utils.document_pipeline import generate_registry_document
+from src.utils.idv_document_pipeline import generate_idv_documents
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -192,6 +195,7 @@ def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
             _evidence(
                 tool="generate_registry_document",
                 description="Generated synthetic registry business profile document",
+                source="Synthetic demo document generator",
                 data=artifact,
                 relevance_tags=[
                     "document",
@@ -218,6 +222,7 @@ def extract_registry_document(state: CDDState) -> dict[str, Any]:
             _evidence(
                 tool="extract_registry_document",
                 description="Classified and extracted registry document data",
+                source="OpenAI document extraction",
                 data={
                     "classification": classification,
                     "extract": extract,
@@ -291,6 +296,90 @@ def build_ownership_and_control(state: CDDState) -> dict[str, Any]:
     return {"cdd": cdd}
 
 
+def establish_idv_requirements(state: CDDState) -> dict[str, Any]:
+    """Interpret the ID&V policy and apply it to required individuals."""
+    cdd = deepcopy(state.get("cdd", {}))
+    policy = interpret_idv_policy()
+    idv = apply_idv_requirements(cdd, policy)
+    cdd["individual_identity_verification"] = idv
+    return {
+        "cdd": cdd,
+        "messages": [AIMessage(content="Establishing ID&V requirements.")],
+        "evidence": [
+            _evidence(
+                tool="establish_idv_requirements",
+                description="Interpreted ID&V policy and applied it to the case",
+                source="OpenAI policy interpretation",
+                data=idv,
+                relevance_tags=["idv", "policy", "ubo", "directors"],
+            )
+        ],
+    }
+
+
+def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
+    """Generate synthetic identity documents for ID&V-required people."""
+    cdd = state.get("cdd", {})
+    idv = cdd.get("individual_identity_verification", {})
+    individuals = idv.get("required_individuals", [])
+    artifacts = generate_idv_documents(individuals)
+    return {
+        "messages": [AIMessage(content="Generating ID&V documents.")],
+        "evidence": [
+            _evidence(
+                tool="generate_idv_documents",
+                description="Generated synthetic ID&V documents",
+                source="Synthetic demo document generator",
+                data={"artifacts": artifacts},
+                relevance_tags=["idv", "document", "synthetic_demo"],
+            )
+        ],
+    }
+
+
+def extract_idv_documents(state: CDDState) -> dict[str, Any]:
+    """Extract generated ID&V documents and populate the ID&V CDD section."""
+    cdd = deepcopy(state.get("cdd", {}))
+    idv = cdd.setdefault("individual_identity_verification", {})
+    individuals = idv.get("required_individuals", [])
+    artifact_data = _latest_evidence_data(state, "generate_idv_documents") or {}
+    artifacts = artifact_data.get("artifacts") or []
+
+    extracts = []
+    for artifact in artifacts:
+        classification = classify_document(artifact["pdf_path"])
+        extract = extract_document(artifact, classification=classification)
+        extracts.append(
+            {
+                "artifact": artifact,
+                "classification": classification,
+                "extract": extract,
+            }
+        )
+
+    _apply_idv_extracts(individuals, extracts)
+    idv["required_individuals"] = individuals
+    idv["missing_items"] = [
+        row.get("name") for row in individuals if row.get("status") != "verified"
+    ]
+    idv["status"] = "complete" if not idv["missing_items"] else "incomplete"
+    cdd["individual_identity_verification"] = idv
+    cdd.setdefault("documents", []).extend(extracts)
+    return {
+        "cdd": cdd,
+        "messages": [AIMessage(content="Extracting ID&V documents.")],
+        "evidence": [
+            _evidence(
+                tool="extract_idv_documents",
+                description="Classified and extracted ID&V document data",
+                source="OpenAI document extraction",
+                data={"documents": extracts},
+                relevance_tags=["idv", "document_extraction"],
+            )
+        ],
+    }
+
+
 def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
     flags = []
     cdd = state.get("cdd", {})
@@ -325,6 +414,7 @@ def finalize_cdd(state: CDDState) -> dict[str, Any]:
     section_statuses = [
         cdd.get("ownership_and_control", {}).get("status"),
         cdd.get("company_business_profile", {}).get("status"),
+        cdd.get("individual_identity_verification", {}).get("status"),
     ]
     complete = all(status == "complete" for status in section_statuses)
     open_flags = [flag for flag in state.get("risk_flags", []) if flag.get("status") == "open"]
@@ -359,9 +449,10 @@ def _evidence(
     description: str,
     data: dict[str, Any],
     relevance_tags: list[str],
+    source: str = "KYC API",
 ) -> dict[str, Any]:
     return {
-        "source": "KYC API",
+        "source": source,
         "tool": tool,
         "description": description,
         "relevance_tags": relevance_tags,
@@ -377,6 +468,56 @@ def _latest_evidence_data(state: CDDState, tool: str) -> dict[str, Any] | None:
             if isinstance(data, dict):
                 return data
     return None
+
+
+def _apply_idv_extracts(
+    individuals: list[dict[str, Any]],
+    extracts: list[dict[str, Any]],
+) -> None:
+    by_key = {}
+    for item in extracts:
+        artifact = item.get("artifact", {})
+        extract = item.get("extract", {})
+        key = _identity_key(
+            {
+                "name": artifact.get("person_name") or extract.get("full_name"),
+                "case_common_id": artifact.get("case_common_id"),
+            }
+        )
+        by_key[key] = item
+
+    for individual in individuals:
+        item = by_key.get(_identity_key(individual))
+        if not item:
+            continue
+        extract = item.get("extract", {})
+        artifact = item.get("artifact", {})
+        document = {
+            "document_type": extract.get("document_type"),
+            "full_name": extract.get("full_name"),
+            "document_number": extract.get("document_number"),
+            "nationality": extract.get("nationality"),
+            "date_of_birth": extract.get("date_of_birth"),
+            "expiry_date": extract.get("expiry_date"),
+            "issuing_country": extract.get("issuing_country"),
+            "address": extract.get("address"),
+            "source": extract.get("extraction", {}).get("source") or artifact.get("source"),
+            "document_path": extract.get("extraction", {}).get("document_path")
+            or artifact.get("pdf_path"),
+        }
+        individual["document"] = _drop_empty(document)
+        individual["status"] = "verified"
+
+
+def _identity_key(row: dict[str, Any]) -> tuple[str, str]:
+    case_common_id = row.get("case_common_id")
+    if case_common_id not in (None, ""):
+        return ("id", str(case_common_id))
+    return ("name", " ".join(str(row.get("name") or "").casefold().split()))
+
+
+def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in data.items() if value not in (None, "", [], {})}
 
 
 def _section_status(data: dict[str, Any], *, required: tuple[str, ...]) -> str:
