@@ -87,10 +87,14 @@ FIELD_ALIASES = {
     "share_capital": (
         "Share capital",
         "Share Capital",
-        "Issued Share Capital",
+        "Capital",
+    ),
+    "paid_up_capital": (
         "Paid Up Capital",
         "Paid-up Capital",
-        "Capital",
+        "Paid up capital",
+        "Paid-up share capital",
+        "Paid Up Share Capital",
     ),
     "registration_date": (
         "Registration Date",
@@ -118,6 +122,47 @@ FIELD_ALIASES = {
         "Former Company Names",
         "Previous Company Names",
     ),
+}
+
+CAPITAL_FIELD_MAPPINGS = (
+    {
+        "canonical_type": "paid_up_capital",
+        "display_label": "Paid-up Capital",
+        "confidence": "exact",
+        "aliases": (
+            "Paid Up Capital",
+            "Paid-up Capital",
+            "Paid up capital",
+            "Paid-up share capital",
+            "Paid Up Share Capital",
+        ),
+    },
+    {
+        "canonical_type": "issued_share_capital",
+        "display_label": "Issued Share Capital",
+        "confidence": "exact",
+        "aliases": (
+            "Issued Share Capital",
+            "Issued Capital",
+            "Total Issued Share Capital",
+        ),
+    },
+    {
+        "canonical_type": "share_capital",
+        "display_label": "Share Capital",
+        "confidence": "source_label",
+        "aliases": (
+            "Share capital",
+            "Share Capital",
+            "Capital",
+        ),
+    },
+)
+
+CAPITAL_DISPLAY_PRIORITY = {
+    "paid_up_capital": 0,
+    "issued_share_capital": 1,
+    "share_capital": 2,
 }
 
 
@@ -239,6 +284,7 @@ def clean_customer_static_response(
     company = details.get("company") or {}
     address = details.get("caseAddress") or {}
     properties = _clean_properties(company.get("properties"))
+    capital_fields = _capital_fields(properties)
 
     cleaned = {
         "case_id": case_id or common.get("caseCommonId") or company.get("caseCommonId"),
@@ -260,6 +306,9 @@ def clean_customer_static_response(
             "activity_type": _property_value(properties, "activity_type"),
             "total_shares": _property_value(properties, "total_shares"),
             "share_capital": _property_value(properties, "share_capital"),
+            "paid_up_capital": _property_value(properties, "paid_up_capital"),
+            "capital_fields": capital_fields,
+            "display_capital": _display_capital(capital_fields),
             "registration_date": _property_value(properties, "registration_date"),
             "incorporation_date": _first_value(
                 _property_value(properties, "incorporation_date"),
@@ -277,6 +326,50 @@ def clean_customer_static_response(
     return _drop_empty(cleaned)
 
 
+def _capital_fields(properties: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(properties, dict):
+        return []
+
+    fields = []
+    seen = set()
+    for mapping in CAPITAL_FIELD_MAPPINGS:
+        for alias in mapping["aliases"]:
+            value, source_label = _property_with_source(properties, alias)
+            if value in (None, "", "-", [], {}):
+                continue
+            key = (mapping["canonical_type"], source_label, json.dumps(value, sort_keys=True, default=str))
+            if key in seen:
+                continue
+            seen.add(key)
+            fields.append(
+                {
+                    "canonical_type": mapping["canonical_type"],
+                    "label": mapping["display_label"],
+                    "source_label": source_label,
+                    "value": value,
+                    "confidence": mapping["confidence"],
+                }
+            )
+    return fields
+
+
+def _display_capital(capital_fields: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not capital_fields:
+        return None
+
+    selected = min(
+        capital_fields,
+        key=lambda item: CAPITAL_DISPLAY_PRIORITY.get(item.get("canonical_type"), 99),
+    )
+    return {
+        "label": selected.get("label") or selected.get("source_label") or "Capital",
+        "source_label": selected.get("source_label"),
+        "value": selected.get("value"),
+        "canonical_type": selected.get("canonical_type"),
+        "confidence": selected.get("confidence"),
+    }
+
+
 def _property_value(properties: dict[str, Any] | None, field: str) -> Any:
     if not isinstance(properties, dict):
         return None
@@ -287,6 +380,17 @@ def _property_value(properties: dict[str, Any] | None, field: str) -> Any:
         if value not in (None, "", "-", [], {}):
             return value
     return None
+
+
+def _property_with_source(properties: dict[str, Any], key: str) -> tuple[Any, str | None]:
+    if key in properties:
+        return properties[key], key
+
+    normalized = _normalize_key(key)
+    for existing_key, value in properties.items():
+        if _normalize_key(existing_key) == normalized:
+            return value, existing_key
+    return None, None
 
 
 def _property(properties: dict[str, Any], key: str) -> Any:

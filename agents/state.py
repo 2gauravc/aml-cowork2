@@ -48,6 +48,9 @@ class CustomerStaticCDD(CDDSection, total=False):
     activity_type: str
     total_shares: str
     share_capital: str
+    paid_up_capital: str
+    capital_fields: list[dict[str, Any]]
+    display_capital: dict[str, Any]
     registration_date: str
     incorporation_date: str
     creation_date: str

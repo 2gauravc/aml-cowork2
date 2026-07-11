@@ -226,6 +226,13 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.field-detail {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

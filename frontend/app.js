@@ -27,6 +27,7 @@ function App() {
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
   const risks = useMemo(() => riskFlags(cdd), [cdd]);
+  const capital = capitalDisplay(profile);
   const cddMetadata = {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
@@ -288,6 +289,7 @@ function App() {
               <Field label="Status" value={profile.company_status} />
               <Field label="Registration No" value={profile.registration_number} />
               <Field label="Company Type" value={profile.company_type} />
+              <Field label={capital.label} value={capital.value} detail={capital.detail} />
               <Field label="Activity" value={profile.activity_type} />
               <Field label="Incorporation" value={profile.incorporation_date} />
               <Field label="Address" value={profile.registered_address?.full_address} />
@@ -376,11 +378,12 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, value }) {
+function Field({ label, value, detail }) {
   return (
     <div className="field">
       <div className="label">{label}</div>
       <div className="value">{value || "-"}</div>
+      {detail && <div className="field-detail">{detail}</div>}
     </div>
   );
 }
@@ -411,6 +414,19 @@ function percent(value) {
   if (value === undefined || value === null || value === "") return "-";
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(2)}%` : value;
+}
+
+function capitalDisplay(profile) {
+  const display = profile.display_capital;
+  if (display?.value) {
+    const source = display.source_label ? `Source: ${display.source_label}` : null;
+    return {
+      label: display.label || "Capital",
+      value: display.value,
+      detail: source,
+    };
+  }
+  return { label: "Capital", value: "-", detail: null };
 }
 
 function cddStatusLabel(status) {
