@@ -8,6 +8,19 @@ from typing import Any
 from src.utils.document_pipeline import ABOUT_FIELD_PATHS, REGISTRY_SOURCE_LABEL
 
 
+REGISTRY_DOCUMENT_FIELD_LABELS = {
+    "name": "Company Name",
+    "jurisdiction": "Jurisdiction",
+    "company_status": "Company Status",
+    "registration_number": "Registration Number",
+    "company_type": "Company Type",
+    "activity_type": "Activity Type",
+    "incorporation_date": "Incorporation Date",
+    "registered_address": "Registered Office Address",
+    "paid_up_capital": "Paid-up Capital",
+}
+
+
 def missing_about_customer_fields(cdd: dict[str, Any]) -> list[str]:
     """Return About the Customer field keys that are blank in the CDD object."""
     static = _customer_static(cdd)
@@ -29,31 +42,27 @@ def apply_document_extract_to_cdd(
     static = _customer_static(cdd)
     source = static.setdefault("source", {})
     applied = []
-    source_info = {
-        "source": REGISTRY_SOURCE_LABEL,
-        "field": "Registry Business Profile",
-        "document_path": extract.get("extraction", {}).get("document_path"),
-    }
 
-    _apply_scalar(static, source, extract, "name", source_info, applied)
-    _apply_scalar(static, source, extract, "jurisdiction", source_info, applied)
-    _apply_scalar(static, source, extract, "company_status", source_info, applied)
-    _apply_scalar(static, source, extract, "registration_number", source_info, applied)
-    _apply_scalar(static, source, extract, "company_type", source_info, applied)
-    _apply_scalar(static, source, extract, "activity_type", source_info, applied)
-    _apply_scalar(static, source, extract, "incorporation_date", source_info, applied)
+    _apply_scalar(static, source, extract, "name", applied)
+    _apply_scalar(static, source, extract, "jurisdiction", applied)
+    _apply_scalar(static, source, extract, "company_status", applied)
+    _apply_scalar(static, source, extract, "registration_number", applied)
+    _apply_scalar(static, source, extract, "company_type", applied)
+    _apply_scalar(static, source, extract, "activity_type", applied)
+    _apply_scalar(static, source, extract, "incorporation_date", applied)
 
     address = extract.get("registered_address") or {}
     if _is_blank(static.get("registered_address", {}).get("full_address")) and not _is_blank(
         address.get("full_address")
     ):
         static.setdefault("registered_address", {})["full_address"] = address["full_address"]
-        source["registered_address"] = dict(source_info)
+        source["registered_address"] = _registry_source_info("registered_address", extract)
         applied.append("registered_address")
 
     if _is_blank(_get_path(static, ("display_capital", "value"))) and not _is_blank(
         extract.get("paid_up_capital")
     ):
+        source_info = _registry_source_info("paid_up_capital", extract)
         static["paid_up_capital"] = extract["paid_up_capital"]
         static["display_capital"] = {
             "label": "Paid-up Capital",
@@ -61,7 +70,7 @@ def apply_document_extract_to_cdd(
             "canonical_type": "paid_up_capital",
             "confidence": "synthetic_demo_document",
             "source_label": "Paid-up Capital",
-            "source": dict(source_info),
+            "source": source_info,
         }
         source["paid_up_capital"] = dict(source_info)
         applied.append("paid_up_capital")
@@ -83,13 +92,20 @@ def _apply_scalar(
     source: dict[str, Any],
     extract: dict[str, Any],
     field: str,
-    source_info: dict[str, Any],
     applied: list[str],
 ) -> None:
     if _is_blank(static.get(field)) and not _is_blank(extract.get(field)):
         static[field] = extract[field]
-        source[field] = dict(source_info)
+        source[field] = _registry_source_info(field, extract)
         applied.append(field)
+
+
+def _registry_source_info(field: str, extract: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": REGISTRY_SOURCE_LABEL,
+        "field": REGISTRY_DOCUMENT_FIELD_LABELS.get(field, field),
+        "document_path": extract.get("extraction", {}).get("document_path"),
+    }
 
 
 def _customer_static(cdd: dict[str, Any]) -> dict[str, Any]:

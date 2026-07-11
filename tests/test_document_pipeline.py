@@ -80,6 +80,52 @@ class DocumentPipelineTests(unittest.TestCase):
             static["source"]["paid_up_capital"]["source"],
             REGISTRY_SOURCE_LABEL,
         )
+        self.assertEqual(static["source"]["paid_up_capital"]["field"], "Paid-up Capital")
+        self.assertEqual(
+            static["display_capital"]["source"],
+            static["source"]["paid_up_capital"],
+        )
+
+    def test_registry_document_uses_field_specific_source_labels(self):
+        cdd = {
+            "company_business_profile": {
+                "customer_static": {
+                    "name": "SC ENGINEERING PRIVATE LIMITED",
+                    "jurisdiction": "SG",
+                    "source": {},
+                }
+            }
+        }
+        extract = {
+            "document_type": "registry_document",
+            "company_status": "Live Company",
+            "incorporation_date": "2014-02-20",
+            "paid_up_capital": "SGD 250,000",
+            "registered_address": {"full_address": "1 Demo Street, Singapore"},
+            "extraction": {"document_path": "generated_documents/sc-engineering.pdf"},
+        }
+
+        applied = apply_document_extract_to_cdd(cdd, extract)
+
+        static = cdd["company_business_profile"]["customer_static"]
+        self.assertIn("incorporation_date", applied)
+        self.assertIn("paid_up_capital", applied)
+        self.assertEqual(
+            static["source"]["incorporation_date"]["source"],
+            REGISTRY_SOURCE_LABEL,
+        )
+        self.assertEqual(
+            static["source"]["incorporation_date"]["field"],
+            "Incorporation Date",
+        )
+        self.assertEqual(
+            static["source"]["paid_up_capital"]["field"],
+            "Paid-up Capital",
+        )
+        self.assertEqual(
+            static["source"]["registered_address"]["field"],
+            "Registered Office Address",
+        )
 
     def test_registry_document_does_not_overwrite_api_capital(self):
         cdd = {
