@@ -10,10 +10,16 @@ from langchain_core.messages import AIMessage
 
 from agents.businesslogic import build_ownership_tables
 from agents.state import CDDState
+from tools.cdd_enrichment import (
+    apply_document_extract_to_cdd,
+    missing_about_customer_fields,
+)
 from tools.customer_static import _fetch_customer_static
+from tools.document_extraction import classify_document, extract_document
 from tools.members import _fetch_company_members
 from tools.orgchart import _fetch_company_org_chart
 from utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
+from utils.document_pipeline import generate_registry_document
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -173,6 +179,77 @@ def build_company_business_profile(state: CDDState) -> dict[str, Any]:
     profile["status"] = profile["customer_static"]["status"]
     profile["missing_items"] = profile["customer_static"]["missing_items"]
     profile["notes"] = []
+    return {"cdd": cdd}
+
+
+def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
+    """Generate a synthetic registry document from the current CDD object."""
+    cdd = state.get("cdd", {})
+    artifact = generate_registry_document(cdd)
+    return {
+        "messages": [AIMessage(content="Generating registry document.")],
+        "evidence": [
+            _evidence(
+                tool="generate_registry_document",
+                description="Generated synthetic registry business profile document",
+                data=artifact,
+                relevance_tags=[
+                    "document",
+                    "registry_document",
+                    "company_profile",
+                    "synthetic_demo",
+                ],
+            )
+        ]
+    }
+
+
+def extract_registry_document(state: CDDState) -> dict[str, Any]:
+    """Classify and extract structured data from the generated registry document."""
+    artifact = _latest_evidence_data(state, "generate_registry_document") or {}
+    if not artifact:
+        raise ValueError("Generated registry document artifact is required")
+
+    classification = classify_document(artifact["pdf_path"])
+    extract = extract_document(artifact, classification=classification)
+    return {
+        "messages": [AIMessage(content="Extracting registry document.")],
+        "evidence": [
+            _evidence(
+                tool="extract_registry_document",
+                description="Classified and extracted registry document data",
+                data={
+                    "classification": classification,
+                    "extract": extract,
+                    "artifact": artifact,
+                },
+                relevance_tags=[
+                    "document",
+                    "registry_document",
+                    "document_extraction",
+                    "company_profile",
+                ],
+            )
+        ]
+    }
+
+
+def enrich_cdd_from_registry_document(state: CDDState) -> dict[str, Any]:
+    """Populate missing CDD profile fields from the registry document extract."""
+    cdd = deepcopy(state.get("cdd", {}))
+    document_data = _latest_evidence_data(state, "extract_registry_document") or {}
+    extract = document_data.get("extract") or {}
+    artifact = document_data.get("artifact") or {}
+    classification = document_data.get("classification") or {}
+    missing_before = missing_about_customer_fields(cdd)
+    applied_fields = apply_document_extract_to_cdd(cdd, extract)
+    document_result = {
+        "classification": classification,
+        "missing_fields_before": missing_before,
+        "applied_fields": applied_fields,
+        "artifact": artifact,
+    }
+    cdd.setdefault("documents", []).append(document_result)
     return {"cdd": cdd}
 
 

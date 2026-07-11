@@ -20,11 +20,14 @@ from agents.nodes import (  # noqa: E402
     build_ownership_and_control,
     collect_required_inputs,
     create_or_reuse_case,
+    enrich_cdd_from_registry_document,
     evaluate_risk_flags,
+    extract_registry_document,
     fetch_customer_static,
     fetch_members,
     fetch_org_chart,
     finalize_cdd,
+    generate_registry_document_node,
     has_required_inputs,
 )
 from agents.state import CDDState, new_cdd_state  # noqa: E402
@@ -42,6 +45,9 @@ def build_cdd_graph():
     graph.add_node("fetch_org_chart", fetch_org_chart)
     graph.add_node("fetch_members", fetch_members)
     graph.add_node("build_company_business_profile", build_company_business_profile)
+    graph.add_node("generate_registry_document", generate_registry_document_node)
+    graph.add_node("extract_registry_document", extract_registry_document)
+    graph.add_node("enrich_cdd_from_registry_document", enrich_cdd_from_registry_document)
     graph.add_node("build_ownership_and_control", build_ownership_and_control)
     graph.add_node("evaluate_risk_flags", evaluate_risk_flags)
     graph.add_node("finalize_cdd", finalize_cdd)
@@ -59,7 +65,10 @@ def build_cdd_graph():
     graph.add_edge("fetch_customer_static", "fetch_org_chart")
     graph.add_edge("fetch_org_chart", "fetch_members")
     graph.add_edge("fetch_members", "build_company_business_profile")
-    graph.add_edge("build_company_business_profile", "build_ownership_and_control")
+    graph.add_edge("build_company_business_profile", "generate_registry_document")
+    graph.add_edge("generate_registry_document", "extract_registry_document")
+    graph.add_edge("extract_registry_document", "enrich_cdd_from_registry_document")
+    graph.add_edge("enrich_cdd_from_registry_document", "build_ownership_and_control")
     graph.add_edge("build_ownership_and_control", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")
     graph.add_edge("finalize_cdd", END)
