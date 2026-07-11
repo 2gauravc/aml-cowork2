@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from utils.langgraph_debug import maybe_debug_node
+from src.utils.langgraph_debug import maybe_debug_node
 
 
 class LangGraphDebugTests(unittest.TestCase):

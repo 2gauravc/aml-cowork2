@@ -6,9 +6,9 @@ The main callable for future LLM tool binding is:
     find_test_cases(query=None, jurisdiction=None, country=None, origin=None)
 
 For local testing:
-    python tools/case_finder.py
-    python tools/case_finder.py --jurisdiction HK
-    python tools/case_finder.py --query ubizense
+    python src/tools/case_finder.py
+    python src/tools/case_finder.py --jurisdiction HK
+    python src/tools/case_finder.py --query ubizense
 """
 
 import argparse
@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CASES_PATH = PROJECT_ROOT / "data" / "kyc-sandbox-test-cases.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CASES_PATH = PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
 MAX_LIMIT = 25
 COUNTRY_ALIASES = {
     "britain": {"jurisdiction": "GB"},
@@ -62,7 +62,7 @@ def find_test_cases(
         include_summary (bool): Whether to include dataset counts and top
             jurisdictions/origins. Defaults to True.
         cases_path (str | Path): Path to the sandbox cases JSON file. Defaults
-            to data/kyc-sandbox-test-cases.json.
+            to registry_list_of_mock_cases/kyc-sandbox-test-cases.json.
 
     Returns:
         dict[str, Any]: A compact summary plus selected matching cases. The

@@ -5,14 +5,14 @@ Fetch and clean static customer/company profile data from the KYC Public API.
 Use this tool for the company business profile basics: company name, company
 type, registration number, status, registration/incorporation dates, total
 shares, share capital, activity type, previous names, and registered address.
-For ownership and control, use tools/orgchart.py or tools/members.py.
+For ownership and control, use src/tools/orgchart.py or src/tools/members.py.
 
 The main callable for future LLM tool binding is:
     get_customer_static_by_name(company_name, jurisdiction)
 
 For local testing:
-    python tools/customer_static.py --company-name "Ubizense Limited" --jurisdiction HK
-    python tools/customer_static.py --from-file company-detail.json
+    python src/tools/customer_static.py --company-name "Ubizense Limited" --jurisdiction HK
+    python src/tools/customer_static.py --from-file company-detail.json
 """
 
 import argparse
@@ -21,11 +21,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.create_case import (  # noqa: E402
+from src.utils.create_case import (  # noqa: E402
     BASE_URL,
     CLIENT_ID,
     CLIENT_SECRET,

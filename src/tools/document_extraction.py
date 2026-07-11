@@ -14,15 +14,15 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.document_pipeline import REGISTRY_SOURCE_LABEL  # noqa: E402
+from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL  # noqa: E402
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-SCHEMA_DIR = PROJECT_ROOT / "schemas"
+SCHEMA_DIR = PROJECT_ROOT / "config" / "schemas"
 DEFAULT_MODEL = os.getenv("OPENAI_DOCUMENT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
 CLASSIFICATION_SCHEMA = {

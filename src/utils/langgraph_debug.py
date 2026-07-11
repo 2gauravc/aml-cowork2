@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DEBUG_DIR = PROJECT_ROOT / "outputs" / "debug"
 MAX_VALUE_CHARS = int(os.getenv("CDD_DEBUG_MAX_VALUE_CHARS", "10000"))
 

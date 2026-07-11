@@ -14,22 +14,22 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from agents.chat_graph import run_chat_graph
-from agents.graph import run_cdd_agent_state
-from agents.qa import answer_cdd_question
-from tools.case_finder import find_test_cases
-from tools.customer_static import get_customer_static_by_name
-from tools.members import get_company_members_by_name
-from tools.orgchart import get_company_org_chart_by_name
-from utils.pdf import render_cdd_pdf
+from src.agents.chat_graph import run_chat_graph
+from src.agents.graph import run_cdd_agent_state
+from src.agents.qa import answer_cdd_question
+from src.tools.case_finder import find_test_cases
+from src.tools.customer_static import get_customer_static_by_name
+from src.tools.members import get_company_members_by_name
+from src.tools.orgchart import get_company_org_chart_by_name
+from src.utils.pdf import render_cdd_pdf
 
 
 load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIR = PROJECT_ROOT / "src" / "frontend"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
-SANDBOX_CASES_PATH = PROJECT_ROOT / "data" / "kyc-sandbox-test-cases.json"
+SANDBOX_CASES_PATH = PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
 
 app = FastAPI(title="WBL Bank CDD Chatbot")
 SESSIONS: dict[str, dict[str, Any]] = {}

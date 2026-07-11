@@ -3,12 +3,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.cdd_enrichment import (
+from src.tools.cdd_enrichment import (
     apply_document_extract_to_cdd,
     missing_about_customer_fields,
 )
-from tools.document_extraction import classify_document, extract_document
-from utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
+from src.tools.document_extraction import classify_document, extract_document
+from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
 
 
 class DocumentPipelineTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class DocumentPipelineTests(unittest.TestCase):
             self.assertTrue(Path(artifact["html_path"]).exists())
 
             with patch(
-                "tools.document_extraction._run_schema_prompt",
+                "src.tools.document_extraction._run_schema_prompt",
                 side_effect=[
                     {
                         "document_type": "registry_document",
@@ -108,7 +108,7 @@ class DocumentPipelineTests(unittest.TestCase):
             "document_type": "registry_document",
             "paid_up_capital": "HKD 500,000",
             "registered_address": {"full_address": "1 Demo Road"},
-            "extraction": {"document_path": "documents/demo.pdf"},
+            "extraction": {"document_path": "generated_documents/demo.pdf"},
         }
 
         applied = apply_document_extract_to_cdd(cdd, extract)

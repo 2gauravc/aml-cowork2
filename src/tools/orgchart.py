@@ -5,15 +5,15 @@ Fetch and clean a company org chart from the KYC Public API.
 Use this tool for the detailed ownership-structure view: the company, its
 officers, direct shareholders, corporate shareholders, and nested shareholders
 or persons with significant control behind those entities. This is more detailed
-than tools/members.py and may repeat the same person or company where they
+than src/tools/members.py and may repeat the same person or company where they
 appear in multiple roles or relationship paths.
 
 The main callable for future LLM tool binding is:
     get_company_org_chart_by_name(company_name, jurisdiction)
 
 For local testing:
-    python tools/orgchart.py --company-name "Ubizense Limited" --jurisdiction HK
-    python tools/orgchart.py --from-file notebooks/org-chart.json
+    python src/tools/orgchart.py --company-name "Ubizense Limited" --jurisdiction HK
+    python src/tools/orgchart.py --from-file notebooks/org-chart.json
 """
 
 import argparse
@@ -22,11 +22,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.create_case import (  # noqa: E402
+from src.utils.create_case import (  # noqa: E402
     BASE_URL,
     CLIENT_ID,
     CLIENT_SECRET,

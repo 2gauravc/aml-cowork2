@@ -5,14 +5,14 @@ Fetch and clean company members from the KYC Public API.
 Use this tool for the concise compliance view: direct controlling members,
 shareholders / beneficial owners, ultimate beneficial owners, KYC status,
 AML flags, addresses, and source registry details. For a deeper recursive
-ownership chain that expands corporate shareholders, use tools/orgchart.py.
+ownership chain that expands corporate shareholders, use src/tools/orgchart.py.
 
 The main callable for future LLM tool binding is:
     get_company_members_by_name(company_name, jurisdiction)
 
 For local testing:
-    python tools/members.py --company-name "Ubizense Limited" --jurisdiction HK
-    python tools/members.py --from-file notebooks/members.json
+    python src/tools/members.py --company-name "Ubizense Limited" --jurisdiction HK
+    python src/tools/members.py --from-file notebooks/members.json
 """
 
 import argparse
@@ -21,11 +21,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.create_case import (  # noqa: E402
+from src.utils.create_case import (  # noqa: E402
     BASE_URL,
     CLIENT_ID,
     CLIENT_SECRET,

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from utils.document_pipeline import ABOUT_FIELD_PATHS, REGISTRY_SOURCE_LABEL
+from src.utils.document_pipeline import ABOUT_FIELD_PATHS, REGISTRY_SOURCE_LABEL
 
 
 def missing_about_customer_fields(cdd: dict[str, Any]) -> list[str]:

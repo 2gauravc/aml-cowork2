@@ -12,9 +12,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from xhtml2pdf import pisa
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_DIR = PROJECT_ROOT / "templates"
-DOCUMENT_DIR = PROJECT_ROOT / "documents"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATE_DIR = PROJECT_ROOT / "config" / "templates"
+DOCUMENT_DIR = PROJECT_ROOT / "generated_documents"
 REGISTRY_TEMPLATE = "registry_business_profile.html"
 REGISTRY_SOURCE_LABEL = "Registry Document (synthetic demo)"
 
@@ -39,11 +39,11 @@ def enrich_cdd_from_registry_document(
     """Generate, extract, and merge a synthetic registry document into CDD."""
     from copy import deepcopy
 
-    from tools.cdd_enrichment import (
+    from src.tools.cdd_enrichment import (
         apply_document_extract_to_cdd,
         missing_about_customer_fields,
     )
-    from tools.document_extraction import classify_document, extract_document
+    from src.tools.document_extraction import classify_document, extract_document
 
     enriched = deepcopy(cdd)
     missing_fields = missing_about_customer_fields(enriched)

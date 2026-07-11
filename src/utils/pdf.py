@@ -11,9 +11,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from xhtml2pdf import pisa
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_DIR = PROJECT_ROOT / "templates"
-OUTPUT_DIR = PROJECT_ROOT / "outputs"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATE_DIR = PROJECT_ROOT / "config" / "templates"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "cdd"
 DEFAULT_TEMPLATE = "CDD.html"
 
 

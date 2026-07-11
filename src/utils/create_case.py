@@ -5,8 +5,8 @@ Search a company by name and jurisdiction, then create a KYC company case.
 This module is intended as an internal helper for LLM-facing tools.
 
 For local testing:
-    python utils/create_case.py "Ubizense Limited" HK
-    python utils/create_case.py "Ubizense Limited" HK --no-wait
+    python src/utils/create_case.py "Ubizense Limited" HK
+    python src/utils/create_case.py "Ubizense Limited" HK --no-wait
 """
 
 import argparse

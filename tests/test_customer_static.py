@@ -1,6 +1,6 @@
 import unittest
 
-from tools.customer_static import clean_customer_static_response
+from src.tools.customer_static import clean_customer_static_response
 
 
 def company_response(properties, *, case_id=123, entity_name="Example Limited"):
