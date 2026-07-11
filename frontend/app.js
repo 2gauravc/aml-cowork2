@@ -35,7 +35,7 @@ function App() {
     status: cdd ? cddStatusLabel(cdd.status) : "-",
   };
   const pipelineStatusText =
-    latestAssistantMessage(messages) || "Running the full CDD pipeline. Please wait";
+    latestAssistantMessage(messages) || "Fetching registry information";
 
   useEffect(() => {
     let ignore = false;

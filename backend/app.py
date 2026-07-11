@@ -269,7 +269,7 @@ async def _run_pipeline_for_session(
     session["messages"].append(
         {
             "role": "assistant",
-            "content": "Running the full CDD pipeline. Please wait",
+            "content": "Fetching registry information",
         }
     )
 
