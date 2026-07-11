@@ -8,6 +8,7 @@ from src.agents.nodes import (
     extract_idv_documents,
     generate_idv_documents_node,
 )
+from src.agents.businesslogic import build_ownership_tables
 from src.tools.idv_requirements import establish_idv_requirements as apply_requirements
 from src.utils.idv_document_pipeline import generate_idv_document
 
@@ -56,6 +57,53 @@ class IDVPipelineTests(unittest.TestCase):
         self.assertEqual(jane["roles"], ["UBO", "Director"])
         self.assertEqual(jane["required_documents"], ["passport", "national_id"])
         self.assertEqual(jane["status"], "required")
+
+    def test_idv_requirements_merge_name_only_ubo_with_id_director(self):
+        cdd = {
+            "ownership_and_control": {
+                "ubos": [
+                    {
+                        "name": "Jane Demo",
+                        "effective_shareholding_percent": 40,
+                    }
+                ],
+                "related_parties": [
+                    {
+                        "name": "Jane Demo",
+                        "case_common_id": "p1",
+                        "role": "Director",
+                        "related_entity": "DemoCo",
+                    }
+                ],
+            }
+        }
+
+        idv = apply_requirements(cdd, POLICY)
+
+        self.assertEqual(len(idv["required_individuals"]), 1)
+        person = idv["required_individuals"][0]
+        self.assertEqual(person["name"], "Jane Demo")
+        self.assertEqual(person["case_common_id"], "p1")
+        self.assertEqual(person["roles"], ["UBO", "Director"])
+
+    def test_ownership_tables_preserve_ubo_case_common_id(self):
+        result = build_ownership_tables(
+            {
+                "org_chart": {
+                    "name": "DemoCo",
+                    "shareholders": [
+                        {
+                            "name": "Jane Demo",
+                            "case_common_id": "p1",
+                            "nationality_id": 1,
+                            "ownership": {"effective_percentage": 40},
+                        }
+                    ],
+                }
+            }
+        )
+
+        self.assertEqual(result["ubos"][0]["case_common_id"], "p1")
 
     def test_generate_idv_document_creates_passport_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:

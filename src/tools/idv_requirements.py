@@ -58,7 +58,7 @@ def _merge_person(
     name = row.get("name")
     if not name:
         return
-    key = _person_key(row)
+    key = _existing_person_key(people, row) or _person_key(row)
     person = people.setdefault(
         key,
         {
@@ -71,6 +71,8 @@ def _merge_person(
             "status": "required",
         },
     )
+    if not person.get("case_common_id") and row.get("case_common_id"):
+        person["case_common_id"] = row.get("case_common_id")
     if role not in person["roles"]:
         person["roles"].append(role)
     if reason and reason not in person["reasons"]:
@@ -87,6 +89,25 @@ def _person_key(row: dict[str, Any]) -> tuple[str, str]:
     if case_common_id not in (None, ""):
         return ("id", str(case_common_id))
     return ("name", _normalize_name(row.get("name")))
+
+
+def _existing_person_key(
+    people: dict[tuple[str, str], dict[str, Any]],
+    row: dict[str, Any],
+) -> tuple[str, str] | None:
+    case_common_id = row.get("case_common_id")
+    normalized_name = _normalize_name(row.get("name"))
+    if case_common_id not in (None, ""):
+        id_key = ("id", str(case_common_id))
+        if id_key in people:
+            return id_key
+
+    for key, person in people.items():
+        if case_common_id not in (None, "") and str(person.get("case_common_id")) == str(case_common_id):
+            return key
+        if normalized_name and _normalize_name(person.get("name")) == normalized_name:
+            return key
+    return None
 
 
 def _normalize_name(value: Any) -> str:

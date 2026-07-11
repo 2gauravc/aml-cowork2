@@ -42,7 +42,11 @@ def build_ownership_tables(org_chart_payload: dict[str, Any]) -> dict[str, Any]:
         ]
     )
     ubos = [
-        {"name": row["name"], "effective_shareholding_percent": row["effective_shareholding_percent"]}
+        {
+            "name": row["name"],
+            "case_common_id": row.get("case_common_id"),
+            "effective_shareholding_percent": row["effective_shareholding_percent"],
+        }
         for row in shareholders
         if row.get("type") == "Individual"
         and row.get("effective_shareholding_percent") is not None
