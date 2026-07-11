@@ -285,7 +285,7 @@ function App() {
 
           <Section title="About the Customer">
             <div className="grid">
-              <Field label="Name" value={profile.name} source={fieldSources.name} />
+              <Field label="Name" value={profile.name || customerName} source={fieldSources.name} />
               <Field
                 label="Jurisdiction"
                 value={profile.jurisdiction || jurisdiction}
