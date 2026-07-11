@@ -91,6 +91,7 @@ class CDD(TypedDict, total=False):
     completed_at: str
     ownership_and_control: OwnershipAndControlCDD
     company_business_profile: CompanyBusinessProfileCDD
+    documents: list[dict[str, Any]]
 
 
 class CaseDocument(TypedDict, total=False):

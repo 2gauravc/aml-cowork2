@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Registry Document",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "document_type": {
+      "type": "string",
+      "enum": ["registry_document"]
+    },
+    "name": {
+      "type": "string"
+    },
+    "jurisdiction": {
+      "type": "string"
+    },
+    "company_status": {
+      "type": "string"
+    },
+    "registration_number": {
+      "type": "string"
+    },
+    "company_type": {
+      "type": "string"
+    },
+    "paid_up_capital": {
+      "type": "string"
+    },
+    "activity_type": {
+      "type": "string"
+    },
+    "incorporation_date": {
+      "type": "string"
+    },
+    "registered_address": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "full_address": {
+          "type": "string"
+        }
+      },
+      "required": ["full_address"]
+    }
+  },
+  "required": [
+    "document_type",
+    "name",
+    "jurisdiction",
+    "company_status",
+    "registration_number",
+    "company_type",
+    "paid_up_capital",
+    "activity_type",
+    "incorporation_date",
+    "registered_address"
+  ]
+}

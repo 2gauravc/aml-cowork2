@@ -34,6 +34,8 @@ function App() {
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
     status: cdd ? cddStatusLabel(cdd.status) : "-",
   };
+  const pipelineStatusText =
+    latestAssistantMessage(messages) || "Running the full CDD pipeline. Please wait";
 
   useEffect(() => {
     let ignore = false;
@@ -253,7 +255,7 @@ function App() {
                 Run Full CDD Pipeline
               </button>
             </div>
-            {pipelineLoading && <p className="empty">Running the full CDD pipeline. Please wait</p>}
+            {pipelineLoading && <p className="empty">{pipelineStatusText}</p>}
           </Section>
 
           <div className="actions">
@@ -460,9 +462,19 @@ function capitalDisplay(profile) {
 function sourceTooltip(source) {
   if (!source) return null;
   const lines = [];
-  if (source.api) lines.push(`API: ${source.api}`);
+  if (source.source) lines.push(`Source: ${source.source}`);
+  else if (source.api) lines.push(`API: ${source.api}`);
   if (source.field) lines.push(`Field: ${source.field}`);
   return lines.length ? lines.join("\n") : null;
+}
+
+function latestAssistantMessage(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "assistant" && messages[index].content) {
+      return messages[index].content;
+    }
+  }
+  return null;
 }
 
 function cddStatusLabel(status) {

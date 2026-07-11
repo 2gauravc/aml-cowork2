@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Registry Business Profile</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm;
+    }
+
+    body {
+      color: #172033;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    h1 {
+      color: #10213f;
+      font-size: 22px;
+      margin: 0 0 4px;
+    }
+
+    .subtitle {
+      color: #5f6f86;
+      margin-bottom: 18px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th {
+      background: #eaf0f8;
+      color: #10213f;
+      text-align: left;
+    }
+
+    th,
+    td {
+      border: 1px solid #c8d2e1;
+      padding: 7px;
+      vertical-align: top;
+    }
+
+    .notice {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #7c2d12;
+      margin: 14px 0;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Registry Business Profile</h1>
+  <div class="subtitle">Synthetic demo registry document</div>
+  <div class="notice">Synthetic demo document - not from an official registry.</div>
+
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Company Name</td><td>{{ document.name }}</td></tr>
+    <tr><td>Jurisdiction</td><td>{{ document.jurisdiction }}</td></tr>
+    <tr><td>Company Status</td><td>{{ document.company_status }}</td></tr>
+    <tr><td>Registration Number</td><td>{{ document.registration_number }}</td></tr>
+    <tr><td>Company Type</td><td>{{ document.company_type }}</td></tr>
+    <tr><td>Paid-up Capital</td><td>{{ document.paid_up_capital }}</td></tr>
+    <tr><td>Activity Type</td><td>{{ document.activity_type }}</td></tr>
+    <tr><td>Incorporation Date</td><td>{{ document.incorporation_date }}</td></tr>
+    <tr><td>Registered Address</td><td>{{ document.registered_address.full_address }}</td></tr>
+  </table>
+</body>
+</html>

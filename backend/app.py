@@ -21,6 +21,12 @@ from tools.case_finder import find_test_cases
 from tools.customer_static import get_customer_static_by_name
 from tools.members import get_company_members_by_name
 from tools.orgchart import get_company_org_chart_by_name
+from tools.cdd_enrichment import (
+    apply_document_extract_to_cdd,
+    missing_about_customer_fields,
+)
+from tools.document_extraction import classify_document, extract_document
+from utils.document_pipeline import generate_registry_document
 from utils.pdf import render_cdd_pdf
 
 
@@ -263,7 +269,7 @@ async def _run_pipeline_for_session(
     session["messages"].append(
         {
             "role": "assistant",
-            "content": f"Running full CDD pipeline for {customer_name} ({jurisdiction}).",
+            "content": "Running the full CDD pipeline. Please wait",
         }
     )
 
@@ -310,6 +316,25 @@ async def _complete_pipeline_for_session(
         session["evidence"] = graph_state.get("evidence", [])
         session["risk_flags"] = graph_state.get("risk_flags", [])
         session["final_recommendation"] = graph_state.get("final_recommendation")
+
+        session["messages"].append(
+            {"role": "assistant", "content": "Generating registry document."}
+        )
+        artifact = await _run_with_minimum_duration(
+            lambda: generate_registry_document(cdd),
+            minimum_seconds=5,
+        )
+
+        session["messages"].append(
+            {"role": "assistant", "content": "Extracting registry document."}
+        )
+        document_result = await _run_with_minimum_duration(
+            lambda: _extract_and_apply_registry_document(cdd, artifact),
+            minimum_seconds=5,
+        )
+        session.setdefault("document_results", []).append(document_result)
+        graph_state.setdefault("document_results", []).append(document_result)
+
         session["messages"].append({"role": "assistant", "content": _summary(cdd)})
 
         if generate_pdf:
@@ -323,6 +348,34 @@ async def _complete_pipeline_for_session(
         session["messages"].append(
             {"role": "assistant", "content": f"CDD pipeline failed: {exc}"}
         )
+
+
+async def _run_with_minimum_duration(callable_obj, *, minimum_seconds: int) -> Any:
+    started = asyncio.get_running_loop().time()
+    result = await asyncio.to_thread(callable_obj)
+    elapsed = asyncio.get_running_loop().time() - started
+    remaining = minimum_seconds - elapsed
+    if remaining > 0:
+        await asyncio.sleep(remaining)
+    return result
+
+
+def _extract_and_apply_registry_document(
+    cdd: dict[str, Any],
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
+    missing_before = missing_about_customer_fields(cdd)
+    classification = classify_document(artifact["pdf_path"])
+    extract = extract_document(artifact, classification=classification)
+    applied_fields = apply_document_extract_to_cdd(cdd, extract)
+    document_result = {
+        "classification": classification,
+        "missing_fields_before": missing_before,
+        "applied_fields": applied_fields,
+        "artifact": artifact,
+    }
+    cdd.setdefault("documents", []).append(document_result)
+    return document_result
 
 
 async def _run_named_company_tool(

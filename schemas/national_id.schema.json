@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "National ID",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "document_type": {
+      "type": "string",
+      "enum": ["national_id"]
+    },
+    "full_name": {
+      "type": "string"
+    },
+    "document_number": {
+      "type": "string"
+    },
+    "nationality": {
+      "type": "string"
+    },
+    "date_of_birth": {
+      "type": "string"
+    },
+    "expiry_date": {
+      "type": "string"
+    },
+    "issuing_country": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "document_type",
+    "full_name",
+    "document_number",
+    "nationality",
+    "date_of_birth",
+    "expiry_date",
+    "issuing_country",
+    "address"
+  ]
+}
