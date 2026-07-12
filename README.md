@@ -146,6 +146,10 @@ http://localhost:8000
 ```
 
 The backend keeps the KYC and OpenAI API keys server-side through `.env`.
+Generated document PDFs are uploaded to S3 when `.env` includes
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The default document bucket URL
+is `https://onbo-bkt.s3.us-east-1.amazonaws.com`; override it with
+`S3_DOCUMENT_BUCKET_URL` or `AWS_S3_BUCKET_URL` if needed.
 
 The UI separates two modes:
 

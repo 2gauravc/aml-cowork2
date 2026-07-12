@@ -1,5 +1,5 @@
 Identity verification is required for all individual Ultimate Beneficial Owners
-and all directors of the customer or relevant corporate shareholders.
+only.
 
 Identity verification can be completed using either a valid passport or a valid
 national identity card.

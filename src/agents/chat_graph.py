@@ -430,11 +430,13 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
         session["case_id"] = case_id
     session["cdd"] = cdd
     session["graph_state"] = graph_state
+    session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
     session["final_recommendation"] = graph_state.get("final_recommendation")
     return {
         "cdd": cdd,
+        "documents": session["documents"],
         "evidence_count": len(session["evidence"]),
         "risk_flags": session["risk_flags"],
         "final_recommendation": session["final_recommendation"],

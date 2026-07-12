@@ -121,6 +121,83 @@ class IDVPipelineTests(unittest.TestCase):
             self.assertTrue(Path(artifact["html_path"]).exists())
             self.assertTrue(Path(artifact["json_path"]).exists())
 
+    def test_generate_idv_documents_node_deletes_local_artifacts_after_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = generate_idv_document(
+                {
+                    "name": "Jane Demo",
+                    "case_common_id": "p1",
+                    "selected_document_type": "passport",
+                },
+                output_dir=Path(tmp),
+            )
+            paths = [Path(artifact[key]) for key in ("pdf_path", "html_path", "json_path")]
+            with patch(
+                "src.agents.nodes.generate_idv_documents",
+                return_value=[artifact],
+            ), patch(
+                "src.agents.nodes.upload_document_to_s3",
+                return_value={
+                    "name": Path(artifact["pdf_path"]).name,
+                    "category": "passport",
+                    "url": "https://onbo-bkt.s3.us-east-1.amazonaws.com/generated_documents/case-123/passport/passport-jane-demo.pdf",
+                    "path": artifact["pdf_path"],
+                    "source": "Passport Document",
+                    "person_name": "Jane Demo",
+                    "storage": {
+                        "provider": "s3",
+                        "bucket": "onbo-bkt",
+                        "key": "generated_documents/case-123/passport/passport-jane-demo.pdf",
+                        "url": "https://onbo-bkt.s3.us-east-1.amazonaws.com/generated_documents/case-123/passport/passport-jane-demo.pdf",
+                    },
+                },
+            ):
+                update = generate_idv_documents_node(
+                    {
+                        "metadata": {"kyc_case": {"case_id": 123}},
+                        "cdd": {
+                            "individual_identity_verification": {
+                                "required_individuals": [{"name": "Jane Demo"}]
+                            }
+                        },
+                    }
+                )
+
+            evidence_artifact = update["evidence"][0]["data"]["artifacts"][0]
+            self.assertIn("s3_url", evidence_artifact)
+            for path in paths:
+                self.assertTrue(path.exists())
+
+            with patch(
+                "src.agents.nodes.classify_document",
+                return_value={"document_type": "passport", "confidence": 0.99},
+            ), patch(
+                "src.agents.nodes.extract_document",
+                return_value={
+                    "document_type": "passport",
+                    "full_name": "Jane Demo",
+                    "document_number": "P12345678",
+                },
+            ):
+                extract_update = extract_idv_documents(
+                    {
+                        "cdd": {
+                            "individual_identity_verification": {
+                                "required_individuals": [{"name": "Jane Demo"}]
+                            }
+                        },
+                        "evidence": update["evidence"],
+                    }
+                )
+
+            extracted = extract_update["evidence"][0]["data"]["documents"][0]
+            self.assertEqual(
+                sorted(extracted["deleted_local_paths"]),
+                sorted(str(path) for path in paths),
+            )
+            for path in paths:
+                self.assertFalse(path.exists())
+
     def test_idv_nodes_populate_verified_documents(self):
         state = {
             "cdd": {
@@ -158,12 +235,22 @@ class IDVPipelineTests(unittest.TestCase):
                     "issuing_country": "GB",
                 },
             ],
+        ), patch(
+            "src.agents.nodes.upload_document_to_s3",
+            return_value=None,
+        ), patch(
+            "src.agents.nodes.s3_upload_skip_reason",
+            return_value="S3 disabled in extraction test",
         ):
             update = establish_idv_requirements(state)
             state["cdd"] = update["cdd"]
             state["evidence"].extend(update["evidence"])
 
             update = generate_idv_documents_node(state)
+            self.assertEqual(
+                update["evidence"][0]["data"]["artifacts"][0]["storage"]["status"],
+                "skipped",
+            )
             state["evidence"].extend(update["evidence"])
 
             update = extract_idv_documents(state)

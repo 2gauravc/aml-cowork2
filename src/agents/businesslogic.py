@@ -33,12 +33,12 @@ COMPANY_SUFFIXES = (
 def build_ownership_tables(org_chart_payload: dict[str, Any]) -> dict[str, Any]:
     """Build UBO, shareholder, and related-party rows from cleaned org-chart JSON."""
     root = org_chart_payload.get("org_chart") or {}
-    shareholder_nodes = _shareholder_nodes(root)
     shareholders = _dedupe_largest(
         [
-            _shareholder_row(node)
-            for node in shareholder_nodes
-            if _percentage(node) is not None and _percentage(node) > 10
+            row
+            for row in _shareholder_rows(root)
+            if row.get("effective_shareholding_percent") is not None
+            and row["effective_shareholding_percent"] > 10
         ]
     )
     ubos = [
@@ -60,34 +60,60 @@ def build_ownership_tables(org_chart_payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _shareholder_nodes(node: dict[str, Any]) -> list[dict[str, Any]]:
-    nodes = []
+def _shareholder_rows(
+    node: dict[str, Any],
+    *,
+    parent_effective_percent: float = 100.0,
+) -> list[dict[str, Any]]:
+    rows = []
     for child in node.get("shareholders") or []:
         if not isinstance(child, dict):
             continue
-        nodes.append(child)
-        nodes.extend(_shareholder_nodes(child))
-    return nodes
+        direct_percent = _direct_percentage(child)
+        effective_percent = _effective_percentage(parent_effective_percent, direct_percent)
+        rows.append(_shareholder_row(child, direct_percent, effective_percent))
+        if effective_percent is not None:
+            rows.extend(
+                _shareholder_rows(
+                    child,
+                    parent_effective_percent=effective_percent,
+                )
+            )
+    return rows
 
 
-def _shareholder_row(node: dict[str, Any]) -> dict[str, Any]:
+def _shareholder_row(
+    node: dict[str, Any],
+    direct_percent: float | None,
+    effective_percent: float | None,
+) -> dict[str, Any]:
     return {
         "name": node.get("name"),
         "type": _entity_type(node),
         "case_common_id": node.get("case_common_id"),
-        "effective_shareholding_percent": _round_percentage(_percentage(node)),
+        "direct_shareholding_percent": _round_percentage(direct_percent),
+        "effective_shareholding_percent": _round_percentage(effective_percent),
     }
 
 
-def _percentage(node: dict[str, Any]) -> float | None:
+def _direct_percentage(node: dict[str, Any]) -> float | None:
     ownership = node.get("ownership") or {}
-    value = ownership.get("effective_percentage")
+    value = ownership.get("shares")
     if value is None:
-        value = ownership.get("shares")
+        value = ownership.get("effective_percentage")
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _effective_percentage(
+    parent_effective_percent: float | None,
+    direct_percent: float | None,
+) -> float | None:
+    if parent_effective_percent is None or direct_percent is None:
+        return None
+    return parent_effective_percent * direct_percent / 100
 
 
 def _round_percentage(value: float | None) -> float | None:

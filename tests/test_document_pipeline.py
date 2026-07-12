@@ -8,6 +8,7 @@ from src.tools.cdd_enrichment import (
     missing_about_customer_fields,
 )
 from src.tools.document_extraction import classify_document, extract_document
+from src.agents.nodes import extract_registry_document, generate_registry_document_node
 from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
 
 
@@ -162,6 +163,141 @@ class DocumentPipelineTests(unittest.TestCase):
         static = cdd["company_business_profile"]["customer_static"]
         self.assertNotIn("paid_up_capital", applied)
         self.assertEqual(static["display_capital"]["value"], "HKD 10,000")
+
+    def test_registry_document_node_records_s3_link_in_documents_and_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "registry.pdf"
+            html_path = Path(tmp) / "registry.html"
+            json_path = Path(tmp) / "registry.json"
+            for path in (pdf_path, html_path, json_path):
+                path.write_text("demo", encoding="utf-8")
+            artifact = {
+                "document_type": "registry_document",
+                "source": REGISTRY_SOURCE_LABEL,
+                "pdf_path": str(pdf_path),
+                "html_path": str(html_path),
+                "json_path": str(json_path),
+                "generated_at": "2026-07-12T00:00:00+00:00",
+            }
+            document = {
+                "name": "registry.pdf",
+                "category": "registry_document",
+                "url": "https://onbo-bkt.s3.us-east-1.amazonaws.com/generated_documents/case-123/registry_document/registry.pdf",
+                "path": str(pdf_path),
+                "source": REGISTRY_SOURCE_LABEL,
+                "storage": {
+                    "provider": "s3",
+                    "bucket": "onbo-bkt",
+                    "key": "generated_documents/case-123/registry_document/registry.pdf",
+                    "url": "https://onbo-bkt.s3.us-east-1.amazonaws.com/generated_documents/case-123/registry_document/registry.pdf",
+                },
+            }
+
+            with patch(
+                "src.agents.nodes.generate_registry_document",
+                return_value=artifact,
+            ), patch(
+                "src.agents.nodes.upload_document_to_s3",
+                return_value=document,
+            ):
+                update = generate_registry_document_node(
+                    {
+                        "metadata": {"kyc_case": {"case_id": 123}},
+                        "cdd": {},
+                    }
+                )
+
+            self.assertEqual(update["documents"][0]["url"], document["url"])
+            self.assertEqual(update["documents"][0]["collected_at"], artifact["generated_at"])
+            evidence_artifact = update["evidence"][0]["data"]
+            self.assertEqual(evidence_artifact["s3_url"], document["url"])
+            self.assertEqual(evidence_artifact["storage"], document["storage"])
+            self.assertTrue(pdf_path.exists())
+            self.assertTrue(html_path.exists())
+            self.assertTrue(json_path.exists())
+
+    def test_extract_registry_document_deletes_local_artifacts_after_s3_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "registry.pdf"
+            html_path = Path(tmp) / "registry.html"
+            json_path = Path(tmp) / "registry.json"
+            for path in (pdf_path, html_path, json_path):
+                path.write_text("demo", encoding="utf-8")
+            artifact = {
+                "document_type": "registry_document",
+                "source": REGISTRY_SOURCE_LABEL,
+                "pdf_path": str(pdf_path),
+                "html_path": str(html_path),
+                "json_path": str(json_path),
+                "generated_at": "2026-07-12T00:00:00+00:00",
+                "s3_url": "https://onbo-bkt.s3.us-east-1.amazonaws.com/generated_documents/case-123/registry_document/registry.pdf",
+            }
+
+            with patch(
+                "src.agents.nodes.classify_document",
+                return_value={"document_type": "registry_document", "confidence": 0.99},
+            ), patch(
+                "src.agents.nodes.extract_document",
+                return_value={"document_type": "registry_document"},
+            ):
+                update = extract_registry_document(
+                    {
+                        "evidence": [
+                            {
+                                "tool": "generate_registry_document",
+                                "data": artifact,
+                            }
+                        ]
+                    }
+                )
+
+            evidence_data = update["evidence"][0]["data"]
+            self.assertEqual(
+                sorted(evidence_data["deleted_local_paths"]),
+                sorted([str(pdf_path), str(html_path), str(json_path)]),
+            )
+            self.assertFalse(pdf_path.exists())
+            self.assertFalse(html_path.exists())
+            self.assertFalse(json_path.exists())
+
+    def test_registry_document_node_records_skipped_s3_upload_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "registry.pdf"
+            html_path = Path(tmp) / "registry.html"
+            json_path = Path(tmp) / "registry.json"
+            for path in (pdf_path, html_path, json_path):
+                path.write_text("demo", encoding="utf-8")
+            artifact = {
+                "document_type": "registry_document",
+                "source": REGISTRY_SOURCE_LABEL,
+                "pdf_path": str(pdf_path),
+                "html_path": str(html_path),
+                "json_path": str(json_path),
+                "generated_at": "2026-07-12T00:00:00+00:00",
+            }
+
+            with patch(
+                "src.agents.nodes.generate_registry_document",
+                return_value=artifact,
+            ), patch(
+                "src.agents.nodes.upload_document_to_s3",
+                return_value=None,
+            ), patch(
+                "src.agents.nodes.s3_upload_skip_reason",
+                return_value="missing AWS credential env vars: AWS_ACCESS_KEY_ID",
+            ):
+                update = generate_registry_document_node({"cdd": {}})
+
+            self.assertNotIn("documents", update)
+            evidence_artifact = update["evidence"][0]["data"]
+            self.assertEqual(evidence_artifact["storage"]["status"], "skipped")
+            self.assertEqual(
+                evidence_artifact["storage"]["reason"],
+                "missing AWS credential env vars: AWS_ACCESS_KEY_ID",
+            )
+            self.assertTrue(pdf_path.exists())
+            self.assertTrue(html_path.exists())
+            self.assertTrue(json_path.exists())
 
 
 if __name__ == "__main__":

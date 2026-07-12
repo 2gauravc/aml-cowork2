@@ -184,6 +184,7 @@ def _response(
         "jurisdiction": session.get("jurisdiction"),
         "case_id": session.get("case_id"),
         "cdd": session.get("cdd"),
+        "documents": session.get("documents", []),
         "risk_flags": session.get("risk_flags", []),
         "final_recommendation": session.get("final_recommendation"),
         "tool_results": session.get("tool_results", []),
@@ -307,6 +308,7 @@ async def _complete_pipeline_for_session(
         cdd = graph_state.get("cdd", {})
         session["cdd"] = cdd
         session["graph_state"] = graph_state
+        session["documents"] = graph_state.get("documents", [])
         session["evidence"] = graph_state.get("evidence", [])
         session["risk_flags"] = graph_state.get("risk_flags", [])
         session["final_recommendation"] = graph_state.get("final_recommendation")

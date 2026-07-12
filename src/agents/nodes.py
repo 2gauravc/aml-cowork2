@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -23,6 +24,7 @@ from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
 from src.utils.document_pipeline import generate_registry_document
 from src.utils.idv_document_pipeline import generate_idv_documents
+from src.utils.s3_documents import s3_upload_skip_reason, upload_document_to_s3
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -189,7 +191,23 @@ def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
     """Generate a synthetic registry document from the current CDD object."""
     cdd = state.get("cdd", {})
     artifact = generate_registry_document(cdd)
-    return {
+    document = upload_document_to_s3(
+        artifact["pdf_path"],
+        category=artifact["document_type"],
+        case_id=state.get("metadata", {}).get("kyc_case", {}).get("case_id"),
+        source=artifact.get("source"),
+    )
+    if document:
+        artifact["s3_url"] = document["url"]
+        artifact["storage"] = document["storage"]
+        document["collected_at"] = artifact["generated_at"]
+    else:
+        artifact["storage"] = {
+            "provider": "s3",
+            "status": "skipped",
+            "reason": s3_upload_skip_reason() or "upload did not return a document URL",
+        }
+    update = {
         "messages": [AIMessage(content="Generating registry document.")],
         "evidence": [
             _evidence(
@@ -204,8 +222,11 @@ def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
                     "synthetic_demo",
                 ],
             )
-        ]
+        ],
     }
+    if document:
+        update["documents"] = [document]
+    return update
 
 
 def extract_registry_document(state: CDDState) -> dict[str, Any]:
@@ -216,6 +237,9 @@ def extract_registry_document(state: CDDState) -> dict[str, Any]:
 
     classification = classify_document(artifact["pdf_path"])
     extract = extract_document(artifact, classification=classification)
+    deleted_local_paths = []
+    if artifact.get("s3_url"):
+        deleted_local_paths = _delete_local_document_artifacts(artifact)
     return {
         "messages": [AIMessage(content="Extracting registry document.")],
         "evidence": [
@@ -227,6 +251,7 @@ def extract_registry_document(state: CDDState) -> dict[str, Any]:
                     "classification": classification,
                     "extract": extract,
                     "artifact": artifact,
+                    "deleted_local_paths": deleted_local_paths,
                 },
                 relevance_tags=[
                     "document",
@@ -323,7 +348,29 @@ def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
     idv = cdd.get("individual_identity_verification", {})
     individuals = idv.get("required_individuals", [])
     artifacts = generate_idv_documents(individuals)
-    return {
+    documents = []
+    case_id = state.get("metadata", {}).get("kyc_case", {}).get("case_id")
+    for artifact in artifacts:
+        document = upload_document_to_s3(
+            artifact["pdf_path"],
+            category=artifact["document_type"],
+            case_id=case_id,
+            person_name=artifact.get("person_name"),
+            source=artifact.get("source"),
+        )
+        if not document:
+            artifact["storage"] = {
+                "provider": "s3",
+                "status": "skipped",
+                "reason": s3_upload_skip_reason() or "upload did not return a document URL",
+            }
+            continue
+        artifact["s3_url"] = document["url"]
+        artifact["storage"] = document["storage"]
+        document["collected_at"] = artifact["generated_at"]
+        documents.append(document)
+
+    update = {
         "messages": [AIMessage(content="Generating ID&V documents.")],
         "evidence": [
             _evidence(
@@ -335,6 +382,9 @@ def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
             )
         ],
     }
+    if documents:
+        update["documents"] = documents
+    return update
 
 
 def extract_idv_documents(state: CDDState) -> dict[str, Any]:
@@ -349,11 +399,15 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
     for artifact in artifacts:
         classification = classify_document(artifact["pdf_path"])
         extract = extract_document(artifact, classification=classification)
+        deleted_local_paths = []
+        if artifact.get("s3_url"):
+            deleted_local_paths = _delete_local_document_artifacts(artifact)
         extracts.append(
             {
                 "artifact": artifact,
                 "classification": classification,
                 "extract": extract,
+                "deleted_local_paths": deleted_local_paths,
             }
         )
 
@@ -461,6 +515,20 @@ def _evidence(
     }
 
 
+def _delete_local_document_artifacts(artifact: dict[str, Any]) -> list[str]:
+    deleted = []
+    for key in ("pdf_path", "html_path", "json_path"):
+        value = artifact.get(key)
+        if not value:
+            continue
+        path = Path(value)
+        if not path.exists() or not path.is_file():
+            continue
+        path.unlink()
+        deleted.append(str(path))
+    return deleted
+
+
 def _latest_evidence_data(state: CDDState, tool: str) -> dict[str, Any] | None:
     for item in reversed(state.get("evidence", [])):
         if item.get("tool") == tool:
@@ -504,6 +572,7 @@ def _apply_idv_extracts(
             "source": extract.get("extraction", {}).get("source") or artifact.get("source"),
             "document_path": extract.get("extraction", {}).get("document_path")
             or artifact.get("pdf_path"),
+            "document_url": artifact.get("s3_url"),
         }
         individual["document"] = _drop_empty(document)
         individual["status"] = "verified"
