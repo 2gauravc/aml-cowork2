@@ -68,6 +68,25 @@ def upload_document_to_s3(
     }
 
 
+def presign_document_url(
+    *,
+    bucket: str,
+    key: str,
+    expires_in_seconds: int = 900,
+) -> str:
+    """Generate a short-lived download URL for a private S3 document."""
+    try:
+        import boto3
+    except ImportError as exc:
+        raise RuntimeError("boto3 is required to generate S3 presigned URLs") from exc
+
+    return boto3.client("s3", region_name=_region_name(_bucket_url())).generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": key},
+        ExpiresIn=expires_in_seconds,
+    )
+
+
 def s3_upload_skip_reason() -> str | None:
     """Return why S3 upload is disabled, if it is disabled."""
     if _has_aws_credentials():

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from src.tools.customer_static import get_customer_static_by_name
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.pdf import render_cdd_pdf
+from src.utils.s3_documents import presign_document_url
 
 
 load_dotenv()
@@ -54,6 +56,11 @@ class PipelineRequest(BaseModel):
     jurisdiction: str
     case_id: str | None = None
     generate_pdf: bool = False
+
+
+class DocumentPresignRequest(BaseModel):
+    session_id: str
+    document_key: str
 
 
 @app.post("/api/chat")
@@ -136,6 +143,37 @@ async def get_session(session_id: str) -> dict[str, Any]:
     )
 
 
+@app.post("/api/documents/presign")
+async def presign_document(request: DocumentPresignRequest) -> dict[str, Any]:
+    session = SESSIONS.get(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    document = _session_document_by_key(session, request.document_key)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found in session")
+
+    storage = document.get("storage") or {}
+    bucket = storage.get("bucket")
+    key = storage.get("key")
+    if not bucket or not key:
+        raise HTTPException(status_code=400, detail="Document is missing S3 storage metadata")
+
+    expires_in_seconds = 15 * 60
+    expires_at = datetime.now(UTC) + timedelta(seconds=expires_in_seconds)
+    url = presign_document_url(
+        bucket=bucket,
+        key=key,
+        expires_in_seconds=expires_in_seconds,
+    )
+    return {
+        "document_key": key,
+        "url": url,
+        "expires_at": expires_at.isoformat(),
+        "expires_in_seconds": expires_in_seconds,
+    }
+
+
 @app.get("/api/jurisdictions")
 async def get_jurisdictions() -> dict[str, Any]:
     with SANDBOX_CASES_PATH.open(encoding="utf-8") as fh:
@@ -192,6 +230,17 @@ def _response(
         "error": error,
         "pipeline_status": session.get("pipeline_status"),
     }
+
+
+def _session_document_by_key(
+    session: dict[str, Any],
+    document_key: str,
+) -> dict[str, Any] | None:
+    for document in session.get("documents", []):
+        storage = document.get("storage") or {}
+        if storage.get("key") == document_key:
+            return document
+    return None
 
 
 def _summary(cdd: dict[str, Any]) -> str:

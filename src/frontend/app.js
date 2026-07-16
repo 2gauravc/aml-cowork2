@@ -1,4 +1,4 @@
-const { useEffect, useMemo, useState } = React;
+const { useEffect, useMemo, useRef, useState } = React;
 
 const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
 
@@ -17,12 +17,17 @@ function App() {
   const [caseId, setCaseId] = useState("");
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
-  const [toolResults, setToolResults] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [documentLinks, setDocumentLinks] = useState({});
+  const [refreshingDocumentKey, setRefreshingDocumentKey] = useState(null);
+  const [uploadNotice, setUploadNotice] = useState("");
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pipelineLoading, setPipelineLoading] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [error, setError] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const uploadInputRef = useRef(null);
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
@@ -37,6 +42,10 @@ function App() {
   };
   const pipelineStatusText =
     latestAssistantMessage(messages) || "Fetching registry information";
+  const documentKeyList = useMemo(
+    () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
+    [documents],
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -62,11 +71,32 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId || !documents.length) return;
+    documents.forEach((document) => {
+      const key = documentKey(document);
+      if (key && !documentLinks[key]) {
+        refreshDocumentLink(document);
+      }
+    });
+  }, [sessionId, documentKeyList]);
+
   function applyResponse(data) {
     setSessionId(data.session_id);
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
-    setToolResults(data.tool_results || []);
+    setDocuments(data.documents || []);
+    setDocumentLinks((current) => {
+      const keys = new Set((data.documents || []).map((document) => documentKey(document)));
+      return Object.fromEntries(
+        Object.entries(current).filter(([key]) => keys.has(key)),
+      );
+    });
     setPdfUrl(data.pdf_url || null);
     if (data.customer_name) setCustomerName(data.customer_name);
     if (data.jurisdiction) setJurisdiction(data.jurisdiction);
@@ -156,6 +186,41 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refreshDocumentLink(document) {
+    const key = documentKey(document);
+    if (!sessionId || !key) return;
+    setRefreshingDocumentKey(key);
+    setError(null);
+    try {
+      const response = await fetch("/api/documents/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          document_key: key,
+        }),
+      });
+      const data = await readJsonResponse(response, "Document link refresh failed");
+      setDocumentLinks((current) => ({ ...current, [key]: data }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefreshingDocumentKey(null);
+    }
+  }
+
+  function openUploadDialog() {
+    uploadInputRef.current?.click();
+  }
+
+  function handleUploadPlaceholder(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length) {
+      setUploadNotice(`${files.length} file${files.length === 1 ? "" : "s"} selected. Upload handling is not enabled yet.`);
+    }
+    event.target.value = "";
   }
 
   async function pollSession(activeSessionId) {
@@ -286,6 +351,20 @@ function App() {
             </div>
           </section>
 
+          <Section title="Case Documents">
+            <CaseDocuments
+              documents={documents}
+              links={documentLinks}
+              now={now}
+              onRefresh={refreshDocumentLink}
+              refreshingKey={refreshingDocumentKey}
+              onUploadClick={openUploadDialog}
+              uploadInputRef={uploadInputRef}
+              onUploadChange={handleUploadPlaceholder}
+              uploadNotice={uploadNotice}
+            />
+          </Section>
+
           <Section title="About the Customer">
             <div className="grid">
               <Field label="Name" value={profile.name || customerName} source={fieldSources.name} />
@@ -391,21 +470,6 @@ function App() {
             )}
           </Section>
 
-          <Section title="Tool Results">
-            {toolResults.length ? (
-              <div className="tool-list">
-                {toolResults.slice().reverse().map((item, index) => (
-                  <details className="tool-result" key={`${item.tool}-${index}`}>
-                    <summary>{item.tool}</summary>
-                    <pre className="json-view">{JSON.stringify(item.data, null, 2)}</pre>
-                  </details>
-                ))}
-              </div>
-            ) : (
-              <p className="empty">No individual tool calls in this session yet.</p>
-            )}
-          </Section>
-
           {showJson && cdd && (
             <Section title="CDD JSON">
               <pre className="json-view">{JSON.stringify(cdd, null, 2)}</pre>
@@ -423,6 +487,75 @@ function Section({ title, children }) {
       <h2>{title}</h2>
       {children}
     </section>
+  );
+}
+
+function CaseDocuments({
+  documents,
+  links,
+  now,
+  onRefresh,
+  refreshingKey,
+  onUploadClick,
+  uploadInputRef,
+  onUploadChange,
+  uploadNotice,
+}) {
+  return (
+    <div className="case-documents">
+      <div className="document-actions">
+        <button className="secondary" onClick={onUploadClick}>Upload Documents</button>
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="application/pdf,image/*"
+          multiple
+          hidden
+          onChange={onUploadChange}
+        />
+        {uploadNotice && <span className="upload-note">{uploadNotice}</span>}
+      </div>
+
+      {documents.length ? (
+        <div className="document-list">
+          {documents.map((document, index) => {
+            const key = documentKey(document);
+            const link = key ? links[key] : null;
+            const remaining = link ? secondsRemaining(link.expires_at, now) : 0;
+            const expired = link && remaining <= 0;
+            return (
+              <div className="document-row" key={key || `${document.name}-${index}`}>
+                <div className="document-main">
+                  <strong>{documentDescription(document)}</strong>
+                  <span>{document.name || document.storage?.key || "-"}</span>
+                </div>
+                <div className="document-controls">
+                  {link?.url && !expired ? (
+                    <a className="download-link" href={link.url} target="_blank" rel="noreferrer">
+                      Download
+                    </a>
+                  ) : (
+                    <span className="document-muted">No active link</span>
+                  )}
+                  <span className={`expiry ${expired ? "expired" : ""}`}>
+                    {link ? (expired ? "Expired" : `Valid ${formatDuration(remaining)}`) : "Not generated"}
+                  </span>
+                  <button
+                    className="secondary"
+                    disabled={!key || refreshingKey === key}
+                    onClick={() => onRefresh(document)}
+                  >
+                    {refreshingKey === key ? "Refreshing" : "Refresh"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty">No case documents are available yet.</p>
+      )}
+    </div>
   );
 }
 
@@ -480,8 +613,31 @@ function documentLabel(value) {
   const labels = {
     passport: "Passport",
     national_id: "National ID",
+    registry_document: "Registry Document",
   };
   return labels[value] || value || "-";
+}
+
+function documentDescription(document) {
+  const label = documentLabel(document.category || document.document_type);
+  if (document.person_name) return `${label} of ${document.person_name}`;
+  return label === "-" ? document.name || "Case document" : label;
+}
+
+function documentKey(document) {
+  return document?.storage?.key || "";
+}
+
+function secondsRemaining(expiresAt, now) {
+  const expiry = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiry)) return 0;
+  return Math.max(0, Math.floor((expiry - now) / 1000));
+}
+
+function formatDuration(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
 function statusLabel(value) {
