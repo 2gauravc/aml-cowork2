@@ -22,6 +22,7 @@ from src.tools.case_finder import find_test_cases
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
+from src.utils.kyc_cache import get_cache_value
 from src.utils.pdf import render_cdd_pdf
 from src.utils.s3_documents import presign_document_url
 
@@ -313,7 +314,11 @@ async def _run_pipeline_for_session(
     session["messages"].append(
         {
             "role": "assistant",
-            "content": "Fetching registry information",
+            "content": _registry_fetch_message(
+                customer_name=customer_name,
+                jurisdiction=jurisdiction,
+                case_id=case_id,
+            ),
         }
     )
 
@@ -337,6 +342,28 @@ async def _run_pipeline_for_session(
             )
         )
     return _response(session, status="running")
+
+
+def _registry_fetch_message(
+    *,
+    customer_name: str,
+    jurisdiction: str | None,
+    case_id: str | None = None,
+) -> str:
+    if case_id:
+        source = (
+            "reading from cache"
+            if get_cache_value("company-detail", [case_id]) is not None
+            else "calling API"
+        )
+    else:
+        source = (
+            "reading from cache"
+            if jurisdiction
+            and get_cache_value("company-case", [jurisdiction, customer_name]) is not None
+            else "calling API"
+        )
+    return f"Fetching registry information... {source}"
 
 
 async def _complete_pipeline_for_session(

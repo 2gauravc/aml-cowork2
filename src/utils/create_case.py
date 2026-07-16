@@ -19,6 +19,8 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
+from src.utils.kyc_cache import get_cache_value, set_cache_value
+
 
 load_dotenv()
 
@@ -109,6 +111,10 @@ def create_company_case(
             raise ValueError("KYCCLIENTID and KYCCLIENTSECRET are required")
         client = KycClient(base_url, client_id, client_secret)
 
+    cached_result = get_cache_value("company-case", [jurisdiction, company_name])
+    if cached_result is not None:
+        return cached_result
+
     matches = search_companies(company_name, jurisdiction, client=client)
     if not matches:
         raise ValueError(
@@ -161,7 +167,8 @@ def create_company_case(
         result["polling"] = polling
         result["ready"] = result["status_id"] == READY_STATUS_ID
 
-    return _drop_empty(result)
+    result = _drop_empty(result)
+    return set_cache_value("company-case", [jurisdiction, company_name], result)
 
 
 def search_companies(
@@ -171,6 +178,10 @@ def search_companies(
     client: KycClient,
 ) -> list[dict[str, Any]]:
     """Search the registry for possible company matches."""
+    cached_body = get_cache_value("company-search", [jurisdiction, company_name])
+    if cached_body is not None:
+        return cached_body.get("companySearch", {}).get("results", [])
+
     resp = client.request(
         "POST",
         "/v2/Companies/search",
@@ -178,6 +189,7 @@ def search_companies(
     )
     resp.raise_for_status()
     body = resp.json()
+    set_cache_value("company-search", [jurisdiction, company_name], body)
     return body.get("companySearch", {}).get("results", [])
 
 
@@ -193,9 +205,8 @@ def _poll_until_ready(
     polls_completed = 0
 
     for poll_number in range(1, attempts + 1):
-        resp = client.request("GET", f"/v2/Companies/{case_id}")
-        resp.raise_for_status()
-        status_id = _status_id(resp.json())
+        body = get_company_detail(case_id, client=client)
+        status_id = _status_id(body)
         polls_completed = poll_number
 
         if status_id == READY_STATUS_ID:
@@ -214,6 +225,20 @@ def _poll_until_ready(
         "polls_completed": polls_completed,
         "elapsed_seconds": round(time.monotonic() - started_at, 2),
     }
+
+
+def get_company_detail(case_id: int | str, *, client: KycClient) -> dict[str, Any]:
+    """Return raw company detail JSON, reading the persistent cache first."""
+    cached_body = get_cache_value("company-detail", [case_id])
+    if cached_body is not None:
+        return cached_body
+
+    resp = client.request("GET", f"/v2/Companies/{case_id}")
+    resp.raise_for_status()
+    body = resp.json()
+    if _status_id(body) == READY_STATUS_ID:
+        set_cache_value("company-detail", [case_id], body)
+    return body
 
 
 def _case_id(response: dict[str, Any]) -> int | str | None:

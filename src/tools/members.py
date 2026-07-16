@@ -32,6 +32,7 @@ from src.utils.create_case import (  # noqa: E402
     KycClient,
     create_company_case,
 )
+from src.utils.kyc_cache import get_cache_value, set_cache_value  # noqa: E402
 
 
 def _fetch_company_members(
@@ -41,9 +42,14 @@ def _fetch_company_members(
 ) -> dict[str, Any]:
     """Internal helper that fetches members after a case has been created."""
     try:
+        cached_body = get_cache_value("company-members", [case_id])
+        if cached_body is not None:
+            return clean_members_response(cached_body, case_id=case_id)
+
         resp = client.request("GET", f"/v2/Companies/{case_id}/members")
         resp.raise_for_status()
-        return clean_members_response(resp.json(), case_id=case_id)
+        body = set_cache_value("company-members", [case_id], resp.json())
+        return clean_members_response(body, case_id=case_id)
     except Exception as exc:
         return _error_response(exc, stage="fetch_members", case_id=case_id)
 

@@ -31,6 +31,7 @@ from src.utils.create_case import (  # noqa: E402
     CLIENT_SECRET,
     KycClient,
     create_company_case,
+    get_company_detail,
 )
 
 FIELD_ALIASES = {
@@ -194,9 +195,10 @@ def _fetch_customer_static(
 ) -> dict[str, Any]:
     """Internal helper that fetches company detail after a case has been created."""
     try:
-        resp = client.request("GET", f"/v2/Companies/{case_id}")
-        resp.raise_for_status()
-        return clean_customer_static_response(resp.json(), case_id=case_id)
+        return clean_customer_static_response(
+            get_company_detail(case_id, client=client),
+            case_id=case_id,
+        )
     except Exception as exc:
         return _error_response(exc, stage="fetch_customer_static", case_id=case_id)
 
