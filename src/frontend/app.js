@@ -317,14 +317,6 @@ function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">WBL Bank Onboarding CDD</div>
-        <div className="top-status">
-          <span className={`badge ${cdd?.status === "complete" ? "complete" : "review"}`}>
-            CDD: {cdd?.status || "Draft"}
-          </span>
-          <span className={`badge ${risks.length ? "review" : "complete"}`}>
-            Risk: {risks.length ? "Review" : "Clear"}
-          </span>
-        </div>
       </header>
 
       <div className="workspace">
@@ -389,7 +381,7 @@ function App() {
 
           {activeWorkspace === "cdd" ? (
             <>
-          <Section title="Run Full CDD Pipeline">
+          <Section title="Run CDD Worker">
             <div className="pipeline-form">
               <input
                 aria-label="Company name"
@@ -435,6 +427,7 @@ function App() {
           </div>
 
           <section className="cdd-metadata" aria-label="CDD metadata">
+            <h2 className="cdd-metadata-title">CDD Metadata</h2>
             <div className="metadata-item">
               <span>Customer</span>
               <strong>{cddMetadata.customer}</strong>
@@ -490,7 +483,7 @@ function App() {
               ])}
             />
             <SubTable
-              title="Shareholders >10%"
+              title="Shareholders > 10%"
               empty="None identified"
               columns={["Name", "Type", "Effective %"]}
               rows={(ownership.shareholders_over_10_percent || []).map((row) => [
@@ -499,10 +492,8 @@ function App() {
                 percent(row.effective_shareholding_percent),
               ])}
             />
-          </Section>
-
-          <Section title="Related Parties">
             <SubTable
+              title="Related Parties"
               empty="None identified"
               columns={["Name", "Role", "Related Entity", "Reason"]}
               rows={(ownership.related_parties || []).map((row) => [
@@ -765,7 +756,7 @@ function safeMarkdownHref(value) {
 
 function SubTable({ title, columns, rows, empty }) {
   return (
-    <div>
+    <div className="subtable">
       {title && <h3>{title}</h3>}
       {rows.length ? (
         <table>

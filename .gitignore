@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+outputs/*
+!outputs/.gitkeep
+!outputs/cdd/
+outputs/cdd/*
+!outputs/cdd/.gitkeep
+!outputs/debug/
+outputs/debug/*
+!outputs/debug/.gitkeep
+notebooks/
+generated_documents/*
+!generated_documents/.gitkeep

@@ -235,8 +235,10 @@ button:disabled {
   padding: 16px;
 }
 
-.section h2 {
-  font-size: 16px;
+.section h2,
+.cdd-metadata-title {
+  font-size: 24px;
+  font-weight: 700;
   margin: 0 0 12px;
 }
 
@@ -369,6 +371,21 @@ th {
   gap: 1px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
+}
+
+.cdd-metadata-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px;
+}
+
+.subtable + .subtable {
+  margin-top: 20px;
+}
+
+.subtable h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
 }
 
 .metadata-item {
