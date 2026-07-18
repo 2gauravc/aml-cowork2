@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 from typing import Any
 
@@ -30,38 +31,48 @@ CLIENT_SECRET = os.getenv("KYCCLIENTSECRET")
 
 READY_STATUS_ID = 3
 FAILED_STATUS_ID = 8
+TOKEN_SCOPE = "PublicApi"
+TOKEN_REFRESH_BUFFER_SECONDS = 30
+
+_TOKEN_CACHE_LOCK = threading.Lock()
+_TOKEN_CACHE: dict[tuple[str, str, str], tuple[str, float]] = {}
 
 
 class KycClient:
-    """Minimal client with an in-memory token cache and refresh-on-401."""
+    """Minimal client with a process-local token cache and refresh-on-401."""
 
     def __init__(self, base_url: str, client_id: str, client_secret: str):
         self.base_url = base_url.rstrip("/")
         self.client_id = client_id
         self.client_secret = client_secret
-        self._token = None
-        self._expires_at = 0.0
 
-    def _token_value(self) -> str:
-        if self._token and time.time() < self._expires_at - 30:
-            return self._token
+    def _token_value(self, *, force_refresh: bool = False) -> str:
+        cache_key = (self.base_url, self.client_id, TOKEN_SCOPE)
 
-        resp = requests.post(
-            f"{self.base_url}/connect/token",
-            data={
-                "grant_type": "client_credentials",
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-                "scope": "PublicApi",
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
+        with _TOKEN_CACHE_LOCK:
+            cached = _TOKEN_CACHE.get(cache_key)
+            if not force_refresh and cached is not None:
+                token, expires_at = cached
+                if time.time() < expires_at - TOKEN_REFRESH_BUFFER_SECONDS:
+                    return token
 
-        body = resp.json()
-        self._token = body["access_token"]
-        self._expires_at = time.time() + int(body.get("expires_in", 600))
-        return self._token
+            resp = requests.post(
+                f"{self.base_url}/connect/token",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "scope": TOKEN_SCOPE,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+
+            body = resp.json()
+            token = body["access_token"]
+            expires_at = time.time() + int(body.get("expires_in", 600))
+            _TOKEN_CACHE[cache_key] = (token, expires_at)
+            return token
 
     def request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         url = f"{self.base_url}{path}"
@@ -70,8 +81,7 @@ class KycClient:
 
         resp = requests.request(method, url, headers=headers, timeout=120, **kwargs)
         if resp.status_code == 401:
-            self._token = None
-            headers["Authorization"] = f"Bearer {self._token_value()}"
+            headers["Authorization"] = f"Bearer {self._token_value(force_refresh=True)}"
             resp = requests.request(method, url, headers=headers, timeout=120, **kwargs)
         return resp
 
