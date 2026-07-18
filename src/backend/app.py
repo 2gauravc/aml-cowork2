@@ -17,8 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.agents.chat_graph import run_chat_graph
-from src.agents.graph import run_cdd_agent_state
-from src.agents.nodes import extract_idv_documents, evaluate_risk_flags, finalize_cdd
+from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.customer_static import get_customer_static_by_name
@@ -231,7 +230,8 @@ async def upload_case_document(
             "match": _match_summary(requirement, classification, preview),
         }
     )
-    return _response(session, status="ok")
+    await _resume_if_ready(session)
+    return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
 
 @app.post("/api/documents/generate")
@@ -252,77 +252,17 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
             output_dir=DOCUMENT_STAGING_DIR / request.session_id,
         )
         requirement.update({"status": "received", "source": "generated", "artifact": artifact})
-    return _response(session, status="ok")
+    await _resume_if_ready(session)
+    return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
 
 @app.post("/api/documents/process")
 async def process_case_documents(request: DocumentActionRequest) -> dict[str, Any]:
-    """Extract staged/cache documents, persist new ones to S3, and update the CDD."""
     session = SESSIONS.get(request.session_id)
-    if not session or not session.get("cdd"):
+    if not session:
         raise HTTPException(status_code=404, detail="CDD session not found")
-    selected = set(request.requirement_ids or [])
-    cdd = session["cdd"]
-    evidence = list(session.get("evidence", []))
-    documents = list(session.get("documents", []))
-    for requirement in session.get("document_requirements", []):
-        if selected and requirement["id"] not in selected:
-            continue
-        if requirement.get("status") not in {"cache_found", "provided", "received"}:
-            continue
-        artifact, document = _artifact_for_processing(requirement)
-        if not artifact:
-            continue
-        # Extraction maps results back to the required individual by case ID when
-        # one is available. Cached and uploaded artifacts need that identity
-        # context restored from the requirement before extraction.
-        artifact.setdefault("person_name", requirement["entity_name"])
-        artifact.setdefault(
-            "case_common_id",
-            requirement["individual"].get("case_common_id"),
-        )
-        artifact.setdefault("document_type", requirement["document_type"])
-        if not document:
-            document = upload_document_to_s3(
-                artifact["pdf_path"],
-                category=requirement["document_type"],
-                person_name=requirement["individual"].get("name"),
-                source=artifact.get("source"),
-                company_name=session.get("customer_name"),
-                jurisdiction=session.get("jurisdiction"),
-                object_name=reusable_document_name(
-                    document_type=requirement["document_type"],
-                    company_name=session["customer_name"],
-                    person_name=requirement["individual"].get("name"),
-                ),
-            )
-        if document:
-            artifact.update({"s3_url": document["url"], "storage": document["storage"]})
-            documents.append(document)
-        extraction_state = {
-            "cdd": cdd,
-            "evidence": evidence + [{"tool": "generate_idv_documents", "data": {"artifacts": [artifact]}}],
-        }
-        update = await asyncio.to_thread(extract_idv_documents, extraction_state)
-        cdd = update["cdd"]
-        evidence.extend(update["evidence"])
-        requirement["status"] = "processed"
-        requirement["processed_at"] = datetime.now(UTC).isoformat()
-        if not artifact.get("s3_url"):
-            Path(artifact["pdf_path"]).unlink(missing_ok=True)
-
-    risk_update = evaluate_risk_flags({"cdd": cdd})
-    final_update = finalize_cdd({"cdd": cdd, "risk_flags": risk_update["risk_flags"]})
-    session.update(
-        {
-            "cdd": final_update["cdd"],
-            "evidence": evidence,
-            "documents": documents,
-            "risk_flags": risk_update["risk_flags"],
-            "final_recommendation": final_update["final_recommendation"],
-        }
-    )
-    return _response(session, status="complete")
+    await _resume_if_ready(session)
+    return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
 
 @app.get("/api/jurisdictions")
@@ -483,6 +423,27 @@ def _safe_file_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", Path(name).name) or "document.pdf"
 
 
+async def _resume_if_ready(session: dict[str, Any]) -> None:
+    requirements = session.get("document_requirements", [])
+    if any(row.get("status") == "not_found" for row in requirements):
+        session["pipeline_status"] = "awaiting_documents"
+        return
+    thread_id = session.get("graph_thread_id")
+    if not thread_id:
+        return
+    session["pipeline_status"] = "running"
+    def publish_progress(progress: dict[str, Any]) -> None:
+        session["pipeline_progress"] = progress
+    result = await asyncio.to_thread(
+        resume_cdd_agent_state,
+        thread_id=thread_id,
+        document_requirements=requirements,
+        progress_callback=publish_progress,
+    )
+    _apply_graph_result(session, result)
+    session["pipeline_status"] = "complete"
+
+
 def _session_document_by_key(
     session: dict[str, Any],
     document_key: str,
@@ -624,6 +585,16 @@ def _registry_fetch_message(
     return f"Fetching registry information... {source}"
 
 
+def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) -> None:
+    session["cdd"] = graph_state.get("cdd", {})
+    session["graph_state"] = graph_state
+    session["documents"] = graph_state.get("documents", [])
+    session["evidence"] = graph_state.get("evidence", [])
+    session["risk_flags"] = graph_state.get("risk_flags", [])
+    session["final_recommendation"] = graph_state.get("final_recommendation")
+    session["document_requirements"] = graph_state.get("document_requirements", [])
+
+
 async def _complete_pipeline_for_session(
     session: dict[str, Any],
     *,
@@ -644,35 +615,15 @@ async def _complete_pipeline_for_session(
             jurisdiction=jurisdiction,
             case_id=case_id,
             progress_callback=publish_progress,
+            thread_id=session["session_id"],
         )
-        cdd = graph_state.get("cdd", {})
-        session["cdd"] = cdd
-        session["graph_state"] = graph_state
-        session["documents"] = graph_state.get("documents", [])
-        session["evidence"] = graph_state.get("evidence", [])
-        session["risk_flags"] = graph_state.get("risk_flags", [])
-        session["final_recommendation"] = graph_state.get("final_recommendation")
+        session["graph_thread_id"] = session["session_id"]
+        _apply_graph_result(session, graph_state)
+        cdd = session["cdd"]
         session["document_results"] = cdd.get("documents", [])
-        session["document_requirements"] = _build_document_requirements(session)
-        if any(
-            requirement.get("status") == "cache_found"
-            for requirement in session["document_requirements"]
-        ):
-            # Cached documents are already available to the bank, so process them
-            # immediately. Only unavailable documents require officer action.
-            session["pipeline_progress"] = {
-                "node": "extract_idv_documents",
-                "node_number": 13,
-                "total_nodes": 15,
-                "message": "Processing ID&V documents found in cache",
-                "using_cache": True,
-                "status": "running",
-                "started_at": datetime.now(UTC).isoformat(),
-            }
-            await process_case_documents(
-                DocumentActionRequest(session_id=session["session_id"])
-            )
-            cdd = session["cdd"]
+        if any(row.get("status") == "not_found" for row in session["document_requirements"]):
+            session["pipeline_status"] = "awaiting_documents"
+            return
         for message in graph_state.get("messages", []):
             content = getattr(message, "content", None)
             if content:

@@ -7,12 +7,15 @@ import json
 import os
 import sys
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
 from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -28,6 +31,8 @@ from src.agents.nodes import (  # noqa: E402
     create_or_reuse_case,
     enrich_cdd_from_registry_document,
     establish_idv_requirements,
+    locate_available_documents,
+    await_documents,
     evaluate_risk_flags,
     extract_idv_documents,
     extract_registry_document,
@@ -46,6 +51,7 @@ from src.utils.pdf import render_cdd_pdf  # noqa: E402
 
 
 load_dotenv()
+CHECKPOINTER = MemorySaver()
 
 
 PIPELINE_NODE_LABELS = {
@@ -60,7 +66,7 @@ PIPELINE_NODE_LABELS = {
     "enrich_cdd_from_registry_document": "Populating CDD from registry document",
     "build_ownership_and_control": "Populating CDD — Ownership & Control",
     "establish_idv_requirements": "Establishing ID&V requirements",
-    "generate_idv_documents": "Locating document",
+    "locate_available_documents": "Locating documents",
     "extract_idv_documents": "Extracting from ID&V documents",
     "evaluate_risk_flags": "Evaluating red flags",
     "finalize_cdd": "Completing CDD",
@@ -189,7 +195,9 @@ def build_cdd_graph(
     add_node("enrich_cdd_from_registry_document", enrich_cdd_from_registry_document)
     add_node("build_ownership_and_control", build_ownership_and_control)
     add_node("establish_idv_requirements", establish_idv_requirements)
-    add_node("generate_idv_documents", generate_idv_documents_node)
+    add_node("locate_available_documents", locate_available_documents)
+    # The interrupt node is an internal pause point, not a visible pipeline step.
+    graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
     add_node("evaluate_risk_flags", evaluate_risk_flags)
     add_node("finalize_cdd", finalize_cdd)
@@ -212,15 +220,13 @@ def build_cdd_graph(
     graph.add_edge("extract_registry_document", "enrich_cdd_from_registry_document")
     graph.add_edge("enrich_cdd_from_registry_document", "build_ownership_and_control")
     graph.add_edge("build_ownership_and_control", "establish_idv_requirements")
-    # Document collection is an officer-driven workflow. The initial run stops
-    # after requirements are known; upload/generation and extraction are started
-    # explicitly from the Case Documents workspace.
-    graph.add_edge("establish_idv_requirements", END)
-    graph.add_edge("generate_idv_documents", "extract_idv_documents")
+    graph.add_edge("establish_idv_requirements", "locate_available_documents")
+    graph.add_edge("locate_available_documents", "await_documents")
+    graph.add_edge("await_documents", "extract_idv_documents")
     graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")
     graph.add_edge("finalize_cdd", END)
-    return graph.compile()
+    return graph.compile(checkpointer=CHECKPOINTER)
 
 
 def run_cdd_agent(
@@ -243,6 +249,7 @@ def run_cdd_agent_state(
     jurisdiction: str | None = None,
     case_id: int | str | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    thread_id: str | None = None,
 ) -> dict[str, Any]:
     """Run the CDD graph and return the full final LangGraph state."""
     app = build_cdd_graph(progress_callback=progress_callback)
@@ -251,7 +258,20 @@ def run_cdd_agent_state(
         jurisdiction=jurisdiction,
         case_id=case_id,
     )
-    return app.invoke(state)
+    return app.invoke(state, config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}})
+
+
+def resume_cdd_agent_state(
+    *,
+    thread_id: str,
+    document_requirements: list[dict[str, Any]],
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Update a paused graph thread and resume it after officer intervention."""
+    app = build_cdd_graph(progress_callback=progress_callback)
+    config = {"configurable": {"thread_id": thread_id}}
+    app.update_state(config, {"document_requirements": document_requirements})
+    return app.invoke(Command(resume={}), config=config)
 
 
 def main() -> None:

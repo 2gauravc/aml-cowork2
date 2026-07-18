@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage
+from langgraph.types import interrupt
 
 from src.agents.businesslogic import build_ownership_tables
 from src.agents.state import CDDState
@@ -388,6 +389,42 @@ def establish_idv_requirements(state: CDDState) -> dict[str, Any]:
     }
 
 
+def locate_available_documents(state: CDDState) -> dict[str, Any]:
+    """Build the officer work queue and locate reusable S3 documents."""
+    cdd = state.get("cdd", {})
+    individuals = cdd.get("individual_identity_verification", {}).get("required_individuals", [])
+    company_name, jurisdiction = _document_scope(state)
+    available = find_documents_in_s3(company_name=company_name, jurisdiction=jurisdiction)
+    by_name = {item.get("name"): item for item in available}
+    requirements = []
+    for index, individual in enumerate(individuals):
+        document_type = individual.get("selected_document_type") or "passport"
+        expected_name = reusable_document_name(
+            document_type=document_type,
+            company_name=company_name or "Company",
+            person_name=individual.get("name"),
+        )
+        cached = by_name.get(expected_name)
+        requirements.append({
+            "id": f"idv-{index}-{document_type}",
+            "entity_name": individual.get("name"),
+            "document_type": document_type,
+            "individual": individual,
+            "status": "cache_found" if cached else "not_found",
+            "cache_document": cached,
+        })
+    return {"document_requirements": requirements}
+
+
+def await_documents(state: CDDState) -> dict[str, Any]:
+    """Pause the graph until every officer document requirement is available."""
+    requirements = state.get("document_requirements", [])
+    outstanding = [row for row in requirements if row.get("status") == "not_found"]
+    if outstanding:
+        interrupt({"status": "awaiting_documents", "requirements": outstanding})
+    return {}
+
+
 def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
     """Reuse S3 identity documents and generate only those still required."""
     cdd = state.get("cdd", {})
@@ -491,7 +528,7 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
     idv = cdd.setdefault("individual_identity_verification", {})
     individuals = idv.get("required_individuals", [])
     artifact_data = _latest_evidence_data(state, "generate_idv_documents") or {}
-    artifacts = artifact_data.get("artifacts") or []
+    artifacts = artifact_data.get("artifacts") or _document_requirement_artifacts(state)
 
     extracts = []
     for artifact in artifacts:
@@ -530,6 +567,30 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
             )
         ],
     }
+
+
+def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
+    """Materialize cached or officer-supplied requirements for graph extraction."""
+    artifacts = []
+    for requirement in state.get("document_requirements", []):
+        if requirement.get("status") not in {"cache_found", "provided", "received"}:
+            continue
+        artifact = deepcopy(requirement.get("artifact") or {})
+        cached = requirement.get("cache_document")
+        if cached and not artifact:
+            artifact = {
+                "pdf_path": download_document_from_s3(cached),
+                "s3_url": cached.get("url"),
+                "storage": cached.get("storage"),
+                "source": "S3 document cache",
+            }
+        if not artifact.get("pdf_path"):
+            continue
+        artifact.setdefault("document_type", requirement.get("document_type"))
+        artifact.setdefault("person_name", requirement.get("entity_name"))
+        artifact.setdefault("case_common_id", requirement.get("individual", {}).get("case_common_id"))
+        artifacts.append(artifact)
+    return artifacts
 
 
 def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:

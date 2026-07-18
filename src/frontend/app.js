@@ -28,6 +28,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [pipelineLoading, setPipelineLoading] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState(null);
+  const [pipelineStatus, setPipelineStatus] = useState(null);
   const [showJson, setShowJson] = useState(false);
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
@@ -47,6 +48,7 @@ function App() {
   const pipelineStatusText = pipelineProgress
     ? formatPipelineProgress(pipelineProgress)
     : latestAssistantMessage(messages) || "Setting up";
+  const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
     [documents],
@@ -108,6 +110,7 @@ function App() {
     if (data.jurisdiction) setJurisdiction(data.jurisdiction);
     if (data.case_id) setCaseId(String(data.case_id));
     setPipelineProgress(data.pipeline_progress || null);
+    setPipelineStatus(data.pipeline_status || data.status || null);
     if (data.error) setError(data.error);
   }
 
@@ -410,13 +413,13 @@ function App() {
           </Section>
 
           <div className="actions">
-            <button disabled={!cdd || loading} onClick={generatePdf}>Generate PDF</button>
+            <button disabled={!cdd || loading || pipelineRunning} onClick={generatePdf}>Generate PDF</button>
             {pdfUrl && (
               <a href={pdfUrl} target="_blank" rel="noreferrer">
                 <button className="secondary">Download PDF</button>
               </a>
             )}
-            <button className="secondary" disabled={!cdd} onClick={() => setShowJson((value) => !value)}>
+            <button className="secondary" disabled={!cdd || pipelineRunning} onClick={() => setShowJson((value) => !value)}>
               {showJson ? "Hide JSON" : "View JSON"}
             </button>
           </div>
