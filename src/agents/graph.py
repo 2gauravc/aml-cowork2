@@ -49,8 +49,8 @@ load_dotenv()
 
 
 PIPELINE_NODE_LABELS = {
-    "collect_required_inputs": "Collecting inputs",
-    "create_or_reuse_case": "Creating case",
+    "collect_required_inputs": "Collecting Inputs",
+    "create_or_reuse_case": "Creating Case",
     "fetch_customer_static": "Fetching customer static information from KYC API",
     "fetch_org_chart": "Fetching org chart information from KYC API",
     "fetch_members": "Fetching members from KYC API",
