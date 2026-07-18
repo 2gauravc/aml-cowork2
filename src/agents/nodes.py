@@ -397,6 +397,19 @@ def locate_available_documents(state: CDDState) -> dict[str, Any]:
     available = find_documents_in_s3(company_name=company_name, jurisdiction=jurisdiction)
     by_name = {item.get("name"): item for item in available}
     requirements = []
+    registry_artifact = _latest_evidence_data(state, "generate_registry_document") or {}
+    if registry_artifact:
+        requirements.append({
+            "id": "registry-document",
+            "entity_name": "Registry document",
+            "document_type": "registry_document",
+            "individual": {},
+            "status": "processed",
+            "cache_document": registry_artifact.get("storage") and {
+                "storage": registry_artifact.get("storage"),
+                "url": registry_artifact.get("s3_url"),
+            },
+        })
     for index, individual in enumerate(individuals):
         document_type = individual.get("selected_document_type") or "passport"
         expected_name = reusable_document_name(
@@ -423,6 +436,11 @@ def await_documents(state: CDDState) -> dict[str, Any]:
     if outstanding:
         interrupt({"status": "awaiting_documents", "requirements": outstanding})
     return {}
+
+
+def process_available_documents(state: CDDState) -> dict[str, Any]:
+    """Process cached documents before pausing for outstanding officer documents."""
+    return extract_idv_documents(state)
 
 
 def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
@@ -608,6 +626,24 @@ def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
         artifact.setdefault("document_type", requirement.get("document_type"))
         artifact.setdefault("person_name", requirement.get("entity_name"))
         artifact.setdefault("case_common_id", requirement.get("individual", {}).get("case_common_id"))
+        if not artifact.get("s3_url"):
+            company_name, jurisdiction = _document_scope(state)
+            document = upload_document_to_s3(
+                artifact["pdf_path"],
+                category=requirement.get("document_type") or "passport",
+                person_name=requirement.get("entity_name"),
+                source=artifact.get("source"),
+                company_name=company_name,
+                jurisdiction=jurisdiction,
+                object_name=reusable_document_name(
+                    document_type=requirement.get("document_type") or "passport",
+                    company_name=company_name or "Company",
+                    person_name=requirement.get("entity_name"),
+                ),
+            )
+            if document:
+                artifact["s3_url"] = document["url"]
+                artifact["storage"] = document["storage"]
         artifacts.append(artifact)
     return artifacts
 

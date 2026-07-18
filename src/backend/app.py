@@ -452,6 +452,11 @@ def _session_document_by_key(
         storage = document.get("storage") or {}
         if storage.get("key") == document_key:
             return document
+    for requirement in session.get("document_requirements", []):
+        document = requirement.get("cache_document") or {}
+        storage = document.get("storage") or {}
+        if storage.get("key") == document_key:
+            return document
     return None
 
 

@@ -93,6 +93,15 @@ function App() {
     });
   }, [sessionId, documentKeyList]);
 
+  useEffect(() => {
+    if (!sessionId) return;
+    documentRequirements.forEach((requirement) => {
+      const document = requirement.cache_document;
+      const key = documentKey(document);
+      if (key && !documentLinks[key]) refreshDocumentLink(document);
+    });
+  }, [sessionId, documentRequirements, documentLinks]);
+
   function applyResponse(data) {
     setSessionId(data.session_id);
     setMessages(data.messages || []);
@@ -274,6 +283,7 @@ function App() {
     try {
       for (const requirement of missing) {
         setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${requirement.entity_name}...`);
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
         const response = await fetch("/api/documents/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -553,6 +563,7 @@ function App() {
           ) : (
             <DocumentManagement
               requirements={documentRequirements}
+              links={documentLinks}
               loading={loading}
               generationStatus={generationStatus}
               onGenerate={generateMissingDocuments}
@@ -580,6 +591,7 @@ function Section({ title, children }) {
 
 function DocumentManagement({
   requirements,
+  links,
   onUploadClick,
   uploadInputRef,
   onUploadChange,
@@ -624,10 +636,15 @@ function DocumentManagement({
             {requirements.map((requirement) => {
               const foundInCache = Boolean(requirement.cache_document);
               const provided = !foundInCache && ["customer_upload", "generated"].includes(requirement.source);
+              const cacheLink = foundInCache ? links[documentKey(requirement.cache_document)] : null;
               return (
                 <tr key={requirement.id}>
                   <td>{documentLabel(requirement.document_type)} — {requirement.entity_name}</td>
-                  <td>{foundInCache ? "Yes" : "No"}</td>
+                  <td>
+                    {foundInCache && cacheLink?.url ? (
+                      <a className="download-link" href={cacheLink.url} target="_blank" rel="noreferrer">Yes</a>
+                    ) : (foundInCache ? "Yes" : "No")}
+                  </td>
                   <td className={foundInCache ? "document-muted" : ""}>
                     {foundInCache ? "N/A" : (provided ? "Yes" : "No")}
                   </td>

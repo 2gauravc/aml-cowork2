@@ -33,6 +33,7 @@ from src.agents.nodes import (  # noqa: E402
     establish_idv_requirements,
     locate_available_documents,
     await_documents,
+    process_available_documents,
     evaluate_risk_flags,
     extract_idv_documents,
     extract_registry_document,
@@ -196,6 +197,7 @@ def build_cdd_graph(
     add_node("build_ownership_and_control", build_ownership_and_control)
     add_node("establish_idv_requirements", establish_idv_requirements)
     add_node("locate_available_documents", locate_available_documents)
+    graph.add_node("process_available_documents", process_available_documents)
     # The interrupt node is an internal pause point, not a visible pipeline step.
     graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
@@ -221,7 +223,8 @@ def build_cdd_graph(
     graph.add_edge("enrich_cdd_from_registry_document", "build_ownership_and_control")
     graph.add_edge("build_ownership_and_control", "establish_idv_requirements")
     graph.add_edge("establish_idv_requirements", "locate_available_documents")
-    graph.add_edge("locate_available_documents", "await_documents")
+    graph.add_edge("locate_available_documents", "process_available_documents")
+    graph.add_edge("process_available_documents", "await_documents")
     graph.add_edge("await_documents", "extract_idv_documents")
     graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")
