@@ -370,7 +370,7 @@ function App() {
               aria-selected={activeWorkspace === "generation"}
               onClick={() => setActiveWorkspace("generation")}
             >
-              Document Generation
+              Document Management
             </button>
           </div>
 
@@ -435,23 +435,6 @@ function App() {
               <strong>{cddMetadata.status}</strong>
             </div>
           </section>
-
-          <Section title="Case Documents">
-            <CaseDocuments
-              documents={documents}
-              requirements={documentRequirements}
-              links={documentLinks}
-              now={now}
-              onRefresh={refreshDocumentLink}
-              refreshingKey={refreshingDocumentKey}
-              onUploadClick={openUploadDialog}
-              uploadInputRef={uploadInputRef}
-              onUploadChange={handleUploadPlaceholder}
-              uploadNotice={uploadNotice}
-              onProcess={() => documentAction("/api/documents/process")}
-              loading={loading}
-            />
-          </Section>
 
           <Section title="About the Customer">
             <div className="grid">
@@ -565,11 +548,16 @@ function App() {
           )}
             </>
           ) : (
-            <DocumentGeneration
+            <DocumentManagement
               requirements={documentRequirements}
               loading={loading}
               generationStatus={generationStatus}
               onGenerate={generateMissingDocuments}
+              onProcess={() => documentAction("/api/documents/process")}
+              onUploadClick={openUploadDialog}
+              uploadInputRef={uploadInputRef}
+              onUploadChange={handleUploadPlaceholder}
+              uploadNotice={uploadNotice}
             />
           )}
         </main>
@@ -587,22 +575,20 @@ function Section({ title, children }) {
   );
 }
 
-function CaseDocuments({
-  documents,
+function DocumentManagement({
   requirements,
-  links,
-  now,
-  onRefresh,
-  refreshingKey,
   onUploadClick,
   uploadInputRef,
   onUploadChange,
   uploadNotice,
+  onGenerate,
   onProcess,
   loading,
+  generationStatus,
 }) {
+  const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
   return (
-    <div className="case-documents">
+    <Section title="Document Management">
       <div className="document-actions">
         <button className="secondary" onClick={onUploadClick}>Upload Documents</button>
         <input
@@ -614,103 +600,38 @@ function CaseDocuments({
           onChange={onUploadChange}
         />
         {uploadNotice && <span className="upload-note">{uploadNotice}</span>}
+        <button disabled={loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
         <button disabled={loading} onClick={onProcess}>Process Documents</button>
       </div>
 
-      <h3>Documents Needed</h3>
       {requirements.length ? (
-        <div className="document-list">
-          {requirements.map((requirement) => (
-            <div className="document-row" key={requirement.id}>
-              <div className="document-main">
-                <strong>{documentLabel(requirement.document_type)} — {requirement.entity_name}</strong>
-                <span>{requirement.status.replaceAll("_", " ")}</span>
-              </div>
-              {requirement.match && <span className="document-muted">Match confidence: {Math.round(requirement.match.confidence * 100)}%</span>}
-            </div>
-          ))}
-        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Document Name</th>
+              <th>Found in Cache</th>
+              <th>Provided by Customer</th>
+              <th>Processed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requirements.map((requirement) => {
+              const foundInCache = Boolean(requirement.cache_document);
+              const provided = !foundInCache && ["customer_upload", "generated"].includes(requirement.source);
+              return (
+                <tr key={requirement.id}>
+                  <td>{documentLabel(requirement.document_type)} — {requirement.entity_name}</td>
+                  <td>{foundInCache ? "Yes" : "No"}</td>
+                  <td className={foundInCache ? "document-muted" : ""}>
+                    {foundInCache ? "N/A" : (provided ? "Yes" : "No")}
+                  </td>
+                  <td>{requirement.status === "processed" ? "Yes" : "No"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       ) : <p className="empty">Run the CDD pipeline to determine required documents.</p>}
-
-      <h3>Documents Provided by Customer</h3>
-      {(requirements || []).filter((requirement) => ["provided", "received"].includes(requirement.status)).length ? (
-        <div className="document-list">
-          {requirements.filter((requirement) => ["provided", "received"].includes(requirement.status)).map((requirement) => (
-            <div className="document-row" key={`provided-${requirement.id}`}>
-              <div className="document-main">
-                <strong>{documentLabel(requirement.document_type)} — {requirement.entity_name}</strong>
-                <span>{requirement.status === "provided" ? "Provided by customer" : "Received"}</span>
-              </div>
-              {requirement.match && <span className="document-muted">Match confidence: {Math.round(requirement.match.confidence * 100)}%</span>}
-            </div>
-          ))}
-        </div>
-      ) : <p className="empty">No documents are staged for processing.</p>}
-
-      <h3>Processed Documents</h3>
-      {documents.length ? (
-        <div className="document-list">
-          {documents.map((document, index) => {
-            const key = documentKey(document);
-            const link = key ? links[key] : null;
-            const remaining = link ? secondsRemaining(link.expires_at, now) : 0;
-            const expired = link && remaining <= 0;
-            return (
-              <div className="document-row" key={key || `${document.name}-${index}`}>
-                <div className="document-main">
-                  <strong>{documentDescription(document)}</strong>
-                  <span>{document.name || document.storage?.key || "-"}</span>
-                </div>
-                <div className="document-controls">
-                  {link?.url && !expired ? (
-                    <a className="download-link" href={link.url} target="_blank" rel="noreferrer">
-                      Download
-                    </a>
-                  ) : (
-                    <span className="document-muted">No active link</span>
-                  )}
-                  <span className={`expiry ${expired ? "expired" : ""}`}>
-                    {link ? (expired ? "Expired" : `Valid ${formatDuration(remaining)}`) : "Not generated"}
-                  </span>
-                  <button
-                    className="secondary"
-                    disabled={!key || refreshingKey === key}
-                    onClick={() => onRefresh(document)}
-                  >
-                    {refreshingKey === key ? "Refreshing" : "Refresh"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="empty">No case documents are available yet.</p>
-      )}
-    </div>
-  );
-}
-
-function DocumentGeneration({ requirements, loading, generationStatus, onGenerate }) {
-  const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
-  return (
-    <Section title="Document Generation">
-      <p className="empty">Documents needed from the customer. Generate only items not found in S3; generated files remain staged locally until processed in the CDD Workspace.</p>
-      {requirements.length ? (
-        <div className="document-list">
-          {requirements.map((requirement) => (
-            <div className="document-row" key={requirement.id}>
-              <div className="document-main">
-                <strong>{documentLabel(requirement.document_type)} — {requirement.entity_name}</strong>
-                <span>{requirement.status === "not_found" ? "Not found in S3 cache" : requirement.status.replaceAll("_", " ")}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : <p className="empty">Run the CDD pipeline to determine required documents.</p>}
-      <div className="actions">
-        <button disabled={loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
-      </div>
       {generationStatus && <p className="empty">{generationStatus}</p>}
     </Section>
   );
