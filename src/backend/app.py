@@ -230,6 +230,7 @@ def _response(
         "pdf_url": pdf_url,
         "error": error,
         "pipeline_status": session.get("pipeline_status"),
+        "pipeline_progress": session.get("pipeline_progress"),
     }
 
 
@@ -308,6 +309,14 @@ async def _run_pipeline_for_session(
     session["jurisdiction"] = jurisdiction
     session["pipeline_status"] = "running"
     session["pipeline_error"] = None
+    session["pipeline_progress"] = {
+        "node": "collect_required_inputs",
+        "node_number": 1,
+        "total_nodes": 15,
+        "message": "Setting up",
+        "using_cache": False,
+        "status": "queued",
+    }
     if case_id:
         session["case_id"] = case_id
 
@@ -375,11 +384,17 @@ async def _complete_pipeline_for_session(
     generate_pdf: bool = False,
 ) -> None:
     try:
+        def publish_progress(progress: dict[str, Any]) -> None:
+            # The graph runs in a worker thread; each update is a complete object so
+            # polling clients never observe a partially-written progress payload.
+            session["pipeline_progress"] = progress
+
         graph_state = await asyncio.to_thread(
             run_cdd_agent_state,
             customer_name=customer_name,
             jurisdiction=jurisdiction,
             case_id=case_id,
+            progress_callback=publish_progress,
         )
         cdd = graph_state.get("cdd", {})
         session["cdd"] = cdd
@@ -404,6 +419,12 @@ async def _complete_pipeline_for_session(
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)
+        current_progress = session.get("pipeline_progress") or {}
+        session["pipeline_progress"] = {
+            **current_progress,
+            "status": "error",
+            "error": str(exc),
+        }
         session["messages"].append(
             {"role": "assistant", "content": f"CDD pipeline failed: {exc}"}
         )

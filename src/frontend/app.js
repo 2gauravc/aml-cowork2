@@ -24,6 +24,7 @@ function App() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState(null);
   const [showJson, setShowJson] = useState(false);
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
@@ -40,8 +41,9 @@ function App() {
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
     status: cdd ? cddStatusLabel(cdd.status) : "-",
   };
-  const pipelineStatusText =
-    latestAssistantMessage(messages) || "Fetching registry information";
+  const pipelineStatusText = pipelineProgress
+    ? formatPipelineProgress(pipelineProgress)
+    : latestAssistantMessage(messages) || "Setting up";
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
     [documents],
@@ -101,6 +103,7 @@ function App() {
     if (data.customer_name) setCustomerName(data.customer_name);
     if (data.jurisdiction) setJurisdiction(data.jurisdiction);
     if (data.case_id) setCaseId(String(data.case_id));
+    setPipelineProgress(data.pipeline_progress || null);
     if (data.error) setError(data.error);
   }
 
@@ -684,6 +687,17 @@ function latestAssistantMessage(messages) {
 
 function cddStatusLabel(status) {
   return status === "complete" ? "Complete" : "Incomplete";
+}
+
+function formatPipelineProgress(progress) {
+  const position = progress.node_number && progress.total_nodes
+    ? `Step ${progress.node_number} of ${progress.total_nodes}: `
+    : "";
+  const cache = progress.using_cache ? " (using cache)" : "";
+  const failure = progress.status === "error" && progress.error
+    ? ` — ${progress.error}`
+    : "";
+  return `${position}${progress.message || "Working"}${cache}${failure}`;
 }
 
 function formatDateTime(value) {
