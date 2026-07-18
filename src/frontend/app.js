@@ -18,6 +18,9 @@ function App() {
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [documentRequirements, setDocumentRequirements] = useState([]);
+  const [generationStatus, setGenerationStatus] = useState("");
+  const [activeWorkspace, setActiveWorkspace] = useState("cdd");
   const [documentLinks, setDocumentLinks] = useState({});
   const [refreshingDocumentKey, setRefreshingDocumentKey] = useState(null);
   const [uploadNotice, setUploadNotice] = useState("");
@@ -93,6 +96,7 @@ function App() {
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
     setDocuments(data.documents || []);
+    setDocumentRequirements(data.document_requirements || []);
     setDocumentLinks((current) => {
       const keys = new Set((data.documents || []).map((document) => documentKey(document)));
       return Object.fromEntries(
@@ -218,12 +222,69 @@ function App() {
     uploadInputRef.current?.click();
   }
 
-  function handleUploadPlaceholder(event) {
+  async function handleUploadPlaceholder(event) {
     const files = Array.from(event.target.files || []);
-    if (files.length) {
-      setUploadNotice(`${files.length} file${files.length === 1 ? "" : "s"} selected. Upload handling is not enabled yet.`);
+    if (!files.length || !sessionId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      for (const file of files) {
+        const body = new FormData();
+        body.append("session_id", sessionId);
+        body.append("file", file);
+        const response = await fetch("/api/documents/upload", { method: "POST", body });
+        applyResponse(await readJsonResponse(response, "Document upload failed"));
+      }
+      setUploadNotice(`${files.length} document${files.length === 1 ? "" : "s"} matched and staged for processing.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
     event.target.value = "";
+  }
+
+  async function documentAction(endpoint) {
+    if (!sessionId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Document action failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generateMissingDocuments() {
+    if (!sessionId) return;
+    const missing = documentRequirements.filter((requirement) => requirement.status === "not_found");
+    if (!missing.length) return;
+    setLoading(true);
+    setError(null);
+    try {
+      for (const requirement of missing) {
+        setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${requirement.entity_name}...`);
+        const response = await fetch("/api/documents/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, requirement_ids: [requirement.id] }),
+        });
+        applyResponse(await readJsonResponse(response, "Document generation failed"));
+      }
+      setGenerationStatus(`Generated ${missing.length} document${missing.length === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err.message);
+      setGenerationStatus("Document generation failed.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function pollSession(activeSessionId) {
@@ -294,6 +355,27 @@ function App() {
         </aside>
 
         <main className="main">
+          <div className="actions" role="tablist" aria-label="Workspace">
+            <button
+              className={activeWorkspace === "cdd" ? "" : "secondary"}
+              role="tab"
+              aria-selected={activeWorkspace === "cdd"}
+              onClick={() => setActiveWorkspace("cdd")}
+            >
+              CDD Workspace
+            </button>
+            <button
+              className={activeWorkspace === "generation" ? "" : "secondary"}
+              role="tab"
+              aria-selected={activeWorkspace === "generation"}
+              onClick={() => setActiveWorkspace("generation")}
+            >
+              Document Generation
+            </button>
+          </div>
+
+          {activeWorkspace === "cdd" ? (
+            <>
           <Section title="Run Full CDD Pipeline">
             <div className="pipeline-form">
               <input
@@ -357,6 +439,7 @@ function App() {
           <Section title="Case Documents">
             <CaseDocuments
               documents={documents}
+              requirements={documentRequirements}
               links={documentLinks}
               now={now}
               onRefresh={refreshDocumentLink}
@@ -365,6 +448,8 @@ function App() {
               uploadInputRef={uploadInputRef}
               onUploadChange={handleUploadPlaceholder}
               uploadNotice={uploadNotice}
+              onProcess={() => documentAction("/api/documents/process")}
+              loading={loading}
             />
           </Section>
 
@@ -478,6 +563,15 @@ function App() {
               <pre className="json-view">{JSON.stringify(cdd, null, 2)}</pre>
             </Section>
           )}
+            </>
+          ) : (
+            <DocumentGeneration
+              requirements={documentRequirements}
+              loading={loading}
+              generationStatus={generationStatus}
+              onGenerate={generateMissingDocuments}
+            />
+          )}
         </main>
       </div>
     </div>
@@ -495,6 +589,7 @@ function Section({ title, children }) {
 
 function CaseDocuments({
   documents,
+  requirements,
   links,
   now,
   onRefresh,
@@ -503,6 +598,8 @@ function CaseDocuments({
   uploadInputRef,
   onUploadChange,
   uploadNotice,
+  onProcess,
+  loading,
 }) {
   return (
     <div className="case-documents">
@@ -511,14 +608,46 @@ function CaseDocuments({
         <input
           ref={uploadInputRef}
           type="file"
-          accept="application/pdf,image/*"
+          accept="application/pdf"
           multiple
           hidden
           onChange={onUploadChange}
         />
         {uploadNotice && <span className="upload-note">{uploadNotice}</span>}
+        <button disabled={loading} onClick={onProcess}>Process Documents</button>
       </div>
 
+      <h3>Documents Needed</h3>
+      {requirements.length ? (
+        <div className="document-list">
+          {requirements.map((requirement) => (
+            <div className="document-row" key={requirement.id}>
+              <div className="document-main">
+                <strong>{documentLabel(requirement.document_type)} — {requirement.entity_name}</strong>
+                <span>{requirement.status.replaceAll("_", " ")}</span>
+              </div>
+              {requirement.match && <span className="document-muted">Match confidence: {Math.round(requirement.match.confidence * 100)}%</span>}
+            </div>
+          ))}
+        </div>
+      ) : <p className="empty">Run the CDD pipeline to determine required documents.</p>}
+
+      <h3>Documents Provided by Customer</h3>
+      {(requirements || []).filter((requirement) => ["provided", "received"].includes(requirement.status)).length ? (
+        <div className="document-list">
+          {requirements.filter((requirement) => ["provided", "received"].includes(requirement.status)).map((requirement) => (
+            <div className="document-row" key={`provided-${requirement.id}`}>
+              <div className="document-main">
+                <strong>{documentLabel(requirement.document_type)} — {requirement.entity_name}</strong>
+                <span>{requirement.status === "provided" ? "Provided by customer" : "Received"}</span>
+              </div>
+              {requirement.match && <span className="document-muted">Match confidence: {Math.round(requirement.match.confidence * 100)}%</span>}
+            </div>
+          ))}
+        </div>
+      ) : <p className="empty">No documents are staged for processing.</p>}
+
+      <h3>Processed Documents</h3>
       {documents.length ? (
         <div className="document-list">
           {documents.map((document, index) => {
@@ -559,6 +688,31 @@ function CaseDocuments({
         <p className="empty">No case documents are available yet.</p>
       )}
     </div>
+  );
+}
+
+function DocumentGeneration({ requirements, loading, generationStatus, onGenerate }) {
+  const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
+  return (
+    <Section title="Document Generation">
+      <p className="empty">Documents needed from the customer. Generate only items not found in S3; generated files remain staged locally until processed in the CDD Workspace.</p>
+      {requirements.length ? (
+        <div className="document-list">
+          {requirements.map((requirement) => (
+            <div className="document-row" key={requirement.id}>
+              <div className="document-main">
+                <strong>{documentLabel(requirement.document_type)} — {requirement.entity_name}</strong>
+                <span>{requirement.status === "not_found" ? "Not found in S3 cache" : requirement.status.replaceAll("_", " ")}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : <p className="empty">Run the CDD pipeline to determine required documents.</p>}
+      <div className="actions">
+        <button disabled={loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
+      </div>
+      {generationStatus && <p className="empty">{generationStatus}</p>}
+    </Section>
   );
 }
 

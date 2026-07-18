@@ -4,27 +4,37 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import run_cdd_agent_state
+from src.agents.nodes import extract_idv_documents, evaluate_risk_flags, finalize_cdd
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.customer_static import get_customer_static_by_name
+from src.tools.document_extraction import classify_document, extract_document
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.kyc_cache import get_cache_value
 from src.utils.pdf import render_cdd_pdf
-from src.utils.s3_documents import presign_document_url
+from src.utils.idv_document_pipeline import generate_idv_document
+from src.utils.s3_documents import (
+    download_document_from_s3,
+    find_documents_in_s3,
+    presign_document_url,
+    reusable_document_name,
+    upload_document_to_s3,
+)
 
 
 load_dotenv()
@@ -32,6 +42,7 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = PROJECT_ROOT / "src" / "frontend"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
+DOCUMENT_STAGING_DIR = OUTPUT_DIR / "document-staging"
 SANDBOX_CASES_PATH = PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
 
 app = FastAPI(title="WBL Bank CDD Chatbot")
@@ -62,6 +73,11 @@ class PipelineRequest(BaseModel):
 class DocumentPresignRequest(BaseModel):
     session_id: str
     document_key: str
+
+
+class DocumentActionRequest(BaseModel):
+    session_id: str
+    requirement_ids: list[str] | None = None
 
 
 @app.post("/api/chat")
@@ -175,6 +191,140 @@ async def presign_document(request: DocumentPresignRequest) -> dict[str, Any]:
     }
 
 
+@app.post("/api/documents/upload")
+async def upload_case_document(
+    session_id: str = Form(...),
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    """Stage an officer-provided PDF and intelligently match it to a requirement."""
+    session = SESSIONS.get(session_id)
+    if not session or not session.get("document_requirements"):
+        raise HTTPException(status_code=404, detail="Document requirements not found")
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+
+    data = await file.read()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Upload must be a PDF no larger than 20 MB")
+    staging = DOCUMENT_STAGING_DIR / session_id
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / f"{uuid.uuid4()}-{_safe_file_name(file.filename or 'document.pdf')}"
+    path.write_bytes(data)
+    artifact = {"pdf_path": str(path), "source": "Provided by customer"}
+    try:
+        classification = await asyncio.to_thread(classify_document, path)
+        preview = await asyncio.to_thread(extract_document, artifact, classification=classification)
+    except Exception as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Unable to identify document: {exc}") from exc
+
+    requirement = _match_requirement(session["document_requirements"], classification, preview)
+    if not requirement:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail="No open document requirement matched this upload")
+    requirement.update(
+        {
+            "status": "provided",
+            "source": "customer_upload",
+            "artifact": {**artifact, "document_type": classification.get("document_type")},
+            "classification": classification,
+            "match": _match_summary(requirement, classification, preview),
+        }
+    )
+    return _response(session, status="ok")
+
+
+@app.post("/api/documents/generate")
+async def generate_missing_documents(request: DocumentActionRequest) -> dict[str, Any]:
+    """Generate selected unavailable documents locally; processing is still explicit."""
+    session = SESSIONS.get(request.session_id)
+    if not session or not session.get("document_requirements"):
+        raise HTTPException(status_code=404, detail="Document requirements not found")
+    selected = set(request.requirement_ids or [])
+    for requirement in session["document_requirements"]:
+        if selected and requirement["id"] not in selected:
+            continue
+        if requirement.get("status") != "not_found":
+            continue
+        artifact = await asyncio.to_thread(
+            generate_idv_document,
+            {**requirement["individual"], "selected_document_type": requirement["document_type"]},
+            output_dir=DOCUMENT_STAGING_DIR / request.session_id,
+        )
+        requirement.update({"status": "received", "source": "generated", "artifact": artifact})
+    return _response(session, status="ok")
+
+
+@app.post("/api/documents/process")
+async def process_case_documents(request: DocumentActionRequest) -> dict[str, Any]:
+    """Extract staged/cache documents, persist new ones to S3, and update the CDD."""
+    session = SESSIONS.get(request.session_id)
+    if not session or not session.get("cdd"):
+        raise HTTPException(status_code=404, detail="CDD session not found")
+    selected = set(request.requirement_ids or [])
+    cdd = session["cdd"]
+    evidence = list(session.get("evidence", []))
+    documents = list(session.get("documents", []))
+    for requirement in session.get("document_requirements", []):
+        if selected and requirement["id"] not in selected:
+            continue
+        if requirement.get("status") not in {"cache_found", "provided", "received"}:
+            continue
+        artifact, document = _artifact_for_processing(requirement)
+        if not artifact:
+            continue
+        # Extraction maps results back to the required individual by case ID when
+        # one is available. Cached and uploaded artifacts need that identity
+        # context restored from the requirement before extraction.
+        artifact.setdefault("person_name", requirement["entity_name"])
+        artifact.setdefault(
+            "case_common_id",
+            requirement["individual"].get("case_common_id"),
+        )
+        artifact.setdefault("document_type", requirement["document_type"])
+        if not document:
+            document = upload_document_to_s3(
+                artifact["pdf_path"],
+                category=requirement["document_type"],
+                person_name=requirement["individual"].get("name"),
+                source=artifact.get("source"),
+                company_name=session.get("customer_name"),
+                jurisdiction=session.get("jurisdiction"),
+                object_name=reusable_document_name(
+                    document_type=requirement["document_type"],
+                    company_name=session["customer_name"],
+                    person_name=requirement["individual"].get("name"),
+                ),
+            )
+        if document:
+            artifact.update({"s3_url": document["url"], "storage": document["storage"]})
+            documents.append(document)
+        extraction_state = {
+            "cdd": cdd,
+            "evidence": evidence + [{"tool": "generate_idv_documents", "data": {"artifacts": [artifact]}}],
+        }
+        update = await asyncio.to_thread(extract_idv_documents, extraction_state)
+        cdd = update["cdd"]
+        evidence.extend(update["evidence"])
+        requirement["status"] = "processed"
+        requirement["processed_at"] = datetime.now(UTC).isoformat()
+        if not artifact.get("s3_url"):
+            Path(artifact["pdf_path"]).unlink(missing_ok=True)
+
+    risk_update = evaluate_risk_flags({"cdd": cdd})
+    final_update = finalize_cdd({"cdd": cdd, "risk_flags": risk_update["risk_flags"]})
+    session.update(
+        {
+            "cdd": final_update["cdd"],
+            "evidence": evidence,
+            "documents": documents,
+            "risk_flags": risk_update["risk_flags"],
+            "final_recommendation": final_update["final_recommendation"],
+        }
+    )
+    return _response(session, status="complete")
+
+
 @app.get("/api/jurisdictions")
 async def get_jurisdictions() -> dict[str, Any]:
     with SANDBOX_CASES_PATH.open(encoding="utf-8") as fh:
@@ -224,6 +374,7 @@ def _response(
         "case_id": session.get("case_id"),
         "cdd": session.get("cdd"),
         "documents": session.get("documents", []),
+        "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
         "final_recommendation": session.get("final_recommendation"),
         "tool_results": session.get("tool_results", []),
@@ -232,6 +383,104 @@ def _response(
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
     }
+
+
+def _build_document_requirements(session: dict[str, Any]) -> list[dict[str, Any]]:
+    cdd = session.get("cdd") or {}
+    individuals = cdd.get("individual_identity_verification", {}).get("required_individuals", [])
+    available = find_documents_in_s3(
+        company_name=session.get("customer_name"),
+        jurisdiction=session.get("jurisdiction"),
+    )
+    by_name = {document.get("name"): document for document in available}
+    requirements = []
+    for index, individual in enumerate(individuals):
+        document_type = individual.get("selected_document_type") or "passport"
+        expected_name = reusable_document_name(
+            document_type=document_type,
+            company_name=session["customer_name"],
+            person_name=individual.get("name"),
+        )
+        cached = by_name.get(expected_name)
+        requirements.append(
+            {
+                "id": f"idv-{index}-{document_type}",
+                "entity_name": individual.get("name"),
+                "document_type": document_type,
+                "individual": individual,
+                "status": "cache_found" if cached else "not_found",
+                "cache_document": cached,
+                "match": None,
+            }
+        )
+    return requirements
+
+
+def _artifact_for_processing(
+    requirement: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if requirement.get("status") == "cache_found":
+        document = requirement.get("cache_document")
+        if not document:
+            return None, None
+        return (
+            {
+                "pdf_path": download_document_from_s3(document),
+                "document_type": requirement["document_type"],
+                "person_name": requirement["entity_name"],
+                "case_common_id": requirement["individual"].get("case_common_id"),
+                "source": "S3 document cache",
+                "s3_url": document["url"],
+                "storage": document["storage"],
+            },
+            document,
+        )
+    return requirement.get("artifact"), None
+
+
+def _match_requirement(
+    requirements: list[dict[str, Any]],
+    classification: dict[str, Any],
+    extract: dict[str, Any],
+) -> dict[str, Any] | None:
+    document_type = classification.get("document_type")
+    extracted_name = _normalise_name(extract.get("full_name") or extract.get("name") or "")
+    candidates = []
+    for requirement in requirements:
+        if requirement.get("status") not in {"not_found", "cache_found"}:
+            continue
+        if requirement.get("document_type") != document_type:
+            continue
+        score = 0.65
+        if extracted_name and extracted_name == _normalise_name(requirement.get("entity_name") or ""):
+            score += 0.35
+        candidates.append((score, requirement))
+    if not candidates:
+        return None
+    score, requirement = max(candidates, key=lambda item: item[0])
+    return requirement if score >= 0.65 else None
+
+
+def _match_summary(
+    requirement: dict[str, Any],
+    classification: dict[str, Any],
+    extract: dict[str, Any],
+) -> dict[str, Any]:
+    extracted_name = _normalise_name(extract.get("full_name") or extract.get("name") or "")
+    exact_name = extracted_name == _normalise_name(requirement.get("entity_name") or "")
+    return {
+        "confidence": 1.0 if exact_name else 0.65,
+        "reason": "document type and extracted name match" if exact_name else "document type match",
+        "classification": classification.get("document_type"),
+    }
+
+
+def _normalise_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _safe_file_name(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", Path(name).name) or "document.pdf"
 
 
 def _session_document_by_key(
@@ -404,6 +653,26 @@ async def _complete_pipeline_for_session(
         session["risk_flags"] = graph_state.get("risk_flags", [])
         session["final_recommendation"] = graph_state.get("final_recommendation")
         session["document_results"] = cdd.get("documents", [])
+        session["document_requirements"] = _build_document_requirements(session)
+        if any(
+            requirement.get("status") == "cache_found"
+            for requirement in session["document_requirements"]
+        ):
+            # Cached documents are already available to the bank, so process them
+            # immediately. Only unavailable documents require officer action.
+            session["pipeline_progress"] = {
+                "node": "extract_idv_documents",
+                "node_number": 13,
+                "total_nodes": 15,
+                "message": "Processing ID&V documents found in cache",
+                "using_cache": True,
+                "status": "running",
+                "started_at": datetime.now(UTC).isoformat(),
+            }
+            await process_case_documents(
+                DocumentActionRequest(session_id=session["session_id"])
+            )
+            cdd = session["cdd"]
         for message in graph_state.get("messages", []):
             content = getattr(message, "content", None)
             if content:

@@ -212,7 +212,10 @@ def build_cdd_graph(
     graph.add_edge("extract_registry_document", "enrich_cdd_from_registry_document")
     graph.add_edge("enrich_cdd_from_registry_document", "build_ownership_and_control")
     graph.add_edge("build_ownership_and_control", "establish_idv_requirements")
-    graph.add_edge("establish_idv_requirements", "generate_idv_documents")
+    # Document collection is an officer-driven workflow. The initial run stops
+    # after requirements are known; upload/generation and extraction are started
+    # explicitly from the Case Documents workspace.
+    graph.add_edge("establish_idv_requirements", END)
     graph.add_edge("generate_idv_documents", "extract_idv_documents")
     graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")

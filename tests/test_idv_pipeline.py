@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.agents.nodes import (
+    _apply_idv_extracts,
     establish_idv_requirements,
     extract_idv_documents,
     generate_idv_documents_node,
@@ -104,6 +105,25 @@ class IDVPipelineTests(unittest.TestCase):
         )
 
         self.assertEqual(result["ubos"][0]["case_common_id"], "p1")
+
+    def test_cached_artifact_with_case_id_populates_matching_individual(self):
+        individuals = [{"name": "Jane Demo", "case_common_id": "p1", "status": "required"}]
+        _apply_idv_extracts(
+            individuals,
+            [
+                {
+                    "artifact": {"person_name": "Jane Demo", "case_common_id": "p1"},
+                    "extract": {
+                        "document_type": "passport",
+                        "full_name": "Jane Demo",
+                        "document_number": "P12345678",
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(individuals[0]["status"], "verified")
+        self.assertEqual(individuals[0]["document"]["document_number"], "P12345678")
 
     def test_generate_idv_document_creates_passport_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
