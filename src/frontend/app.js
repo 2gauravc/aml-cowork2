@@ -590,6 +590,9 @@ function DocumentManagement({
   generationStatus,
 }) {
   const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
+  const hasProcessableDocuments = (requirements || []).some((requirement) =>
+    ["cache_found", "provided", "received"].includes(requirement.status),
+  );
   return (
     <Section title="Document Management">
       <div className="document-actions">
@@ -604,7 +607,7 @@ function DocumentManagement({
         />
         {uploadNotice && <span className="upload-note">{uploadNotice}</span>}
         <button disabled={loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
-        <button disabled={loading} onClick={onProcess}>Process Documents</button>
+        <button disabled={loading || !hasProcessableDocuments} onClick={onProcess}>Process Documents</button>
       </div>
 
       {requirements.length ? (

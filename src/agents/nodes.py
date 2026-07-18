@@ -547,6 +547,22 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
         )
 
     _apply_idv_extracts(individuals, extracts)
+    requirements = deepcopy(state.get("document_requirements", []))
+    processed_keys = {
+        _identity_key(
+            {
+                "name": item.get("artifact", {}).get("person_name")
+                or item.get("extract", {}).get("full_name"),
+                "case_common_id": item.get("artifact", {}).get("case_common_id"),
+            }
+        )
+        for item in extracts
+    }
+    for requirement in requirements:
+        identity = _identity_key(requirement.get("individual", {}))
+        if identity in processed_keys:
+            requirement["status"] = "processed"
+            requirement["processed_at"] = datetime.now(UTC).isoformat()
     idv["required_individuals"] = individuals
     idv["missing_items"] = [
         row.get("name") for row in individuals if row.get("status") != "verified"
@@ -554,7 +570,7 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
     idv["status"] = "complete" if not idv["missing_items"] else "incomplete"
     cdd["individual_identity_verification"] = idv
     cdd.setdefault("documents", []).extend(extracts)
-    return {
+    update = {
         "cdd": cdd,
         "messages": [AIMessage(content="Extracting ID&V documents.")],
         "evidence": [
@@ -567,6 +583,9 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
             )
         ],
     }
+    if requirements:
+        update["document_requirements"] = requirements
+    return update
 
 
 def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
