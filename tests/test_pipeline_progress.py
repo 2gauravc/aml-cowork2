@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.agents.graph import _progress_node
+from src.agents.graph import _document_progress_message, _progress_node
 
 
 class PipelineProgressTests(unittest.TestCase):
@@ -47,6 +47,29 @@ class PipelineProgressTests(unittest.TestCase):
 
         self.assertEqual(updates[-1]["status"], "error")
         self.assertEqual(updates[-1]["error"], "registry unavailable")
+
+    def test_document_status_reports_the_actual_cache_outcome(self):
+        self.assertEqual(
+            _document_progress_message(
+                "generate_registry_document",
+                {"evidence": [{"data": {"reused_from_s3": True}}]},
+            ),
+            "Locating document — found in cache",
+        )
+        self.assertEqual(
+            _document_progress_message(
+                "generate_idv_documents",
+                {"evidence": [{"data": {"artifacts": [{"reused_from_s3": True}, {}]}}]},
+            ),
+            "Locating document — found in cache; generating missing documents",
+        )
+        self.assertEqual(
+            _document_progress_message(
+                "generate_idv_documents",
+                {"evidence": [{"data": {"artifacts": [{}]}}]},
+            ),
+            "Locating document — not found, generating",
+        )
 
 
 if __name__ == "__main__":

@@ -22,9 +22,15 @@ from src.tools.idv_requirements import establish_idv_requirements as apply_idv_r
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
-from src.utils.document_pipeline import generate_registry_document
-from src.utils.idv_document_pipeline import generate_idv_documents
-from src.utils.s3_documents import s3_upload_skip_reason, upload_document_to_s3
+from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
+from src.utils.idv_document_pipeline import IDV_SOURCE_LABELS, generate_idv_documents
+from src.utils.s3_documents import (
+    download_document_from_s3,
+    find_documents_in_s3,
+    reusable_document_name,
+    s3_upload_skip_reason,
+    upload_document_to_s3,
+)
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -188,19 +194,43 @@ def build_company_business_profile(state: CDDState) -> dict[str, Any]:
 
 
 def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
-    """Generate a synthetic registry document from the current CDD object."""
+    """Reuse or generate a synthetic registry document for the current CDD object."""
     cdd = state.get("cdd", {})
-    artifact = generate_registry_document(cdd)
-    document = upload_document_to_s3(
-        artifact["pdf_path"],
-        category=artifact["document_type"],
-        case_id=state.get("metadata", {}).get("kyc_case", {}).get("case_id"),
-        source=artifact.get("source"),
+    company_name, jurisdiction = _document_scope(state)
+    existing_documents = find_documents_in_s3(
+        company_name=company_name,
+        jurisdiction=jurisdiction,
     )
+    expected_name = (
+        reusable_document_name(
+            document_type="registry_document",
+            company_name=company_name,
+        )
+        if company_name
+        else None
+    )
+    document = _find_document(existing_documents, expected_name)
+    if document:
+        artifact = _reused_artifact(
+            document,
+            document_type="registry_document",
+            source=REGISTRY_SOURCE_LABEL,
+        )
+    else:
+        artifact = generate_registry_document(cdd)
+        document = upload_document_to_s3(
+            artifact["pdf_path"],
+            category=artifact["document_type"],
+            case_id=state.get("metadata", {}).get("kyc_case", {}).get("case_id"),
+            source=artifact.get("source"),
+            company_name=company_name,
+            jurisdiction=jurisdiction,
+            object_name=expected_name,
+        )
     if document:
         artifact["s3_url"] = document["url"]
         artifact["storage"] = document["storage"]
-        document["collected_at"] = artifact["generated_at"]
+        document["collected_at"] = artifact.get("generated_at")
     else:
         artifact["storage"] = {
             "provider": "s3",
@@ -208,12 +238,28 @@ def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
             "reason": s3_upload_skip_reason() or "upload did not return a document URL",
         }
     update = {
-        "messages": [AIMessage(content="Generating registry document.")],
+        "messages": [
+            AIMessage(
+                content=(
+                    "Reusing registry document from S3."
+                    if artifact.get("reused_from_s3")
+                    else "Generating registry document."
+                )
+            )
+        ],
         "evidence": [
             _evidence(
                 tool="generate_registry_document",
-                description="Generated synthetic registry business profile document",
-                source="Synthetic demo document generator",
+                description=(
+                    "Reused registry business profile document from S3"
+                    if artifact.get("reused_from_s3")
+                    else "Generated synthetic registry business profile document"
+                ),
+                source=(
+                    "S3 document store"
+                    if artifact.get("reused_from_s3")
+                    else "Synthetic demo document generator"
+                ),
                 data=artifact,
                 relevance_tags=[
                     "document",
@@ -343,21 +389,65 @@ def establish_idv_requirements(state: CDDState) -> dict[str, Any]:
 
 
 def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
-    """Generate synthetic identity documents for ID&V-required people."""
+    """Reuse S3 identity documents and generate only those still required."""
     cdd = state.get("cdd", {})
     idv = cdd.get("individual_identity_verification", {})
     individuals = idv.get("required_individuals", [])
-    artifacts = generate_idv_documents(individuals)
+    company_name, jurisdiction = _document_scope(state)
+    existing_documents = find_documents_in_s3(
+        company_name=company_name,
+        jurisdiction=jurisdiction,
+    )
+    artifacts = []
     documents = []
     case_id = state.get("metadata", {}).get("kyc_case", {}).get("case_id")
-    for artifact in artifacts:
+    missing_individuals = []
+    for individual in individuals:
+        document_type = individual.get("selected_document_type") or "passport"
+        expected_name = (
+            reusable_document_name(
+                document_type=document_type,
+                company_name=company_name,
+                person_name=individual.get("name"),
+            )
+            if company_name and individual.get("name")
+            else None
+        )
+        document = _find_document(existing_documents, expected_name)
+        if not document:
+            missing_individuals.append(individual)
+            continue
+        document["person_name"] = individual.get("name")
+        document["source"] = IDV_SOURCE_LABELS.get(document_type, "Identity Document")
+        artifact = _reused_artifact(
+            document,
+            document_type=document_type,
+            source=document["source"],
+            person_name=individual.get("name"),
+        )
+        artifacts.append(artifact)
+        documents.append(document)
+
+    for artifact in generate_idv_documents(missing_individuals):
         document = upload_document_to_s3(
             artifact["pdf_path"],
             category=artifact["document_type"],
             case_id=case_id,
             person_name=artifact.get("person_name"),
             source=artifact.get("source"),
+            company_name=company_name,
+            jurisdiction=jurisdiction,
+            object_name=(
+                reusable_document_name(
+                    document_type=artifact["document_type"],
+                    company_name=company_name,
+                    person_name=artifact.get("person_name"),
+                )
+                if company_name and artifact.get("person_name")
+                else None
+            ),
         )
+        artifacts.append(artifact)
         if not document:
             artifact["storage"] = {
                 "provider": "s3",
@@ -371,11 +461,19 @@ def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
         documents.append(document)
 
     update = {
-        "messages": [AIMessage(content="Generating ID&V documents.")],
+        "messages": [
+            AIMessage(
+                content=(
+                    "Reusing available ID&V documents from S3 and generating missing documents."
+                    if any(artifact.get("reused_from_s3") for artifact in artifacts)
+                    else "Generating ID&V documents."
+                )
+            )
+        ],
         "evidence": [
             _evidence(
                 tool="generate_idv_documents",
-                description="Generated synthetic ID&V documents",
+                description="Reused available S3 ID&V documents and generated missing documents",
                 source="Synthetic demo document generator",
                 data={"artifacts": artifacts},
                 relevance_tags=["idv", "document", "synthetic_demo"],
@@ -527,6 +625,54 @@ def _delete_local_document_artifacts(artifact: dict[str, Any]) -> list[str]:
         path.unlink()
         deleted.append(str(path))
     return deleted
+
+
+def _document_scope(state: CDDState) -> tuple[str | None, str | None]:
+    """Resolve the company/jurisdiction S3 folder from enriched state."""
+    static = (
+        state.get("cdd", {})
+        .get("company_business_profile", {})
+        .get("customer_static", {})
+    )
+    customer = state.get("metadata", {}).get("customer", {})
+    return (
+        static.get("name") or customer.get("name"),
+        static.get("jurisdiction") or customer.get("jurisdiction"),
+    )
+
+
+def _find_document(
+    documents: list[dict[str, Any]],
+    expected_name: str | None,
+) -> dict[str, Any] | None:
+    if not expected_name:
+        return None
+    return next(
+        (document for document in documents if document.get("name") == expected_name),
+        None,
+    )
+
+
+def _reused_artifact(
+    document: dict[str, Any],
+    *,
+    document_type: str,
+    source: str,
+    person_name: str | None = None,
+) -> dict[str, Any]:
+    """Turn an S3 listing result into the artifact shape consumed by extract nodes."""
+    return {
+        "document_type": document_type,
+        "source": source,
+        "person_name": person_name,
+        "pdf_path": download_document_from_s3(document),
+        "generated_at": str(
+            document.get("last_modified") or datetime.now(UTC).isoformat()
+        ),
+        "s3_url": document["url"],
+        "storage": document["storage"],
+        "reused_from_s3": True,
+    }
 
 
 def _latest_evidence_data(state: CDDState, tool: str) -> dict[str, Any] | None:

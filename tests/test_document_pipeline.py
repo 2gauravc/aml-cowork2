@@ -299,6 +299,35 @@ class DocumentPipelineTests(unittest.TestCase):
             self.assertTrue(html_path.exists())
             self.assertTrue(json_path.exists())
 
+    def test_registry_document_node_reuses_matching_s3_document(self):
+        document = {
+            "name": "registry-business-profile-demo-co.pdf",
+            "category": "registry_document",
+            "url": "https://example.s3.amazonaws.com/generated_documents/GB/demo-co/registry-business-profile-demo-co.pdf",
+            "storage": {
+                "provider": "s3",
+                "bucket": "example",
+                "key": "generated_documents/GB/demo-co/registry-business-profile-demo-co.pdf",
+                "url": "https://example.s3.amazonaws.com/generated_documents/GB/demo-co/registry-business-profile-demo-co.pdf",
+            },
+        }
+        with patch("src.agents.nodes.find_documents_in_s3", return_value=[document]), patch(
+            "src.agents.nodes.download_document_from_s3",
+            return_value="/tmp/reused-registry.pdf",
+        ), patch("src.agents.nodes.generate_registry_document") as generate:
+            update = generate_registry_document_node(
+                {
+                    "metadata": {"customer": {"name": "Demo Co", "jurisdiction": "GB"}},
+                    "cdd": {},
+                }
+            )
+
+        generate.assert_not_called()
+        artifact = update["evidence"][0]["data"]
+        self.assertTrue(artifact["reused_from_s3"])
+        self.assertEqual(artifact["pdf_path"], "/tmp/reused-registry.pdf")
+        self.assertEqual(update["documents"][0]["name"], document["name"])
+
 
 if __name__ == "__main__":
     unittest.main()

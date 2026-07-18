@@ -262,6 +262,67 @@ class IDVPipelineTests(unittest.TestCase):
         self.assertEqual(person["document"]["document_number"], "P12345678")
         self.assertEqual(person["document"]["source"], "Passport Document")
 
+    def test_idv_node_reuses_available_document_and_generates_only_missing_one(self):
+        reused_document = {
+            "name": "passport-jane-demo.pdf",
+            "category": "passport",
+            "url": "https://example.s3.amazonaws.com/generated_documents/GB/demo-co/passport-jane-demo.pdf",
+            "storage": {
+                "provider": "s3",
+                "bucket": "example",
+                "key": "generated_documents/GB/demo-co/passport-jane-demo.pdf",
+                "url": "https://example.s3.amazonaws.com/generated_documents/GB/demo-co/passport-jane-demo.pdf",
+            },
+        }
+        generated = {
+            "document_type": "passport",
+            "source": "Passport Document",
+            "person_name": "Sam Other",
+            "pdf_path": "/tmp/passport-sam-other.pdf",
+            "generated_at": "2026-07-18T00:00:00+00:00",
+        }
+        uploaded = {
+            "name": "passport-sam-other.pdf",
+            "category": "passport",
+            "url": "https://example.s3.amazonaws.com/generated_documents/GB/demo-co/passport-sam-other.pdf",
+            "storage": {
+                "provider": "s3",
+                "bucket": "example",
+                "key": "generated_documents/GB/demo-co/passport-sam-other.pdf",
+            },
+        }
+        with patch("src.agents.nodes.find_documents_in_s3", return_value=[reused_document]), patch(
+            "src.agents.nodes.download_document_from_s3",
+            return_value="/tmp/passport-jane-demo.pdf",
+        ), patch(
+            "src.agents.nodes.generate_idv_documents",
+            return_value=[generated],
+        ) as generate, patch(
+            "src.agents.nodes.upload_document_to_s3",
+            return_value=uploaded,
+        ):
+            update = generate_idv_documents_node(
+                {
+                    "metadata": {"customer": {"name": "Demo Co", "jurisdiction": "GB"}},
+                    "cdd": {
+                        "individual_identity_verification": {
+                            "required_individuals": [
+                                {"name": "Jane Demo", "selected_document_type": "passport"},
+                                {"name": "Sam Other", "selected_document_type": "passport"},
+                            ]
+                        }
+                    },
+                }
+            )
+
+        generate.assert_called_once_with(
+            [{"name": "Sam Other", "selected_document_type": "passport"}]
+        )
+        artifacts = update["evidence"][0]["data"]["artifacts"]
+        self.assertEqual(len(artifacts), 2)
+        self.assertTrue(artifacts[0]["reused_from_s3"])
+        self.assertEqual(len(update["documents"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

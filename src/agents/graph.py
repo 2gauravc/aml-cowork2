@@ -49,18 +49,18 @@ load_dotenv()
 
 
 PIPELINE_NODE_LABELS = {
-    "collect_required_inputs": "Setting up",
-    "create_or_reuse_case": "Setting up",
+    "collect_required_inputs": "Collecting inputs",
+    "create_or_reuse_case": "Creating case",
     "fetch_customer_static": "Fetching customer static information from KYC API",
     "fetch_org_chart": "Fetching org chart information from KYC API",
     "fetch_members": "Fetching members from KYC API",
     "build_company_business_profile": "Populating CDD — About the Customer",
-    "generate_registry_document": "Generating registry documents",
+    "generate_registry_document": "Locating document",
     "extract_registry_document": "Extracting from registry document",
     "enrich_cdd_from_registry_document": "Populating CDD from registry document",
     "build_ownership_and_control": "Populating CDD — Ownership & Control",
     "establish_idv_requirements": "Establishing ID&V requirements",
-    "generate_idv_documents": "Generating ID&V documents",
+    "generate_idv_documents": "Locating document",
     "extract_idv_documents": "Extracting from ID&V documents",
     "evaluate_risk_flags": "Evaluating red flags",
     "finalize_cdd": "Completing CDD",
@@ -110,7 +110,21 @@ def _progress_node(
             }
         )
         try:
-            return func(state)
+            result = func(state)
+            document_message = _document_progress_message(node_name, result)
+            if document_message:
+                progress_callback(
+                    {
+                        "node": node_name,
+                        "node_number": node_number,
+                        "total_nodes": len(PIPELINE_NODE_LABELS),
+                        "message": document_message,
+                        "using_cache": False,
+                        "status": "running",
+                        "started_at": datetime.now(UTC).isoformat(),
+                    }
+                )
+            return result
         except Exception as exc:
             progress_callback(
                 {
@@ -131,6 +145,27 @@ def _progress_node(
 
     wrapped.__name__ = getattr(func, "__name__", node_name)
     return wrapped
+
+
+def _document_progress_message(node_name: str, result: dict[str, Any]) -> str | None:
+    """Build a UI message from the document node's actual S3 lookup outcome."""
+    if node_name == "generate_registry_document":
+        artifact = (result.get("evidence") or [{}])[0].get("data") or {}
+        return (
+            "Locating document — found in cache"
+            if artifact.get("reused_from_s3")
+            else "Locating document — not found, generating"
+        )
+    if node_name == "generate_idv_documents":
+        artifact_data = (result.get("evidence") or [{}])[0].get("data") or {}
+        artifacts = artifact_data.get("artifacts") or []
+        reused = sum(bool(artifact.get("reused_from_s3")) for artifact in artifacts)
+        if reused and reused == len(artifacts):
+            return "Locating document — found in cache"
+        if reused:
+            return "Locating document — found in cache; generating missing documents"
+        return "Locating document — not found, generating"
+    return None
 
 
 def build_cdd_graph(
