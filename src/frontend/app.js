@@ -336,7 +336,7 @@ function App() {
           <div className="messages">
             {messages.map((item, index) => (
               <div className={`message ${item.role}`} key={`${item.role}-${index}`}>
-                {item.content}
+                <MarkdownMessage content={item.content} />
               </div>
             ))}
             {loading && (
@@ -676,6 +676,91 @@ function Field({ label, value, source }) {
       <div className="value">{value || "-"}</div>
     </div>
   );
+}
+
+function MarkdownMessage({ content }) {
+  const lines = String(content || "").split("\n");
+  const blocks = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    if (!lines[index].trim()) {
+      index += 1;
+      continue;
+    }
+    const heading = lines[index].match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const Tag = `h${heading[1].length + 2}`;
+      blocks.push(<Tag key={`heading-${index}`}>{renderMarkdownInline(heading[2])}</Tag>);
+      index += 1;
+      continue;
+    }
+    const unordered = lines[index].match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = lines[index].match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const ItemList = unordered ? "ul" : "ol";
+      const items = [];
+      while (index < lines.length) {
+        const item = lines[index].match(unordered ? /^\s*[-*+]\s+(.+)$/ : /^\s*\d+[.)]\s+(.+)$/);
+        if (!item) break;
+        items.push(<li key={`item-${index}`}>{renderMarkdownInline(item[1])}</li>);
+        index += 1;
+      }
+      blocks.push(<ItemList key={`list-${index}`}>{items}</ItemList>);
+      continue;
+    }
+
+    const paragraph = [];
+    while (index < lines.length && lines[index].trim()
+      && !/^#{1,3}\s+/.test(lines[index])
+      && !/^\s*[-*+]\s+/.test(lines[index])
+      && !/^\s*\d+[.)]\s+/.test(lines[index])) {
+      paragraph.push(lines[index]);
+      index += 1;
+    }
+    blocks.push(
+      <p key={`paragraph-${index}`}>
+        {paragraph.flatMap((line, lineIndex) => [
+          ...(lineIndex ? [<br key={`break-${lineIndex}`} />] : []),
+          ...renderMarkdownInline(line),
+        ])}
+      </p>,
+    );
+  }
+
+  return <>{blocks}</>;
+}
+
+function renderMarkdownInline(value) {
+  const tokens = [];
+  const expression = /(\[([^\]]+)\]\(([^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*)/g;
+  let cursor = 0;
+  let match;
+  while ((match = expression.exec(value)) !== null) {
+    if (match.index > cursor) tokens.push(value.slice(cursor, match.index));
+    if (match[2]) {
+      const href = safeMarkdownHref(match[3]);
+      tokens.push(href
+        ? <a key={`link-${match.index}`} href={href} target="_blank" rel="noreferrer">{match[2]}</a>
+        : match[0]);
+    } else if (match[4]) {
+      tokens.push(<code key={`code-${match.index}`}>{match[4]}</code>);
+    } else {
+      tokens.push(<strong key={`strong-${match.index}`}>{match[5]}</strong>);
+    }
+    cursor = expression.lastIndex;
+  }
+  if (cursor < value.length) tokens.push(value.slice(cursor));
+  return tokens;
+}
+
+function safeMarkdownHref(value) {
+  try {
+    const url = new URL(value, window.location.origin);
+    return ["https:", "http:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function SubTable({ title, columns, rows, empty }) {

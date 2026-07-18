@@ -134,7 +134,48 @@ button:disabled {
   max-width: 92%;
   overflow-wrap: anywhere;
   padding: 10px 12px;
-  white-space: pre-wrap;
+}
+
+.message > :first-child {
+  margin-top: 0;
+}
+
+.message > :last-child {
+  margin-bottom: 0;
+}
+
+.message p {
+  margin: 0 0 8px;
+}
+
+.message ul,
+.message ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+
+.message li + li {
+  margin-top: 4px;
+}
+
+.message h3,
+.message h4,
+.message h5 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.message a {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
+.message code {
+  background: #e8edf4;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 1px 3px;
 }
 
 .message.assistant {
