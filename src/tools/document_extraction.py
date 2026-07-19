@@ -169,7 +169,6 @@ def _run_schema_prompt(
                     "strict": True,
                 }
             },
-            temperature=0,
         )
     except OpenAIError as exc:
         raise DocumentExtractionError(f"OpenAI document extraction failed: {exc}") from exc

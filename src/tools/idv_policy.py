@@ -101,7 +101,6 @@ def _run_policy_prompt(policy_text: str) -> dict[str, Any]:
                     "strict": True,
                 }
             },
-            temperature=0,
         )
     except OpenAIError as exc:
         raise PolicyInterpretationError(f"OpenAI policy interpretation failed: {exc}") from exc

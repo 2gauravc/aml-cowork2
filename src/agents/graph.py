@@ -41,6 +41,7 @@ from src.agents.nodes import (  # noqa: E402
     fetch_members,
     fetch_org_chart,
     finalize_cdd,
+    generate_case_review,
     generate_idv_documents_node,
     generate_registry_document_node,
     has_required_inputs,
@@ -71,6 +72,7 @@ PIPELINE_NODE_LABELS = {
     "extract_idv_documents": "Extracting from ID&V documents",
     "evaluate_risk_flags": "Evaluating red flags",
     "finalize_cdd": "Completing CDD",
+    "generate_case_review": "Preparing case review",
 }
 
 
@@ -203,6 +205,7 @@ def build_cdd_graph(
     add_node("extract_idv_documents", extract_idv_documents)
     add_node("evaluate_risk_flags", evaluate_risk_flags)
     add_node("finalize_cdd", finalize_cdd)
+    add_node("generate_case_review", generate_case_review)
 
     graph.set_entry_point("collect_required_inputs")
     graph.add_conditional_edges(
@@ -228,7 +231,8 @@ def build_cdd_graph(
     graph.add_edge("await_documents", "extract_idv_documents")
     graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")
-    graph.add_edge("finalize_cdd", END)
+    graph.add_edge("finalize_cdd", "generate_case_review")
+    graph.add_edge("generate_case_review", END)
     return graph.compile(checkpointer=CHECKPOINTER)
 
 

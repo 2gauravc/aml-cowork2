@@ -18,6 +18,11 @@ function App() {
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
   const [riskFlagRecords, setRiskFlagRecords] = useState([]);
+  const [caseReviewSummary, setCaseReviewSummary] = useState(null);
+  const [caseReviewDecision, setCaseReviewDecision] = useState(null);
+  const [reviewDecisionDraft, setReviewDecisionDraft] = useState("request_information");
+  const [reviewNote, setReviewNote] = useState("");
+  const [caseReviewLoading, setCaseReviewLoading] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
@@ -115,6 +120,8 @@ function App() {
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
     setRiskFlagRecords(data.risk_flags || []);
+    setCaseReviewSummary(data.case_review_summary || null);
+    setCaseReviewDecision(data.case_review_decision || null);
     setDocuments(data.documents || []);
     setDocumentRequirements(data.document_requirements || []);
     setDocumentLinks((current) => {
@@ -213,6 +220,46 @@ function App() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function refreshCaseReview() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/case-review/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Case review refresh failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
+  async function saveCaseReviewDecision() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/case-review/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          decision: reviewDecisionDraft,
+          note: reviewNote,
+        }),
+      });
+      applyResponse(await readJsonResponse(response, "Unable to record reviewer decision"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
     }
   }
 
@@ -423,6 +470,14 @@ function App() {
               Documents
             </button>
             <button
+              className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activeWorkspace === "case-review"}
+              onClick={() => setActiveWorkspace("case-review")}
+            >
+              Case Review
+            </button>
+            <button
               className={`workspace-tab ${activeWorkspace === "csp" ? "active" : ""}`}
               role="tab"
               aria-selected={activeWorkspace === "csp"}
@@ -624,6 +679,19 @@ function App() {
                 onUploadChange={handleUploadPlaceholder}
                 uploadNotice={uploadNotice}
               />
+            ) : activeWorkspace === "case-review" ? (
+              <CaseReview
+                summary={caseReviewSummary}
+                decision={caseReviewDecision}
+                decisionDraft={reviewDecisionDraft}
+                note={reviewNote}
+                loading={caseReviewLoading}
+                hasCdd={Boolean(cdd)}
+                onRefresh={refreshCaseReview}
+                onDecisionChange={setReviewDecisionDraft}
+                onNoteChange={setReviewNote}
+                onSaveDecision={saveCaseReviewDecision}
+              />
             ) : (
               <CSPDetection
                 companyName={cspCompanyName}
@@ -653,6 +721,136 @@ function Section({ title, children }) {
       {children}
     </section>
   );
+}
+
+function CaseReview({
+  summary,
+  decision,
+  decisionDraft,
+  note,
+  loading,
+  hasCdd,
+  onRefresh,
+  onDecisionChange,
+  onNoteChange,
+  onSaveDecision,
+}) {
+  if (!hasCdd) {
+    return (
+      <Section title="Case Review">
+        <p className="empty">Run a CDD case to generate an evidence-grounded reviewer brief.</p>
+      </Section>
+    );
+  }
+
+  const humanReviewRequired = summary?.outcome !== "ready_to_complete";
+  const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
+  return (
+    <>
+      <Section title="Case Review">
+        <div className="case-review-header">
+          <div>
+            <span className={`case-outcome ${humanReviewRequired ? "review" : "complete"}`}>
+              {humanReviewRequired ? "Human review required" : "Ready to complete"}
+            </span>
+            <p className="review-disclaimer">Decision support only. A human reviewer remains responsible for the case decision.</p>
+          </div>
+          <button disabled={loading} onClick={onRefresh}>
+            {loading ? "Refreshing…" : summary ? "Refresh summary" : "Generate summary"}
+          </button>
+        </div>
+        {!summary ? (
+          <p className="empty">No case review has been generated yet.</p>
+        ) : (
+          <>
+            {summary.status === "unavailable" && <p className="risk">The generated review is unavailable. The recorded CDD evidence remains available for review.</p>}
+            <h3>Executive summary</h3>
+            <p>{summary.executive_summary}</p>
+          </>
+        )}
+      </Section>
+
+      {summary && (
+        <>
+          <Section title="Key Evidence">
+            {summary.key_evidence?.length ? (
+              <div className="review-list">
+                {summary.key_evidence.map((item, index) => (
+                  <div className="review-item" key={`${item.category}-${index}`}>
+                    <strong>{item.category}</strong>
+                    <p>{item.finding}</p>
+                    {item.source_refs?.length > 0 && (
+                      <small>
+                        Evidence: {item.source_refs.map((sourceRef, sourceIndex) => {
+                          const evidenceItem = evidenceById[sourceRef];
+                          const url = evidenceItem?.urls?.[0];
+                          return (
+                            <React.Fragment key={sourceRef}>
+                              {sourceIndex > 0 && ", "}
+                              {url ? <a href={url} target="_blank" rel="noreferrer">{sourceRef}</a> : sourceRef}
+                            </React.Fragment>
+                          );
+                        })}
+                      </small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : <p className="empty">No evidence summary was generated.</p>}
+          </Section>
+
+          <Section title="Uncertainty & Limitations">
+            <BulletList items={summary.limitations} empty="No material limitations were recorded." />
+          </Section>
+
+          <Section title="Recommended Analyst Actions">
+            <BulletList items={summary.recommended_actions} empty="No additional analyst actions were recommended." />
+          </Section>
+
+          <Section title="Request for Information">
+            {summary.requests_for_information?.length ? (
+              <div className="review-list">
+                {summary.requests_for_information.map((item, index) => (
+                  <div className="review-item" key={`${item.request}-${index}`}>
+                    <strong>{item.request}</strong>
+                    <p>{item.reason}</p>
+                    <small>{`Addresses: ${item.risk_or_gap} · Priority: ${item.priority}`}</small>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="empty">No customer information is currently requested.</p>}
+          </Section>
+        </>
+      )}
+
+      <Section title="Reviewer Decision">
+        <div className="review-decision">
+          <label>
+            Decision
+            <select value={decisionDraft} onChange={(event) => onDecisionChange(event.target.value)}>
+              <option value="approve">Approve</option>
+              <option value="request_information">Request information</option>
+              <option value="escalate">Escalate</option>
+            </select>
+          </label>
+          <label>
+            Reviewer note
+            <textarea value={note} onChange={(event) => onNoteChange(event.target.value)} placeholder="Optional rationale or follow-up note" />
+          </label>
+          <button disabled={loading} onClick={onSaveDecision}>Record decision</button>
+          {decision && <p className="review-recorded">Recorded: {decisionLabel(decision.decision)}{decision.recorded_at ? ` on ${formatDateTime(decision.recorded_at)}` : ""}</p>}
+        </div>
+      </Section>
+    </>
+  );
+}
+
+function BulletList({ items, empty }) {
+  return items?.length ? <ul className="review-bullets">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="empty">{empty}</p>;
+}
+
+function decisionLabel(value) {
+  return ({ approve: "Approve", request_information: "Request information", escalate: "Escalate" })[value] || value;
 }
 
 function CSPDetection({

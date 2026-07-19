@@ -21,6 +21,11 @@ from src.tools.customer_static import _fetch_customer_static
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.idv_policy import interpret_idv_policy
 from src.tools.idv_requirements import establish_idv_requirements as apply_idv_requirements
+from src.tools.case_review import (
+    CaseReviewError,
+    generate_case_review_summary,
+    unavailable_case_review,
+)
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -681,6 +686,21 @@ def finalize_cdd(state: CDDState) -> dict[str, Any]:
         cdd["status"] = "incomplete"
 
     return {"cdd": cdd, "final_recommendation": recommendation}
+
+
+def generate_case_review(state: CDDState) -> dict[str, Any]:
+    """Create a reviewer brief from completed CDD data without changing its outcome."""
+    final_recommendation = state.get("final_recommendation")
+    try:
+        summary = generate_case_review_summary(
+            cdd=state.get("cdd", {}),
+            risk_flags=state.get("risk_flags", []),
+            evidence=state.get("evidence", []),
+            final_recommendation=final_recommendation,
+        )
+    except CaseReviewError as exc:
+        summary = unavailable_case_review(final_recommendation, str(exc))
+    return {"case_review_summary": summary}
 
 
 def _client() -> KycClient:

@@ -135,6 +135,7 @@ class CDDState(TypedDict, total=False):
     evidence: Annotated[list[EvidenceItem], add]
     risk_flags: Annotated[list[RiskFlag], add]
     final_recommendation: FinalRecommendation | None
+    case_review_summary: dict[str, Any] | None
     messages: Annotated[list[AnyMessage], add_messages]
     document_requirements: list[dict[str, Any]]
 
@@ -188,6 +189,7 @@ def new_cdd_state(
         "evidence": [],
         "risk_flags": [],
         "final_recommendation": None,
+        "case_review_summary": None,
         "messages": [],
         "document_requirements": [],
     }

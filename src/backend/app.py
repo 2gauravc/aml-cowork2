@@ -8,7 +8,7 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
@@ -20,6 +20,7 @@ from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
+from src.tools.case_review import CaseReviewError, generate_case_review_summary, unavailable_case_review
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
@@ -85,6 +86,16 @@ class CSPAssessmentRequest(BaseModel):
     registered_address: str = Field(min_length=1)
 
 
+class CaseReviewDecisionRequest(BaseModel):
+    session_id: str
+    decision: Literal["approve", "request_information", "escalate"]
+    note: str = Field(default="", max_length=4_000)
+
+
+class CaseReviewRefreshRequest(BaseModel):
+    session_id: str
+
+
 @app.post("/api/chat")
 async def chat(
     request: ChatRequest,
@@ -131,6 +142,38 @@ async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
         )
     except CSPAssessmentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/case-review/refresh")
+async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, Any]:
+    session = SESSIONS.get(request.session_id)
+    if not session or not session.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    try:
+        summary = await asyncio.to_thread(
+            generate_case_review_summary,
+            cdd=session["cdd"],
+            risk_flags=session.get("risk_flags", []),
+            evidence=session.get("evidence", []),
+            final_recommendation=session.get("final_recommendation"),
+        )
+    except CaseReviewError as exc:
+        summary = unavailable_case_review(session.get("final_recommendation"), str(exc))
+    session["case_review_summary"] = summary
+    return _response(session, status="case_review_refreshed")
+
+
+@app.post("/api/case-review/decision")
+async def record_case_review_decision(request: CaseReviewDecisionRequest) -> dict[str, Any]:
+    session = SESSIONS.get(request.session_id)
+    if not session or not session.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    session["case_review_decision"] = {
+        "decision": request.decision,
+        "note": request.note.strip(),
+        "recorded_at": datetime.now(UTC).isoformat(),
+    }
+    return _response(session, status="case_review_decision_recorded")
 
 
 @app.post("/api/pipeline/run")
@@ -342,6 +385,8 @@ def _response(
         "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
         "final_recommendation": session.get("final_recommendation"),
+        "case_review_summary": session.get("case_review_summary"),
+        "case_review_decision": session.get("case_review_decision"),
         "tool_results": session.get("tool_results", []),
         "pdf_url": pdf_url,
         "error": error,
@@ -622,6 +667,7 @@ def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) ->
     session["evidence"] = graph_state.get("evidence", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
     session["final_recommendation"] = graph_state.get("final_recommendation")
+    session["case_review_summary"] = graph_state.get("case_review_summary")
     session["document_requirements"] = graph_state.get("document_requirements", [])
 
 

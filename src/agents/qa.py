@@ -30,7 +30,6 @@ def answer_cdd_question(
 
     llm = ChatOpenAI(
         model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
-        temperature=0,
         timeout=20,
     )
     try:

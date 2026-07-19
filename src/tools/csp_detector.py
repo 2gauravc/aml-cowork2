@@ -146,7 +146,6 @@ def _assess_search_results(
                     "strict": True,
                 }
             },
-            temperature=0,
         )
     except OpenAIError as exc:
         raise CSPAssessmentError(f"CSP assessment failed: {exc}") from exc

@@ -15,6 +15,9 @@ KYCBASEURL=https://api.knowyourcustomer.dev
 KYCCLIENTID=your_client_id
 KYCCLIENTSECRET=your_client_secret
 TAVILY_API_KEY=tvly-your_tavily_key
+OPENAI_API_KEY=your_openai_api_key
+# Optional overrides; all OpenAI workflows default to gpt-5.6.
+OPENAI_MODEL=gpt-5.6
 ```
 
 ## Members Tool
@@ -186,6 +189,29 @@ python -m src.tools.csp_detector \
   --address "1 Example Street, London" \
   --company-name "Example Ltd"
 ```
+
+## Case Review
+
+After the deterministic CDD pipeline finishes, it creates a separate **Case
+Review** workspace tab. GPT-5.6 loads the reusable
+[`skills/case-review/SKILL.md`](skills/case-review/SKILL.md) instructions, then
+receives a compact packet containing the completed CDD object, retained risk
+flags, and tagged evidence. It returns a strictly structured reviewer brief
+with:
+
+- key evidence and source references;
+- uncertainty and limitations;
+- recommended internal analyst actions; and
+- customer-facing Requests for Information (RFIs) that could resolve material
+  gaps.
+
+The deterministic CDD recommendation remains the guardrail: the model cannot
+clear an open risk flag or approve/reject/escalate a case. A human reviewer can
+record **Approve**, **Request information**, or **Escalate**, with an optional
+note. RFIs are drafts only; the application does not send them to customers.
+
+Use **Refresh summary** in the Case Review tab to regenerate the brief from the
+latest session evidence.
 
 ## Run
 

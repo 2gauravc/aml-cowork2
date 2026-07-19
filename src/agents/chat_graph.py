@@ -212,7 +212,6 @@ def _agent_node(state: ChatGraphState) -> dict[str, Any]:
     messages = state.get("messages", [])
     llm = ChatOpenAI(
         model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
-        temperature=0,
         timeout=30,
     ).bind_tools(_tool_specs())
     try:
