@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from src.agents.graph import run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
+from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
@@ -84,6 +85,17 @@ class AnswerContextArgs(BaseModel):
     question: str = Field(description="Question to answer from the current CDD/evidence context.")
 
 
+class CSPAddressArgs(BaseModel):
+    registered_address: str | None = Field(
+        default=None,
+        description="Address to assess. Omit only when the active CDD already has a registered address.",
+    )
+    company_name: str | None = Field(
+        default=None,
+        description="Optional legal company name; defaults to the active CDD customer name.",
+    )
+
+
 class SessionInspectionArgs(BaseModel):
     """This tool takes no arguments; it reads the active chat session."""
 
@@ -133,6 +145,10 @@ Available workflows:
   provenance, or whether a source/API result is retained as evidence.
 - Use answer_from_context for analytical questions about the current
   CDD/evidence, rather than answering from general knowledge.
+- Use evaluate_csp_address when the user asks whether a registered address is a
+  company service provider, virtual office, registered office, or formation agent.
+- When asked whether CSP assessment has run, use list_session_evidence or
+  inspect_current_session first. Do not infer its status from general knowledge.
 
 Rules:
 - Do not list sandbox cases when the user is trying to complete missing inputs
@@ -315,6 +331,8 @@ def _execute_tool_call(name: str, args: dict[str, Any], session: dict[str, Any])
                     risk_flags=session.get("risk_flags", []),
                 )
             }
+        if name == "evaluate_csp_address":
+            return _run_csp_address_tool(args=args, session=session)
         return {"error": {"message": f"Unknown tool: {name}"}}
     except Exception as exc:
         return {"error": {"type": exc.__class__.__name__, "message": str(exc)}}
@@ -407,6 +425,16 @@ def _tool_specs() -> list[StructuredTool]:
             description="Answer a question from the current CDD/evidence already in session.",
             func=lambda **kwargs: kwargs,
             args_schema=AnswerContextArgs,
+        ),
+        StructuredTool.from_function(
+            name="evaluate_csp_address",
+            description=(
+                "Search and assess whether a company's registered address appears to be a "
+                "company service provider address. Returns an evidence-backed Yes/No/Inconclusive "
+                "assessment. Use only for an explicit CSP-address question."
+            ),
+            func=lambda **kwargs: kwargs,
+            args_schema=CSPAddressArgs,
         ),
     ]
 
@@ -627,6 +655,42 @@ def _run_named_company_tool(tool_func, *, args: dict[str, Any], session: dict[st
     session["customer_name"] = company_name
     session["jurisdiction"] = str(jurisdiction).strip().upper()
     return tool_func(company_name, session["jurisdiction"])
+
+
+def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    cdd = session.get("cdd") or {}
+    customer_static = cdd.get("company_business_profile", {}).get("customer_static", {})
+    address = args.get("registered_address") or (
+        customer_static.get("registered_address") or {}
+    ).get("full_address")
+    company_name = args.get("company_name") or customer_static.get("name") or session.get("customer_name")
+    if not address:
+        return {"error": {"message": "A registered address is required for CSP assessment."}}
+
+    try:
+        result = evaluate_csp_address(address, company_name=company_name)
+    except CSPAssessmentError as exc:
+        return {"error": {"type": exc.__class__.__name__, "message": str(exc)}}
+
+    assessment = result.get("assessment") or {}
+    outcome = str(assessment.get("is_csp") or "inconclusive").casefold()
+    if outcome in {"yes", "no", "inconclusive"}:
+        flag = {
+            "category": "csp_address",
+            "severity": "low" if outcome == "no" else "medium",
+            "description": (
+                f"CSP: Evaluation: {outcome.title()}. "
+                f"{(assessment.get('explanation') or '').strip()}"
+            ).strip(),
+            "source": "csp_address_assessment",
+            "status": "cleared" if outcome == "no" else "open",
+            "evidence_tool": "evaluate_csp_address",
+            "evidence": result,
+        }
+        existing = session.setdefault("risk_flags", [])
+        if not any(item.get("category") == "csp_address" for item in existing):
+            existing.append(flag)
+    return result
 
 
 def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:

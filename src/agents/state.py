@@ -124,6 +124,8 @@ class RiskFlag(TypedDict, total=False):
     description: str
     source: str
     status: Literal["open", "cleared"]
+    evidence_tool: str
+    evidence: dict[str, Any]
 
 
 class CDDState(TypedDict, total=False):

@@ -17,6 +17,7 @@ function App() {
   const [caseId, setCaseId] = useState("");
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
+  const [riskFlagRecords, setRiskFlagRecords] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
@@ -37,7 +38,7 @@ function App() {
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
   const idv = cdd?.individual_identity_verification || {};
-  const risks = useMemo(() => riskFlags(cdd), [cdd]);
+  const risks = useMemo(() => riskFlags(riskFlagRecords), [riskFlagRecords]);
   const capital = capitalDisplay(profile);
   const fieldSources = profile.source || {};
   const cddMetadata = {
@@ -106,6 +107,7 @@ function App() {
     setSessionId(data.session_id);
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
+    setRiskFlagRecords(data.risk_flags || []);
     setDocuments(data.documents || []);
     setDocumentRequirements(data.document_requirements || []);
     setDocumentLinks((current) => {
@@ -537,7 +539,13 @@ function App() {
             {risks.length ? (
               <div className="risk-list">
                 {risks.map((risk, index) => (
-                  <div className="risk" key={index}>{risk}</div>
+                  <div className="risk" key={`${risk.category || "risk"}-${index}`}>
+                    <div className="risk-content">
+                      <strong>{riskPresentation(risk).title}</strong>
+                      <span>{`Evaluation: ${riskPresentation(risk).evaluation}. ${riskPresentation(risk).summary}`}</span>
+                    </div>
+                    <RiskEvidenceTooltip risk={risk} />
+                  </div>
                 ))}
               </div>
             ) : (
@@ -910,20 +918,62 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function riskFlags(cdd) {
-  if (!cdd) return [];
-  const risks = [];
-  const ownership = cdd.ownership_and_control || {};
-  if (ownership.status === "complete" && !(ownership.ubos || []).length) {
-    risks.push("Medium: No individual UBO above 25% was identified.");
-  }
-  const members = ownership.members?.controlling_members || [];
-  members.forEach((member) => {
-    if (member.kyc?.is_aml_positive) {
-      risks.push(`High: AML review flag for ${member.name}.`);
-    }
-  });
-  return risks;
+function riskFlags(records) {
+  return Array.isArray(records) ? records : [];
+}
+
+function riskPresentation(risk) {
+  const assessment = risk.evidence?.assessment || {};
+  const evaluation = String(assessment.is_csp || risk.description?.match(/Evaluation:\s*(Yes|No|Inconclusive)/i)?.[1] || "Inconclusive");
+  const category = risk.category || "risk";
+  const summaries = {
+    ownership: {
+      title: "Ownership Risk",
+      yes: "No individual UBO above 25% was identified.",
+      no: "Individual UBOs above 25% were identified.",
+      inconclusive: "Ownership review is required.",
+    },
+    aml: {
+      title: "AML Risk",
+      yes: "An AML-positive controlling member requires review.",
+      no: "No AML-positive controlling member was identified.",
+      inconclusive: "AML review is required.",
+    },
+    csp_address: {
+      title: "CSP Risk",
+      yes: "The address appears to be used by a company service provider.",
+      no: "No company service provider indicator was identified.",
+      inconclusive: "The address requires further review.",
+    },
+  };
+  const presentation = summaries[category] || {
+    title: "Risk Assessment",
+    yes: "A review item was identified.",
+    no: "No review item was identified.",
+    inconclusive: "Further review is required.",
+  };
+  const outcome = evaluation.toLowerCase();
+  return { title: presentation.title, evaluation, summary: presentation[outcome] || presentation.inconclusive };
+}
+
+function RiskEvidenceTooltip({ risk }) {
+  const evidence = risk.evidence || {};
+  const assessment = evidence.assessment || {};
+  const sources = evidence.sources || [];
+  const detail = assessment.explanation || risk.description || "No detailed explanation is available.";
+  return (
+    <span className="source-tip risk-evidence-tip" tabIndex="0" aria-label="View risk evidence">
+      i
+      <span className="source-tooltip risk-evidence-tooltip" role="tooltip">
+        <span>{detail}</span>
+        {sources.map((source, index) => (
+          <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
+            {source.title || source.url || "Source"}
+          </a>
+        ))}
+      </span>
+    </span>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);

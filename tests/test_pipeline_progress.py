@@ -54,7 +54,7 @@ class PipelineProgressTests(unittest.TestCase):
                 "generate_registry_document",
                 {"evidence": [{"data": {"reused_from_s3": True}}]},
             ),
-            "Locating document — found in cache",
+            "Locating Business Profile Document — found in cache",
         )
         self.assertEqual(
             _document_progress_message(

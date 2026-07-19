@@ -62,7 +62,7 @@ PIPELINE_NODE_LABELS = {
     "fetch_org_chart": "Fetching org chart information from KYC API",
     "fetch_members": "Fetching members from KYC API",
     "build_company_business_profile": "Populating CDD — About the Customer",
-    "generate_registry_document": "Locating document",
+    "generate_registry_document": "Locating Business Profile Document",
     "extract_registry_document": "Extracting from registry document",
     "enrich_cdd_from_registry_document": "Populating CDD from registry document",
     "build_ownership_and_control": "Populating CDD — Ownership & Control",
@@ -159,9 +159,9 @@ def _document_progress_message(node_name: str, result: dict[str, Any]) -> str | 
     if node_name == "generate_registry_document":
         artifact = (result.get("evidence") or [{}])[0].get("data") or {}
         return (
-            "Locating document — found in cache"
+            "Locating Business Profile Document — found in cache"
             if artifact.get("reused_from_s3")
-            else "Locating document — not found, generating"
+            else "Locating Business Profile Document — not found, generating"
         )
     if node_name == "generate_idv_documents":
         artifact_data = (result.get("evidence") or [{}])[0].get("data") or {}

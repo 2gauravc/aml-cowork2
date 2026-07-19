@@ -14,6 +14,7 @@ Create a `.env` file or export these environment variables:
 KYCBASEURL=https://api.knowyourcustomer.dev
 KYCCLIENTID=your_client_id
 KYCCLIENTSECRET=your_client_secret
+TAVILY_API_KEY=tvly-your_tavily_key
 ```
 
 ## Members Tool
@@ -168,6 +169,23 @@ underlying KYC tool calls, and any previous individual tool results. OpenAI is
 used automatically for richer natural-language explanations when
 `OPENAI_API_KEY` is configured; set `OPENAI_QA_ENABLED=false` to force
 deterministic CDD/evidence lookup.
+
+## Red Flags and CSP Address Assessment
+
+The CDD graph delegates red-flag checks to a focused subgraph. Its current
+indicators cover missing UBOs, AML-positive controlling members, and whether a
+registered address appears to be used by a company service provider (CSP).
+CSP searches use Tavily and an OpenAI structured assessment; the cited results
+and assessment are retained as evidence. A CSP indicator is a review item, not
+proof of wrongdoing.
+
+Run the CSP check independently:
+
+```bash
+python -m src.tools.csp_detector \
+  --address "1 Example Street, London" \
+  --company-name "Example Ltd"
+```
 
 ## Run
 

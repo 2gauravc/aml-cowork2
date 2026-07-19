@@ -498,9 +498,46 @@ th {
 }
 
 .risk {
+  align-items: flex-start;
   border-left: 4px solid var(--warn);
   background: #fff7ed;
+  display: flex;
+  gap: 8px;
   padding: 10px;
+}
+
+.risk-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.risk-content strong {
+  color: #7c2d12;
+}
+
+.risk-evidence-tooltip {
+  display: none;
+  flex-direction: column;
+  gap: 7px;
+  left: auto;
+  max-height: min(520px, calc(100vh - 120px));
+  max-width: none;
+  min-width: 0;
+  overflow: auto;
+  right: 0;
+  width: min(420px, calc(100vw - 48px));
+}
+
+.risk-evidence-tip:hover .risk-evidence-tooltip,
+.risk-evidence-tip:focus .risk-evidence-tooltip {
+  display: flex;
+}
+
+.risk-evidence-tooltip a {
+  color: #bfdbfe;
+  text-decoration: underline;
 }
 
 .json-view {

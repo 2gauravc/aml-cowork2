@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage
 from langgraph.types import interrupt
 
 from src.agents.businesslogic import build_ownership_tables
+from src.agents.red_flags_graph import run_red_flags_graph
 from src.agents.state import CDDState
 from src.tools.cdd_enrichment import (
     apply_document_extract_to_cdd,
@@ -649,32 +650,16 @@ def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
 
 
 def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
-    flags = []
+    """Run the focused red-flags subgraph and merge its additive outputs."""
     cdd = state.get("cdd", {})
-    ownership = cdd.get("ownership_and_control", {})
-    if not ownership.get("ubos"):
-        flags.append(
-            {
-                "category": "ownership",
-                "severity": "medium",
-                "description": "No individual UBO above 25% was identified.",
-                "source": "org_chart",
-                "status": "open",
-            }
-        )
-    for member in ownership.get("members", {}).get("controlling_members", []):
-        kyc = member.get("kyc", {})
-        if kyc.get("is_aml_positive"):
-            flags.append(
-                {
-                    "category": "aml",
-                    "severity": "high",
-                    "description": f"AML review flag for {member.get('name')}.",
-                    "source": "members",
-                    "status": "open",
-                }
-            )
-    return {"risk_flags": flags}
+    result = run_red_flags_graph(
+        customer_static=cdd.get("company_business_profile", {}).get("customer_static", {}),
+        ownership_and_control=cdd.get("ownership_and_control", {}),
+    )
+    return {
+        "evidence": result.get("evidence", []),
+        "risk_flags": result.get("risk_flags", []),
+    }
 
 
 def finalize_cdd(state: CDDState) -> dict[str, Any]:

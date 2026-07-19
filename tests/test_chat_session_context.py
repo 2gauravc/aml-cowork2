@@ -113,3 +113,24 @@ class ChatSessionContextTests(unittest.TestCase):
 
         self.assertIn("authoritative source", tool.description)
         self.assertIn("pre-signed URL", tool.description)
+
+    @patch("src.agents.chat_graph.evaluate_csp_address")
+    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp) -> None:
+        self.session["cdd"] = {
+            "company_business_profile": {
+                "customer_static": {
+                    "name": "SC ENGINEERING PRIVATE LIMITED",
+                    "registered_address": {"full_address": "1 Example Street"},
+                }
+            }
+        }
+        evaluate_csp.return_value = {
+            "assessment": {"is_csp": "yes", "explanation": "Provider evidence."},
+            "sources": [],
+        }
+
+        result = _execute_tool_call("evaluate_csp_address", {}, self.session)
+
+        evaluate_csp.assert_called_once_with("1 Example Street", company_name="SC ENGINEERING PRIVATE LIMITED")
+        self.assertEqual(result["assessment"]["is_csp"], "yes")
+        self.assertEqual(self.session["risk_flags"][-1]["category"], "csp_address")
