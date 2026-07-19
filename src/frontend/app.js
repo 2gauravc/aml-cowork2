@@ -362,27 +362,28 @@ function App() {
         </aside>
 
         <main className="main">
-          <div className="actions" role="tablist" aria-label="Workspace">
+          <div className="workspace-tabs" role="tablist" aria-label="Workspace">
             <button
-              className={activeWorkspace === "cdd" ? "" : "secondary"}
+              className={`workspace-tab ${activeWorkspace === "cdd" ? "active" : ""}`}
               role="tab"
               aria-selected={activeWorkspace === "cdd"}
               onClick={() => setActiveWorkspace("cdd")}
             >
-              CDD Workspace
+              CDD
             </button>
             <button
-              className={activeWorkspace === "generation" ? "" : "secondary"}
+              className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
               role="tab"
               aria-selected={activeWorkspace === "generation"}
               onClick={() => setActiveWorkspace("generation")}
             >
-              Document Management
+              Documents
             </button>
           </div>
 
-          {activeWorkspace === "cdd" ? (
-            <>
+          <div className="workspace-tab-panel" role="tabpanel">
+            {activeWorkspace === "cdd" ? (
+              <>
           <Section title="Run CDD Worker">
             <div className="pipeline-form">
               <input
@@ -558,21 +559,22 @@ function App() {
               <pre className="json-view">{JSON.stringify(cdd, null, 2)}</pre>
             </Section>
           )}
-            </>
-          ) : (
-            <DocumentManagement
-              requirements={documentRequirements}
-              links={documentLinks}
-              loading={loading}
-              generationStatus={generationStatus}
-              onGenerate={generateMissingDocuments}
-              onProcess={() => documentAction("/api/documents/process")}
-              onUploadClick={openUploadDialog}
-              uploadInputRef={uploadInputRef}
-              onUploadChange={handleUploadPlaceholder}
-              uploadNotice={uploadNotice}
-            />
-          )}
+              </>
+            ) : (
+              <DocumentManagement
+                requirements={documentRequirements}
+                links={documentLinks}
+                loading={loading}
+                generationStatus={generationStatus}
+                onGenerate={generateMissingDocuments}
+                onProcess={() => documentAction("/api/documents/process")}
+                onUploadClick={openUploadDialog}
+                uploadInputRef={uploadInputRef}
+                onUploadChange={handleUploadPlaceholder}
+                uploadNotice={uploadNotice}
+              />
+            )}
+          </div>
         </main>
       </div>
     </div>

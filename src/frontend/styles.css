@@ -360,6 +360,40 @@ th {
   margin-bottom: 10px;
 }
 
+.workspace-tabs {
+  align-items: flex-end;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.workspace-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  color: var(--muted);
+  min-height: 36px;
+  padding: 0 16px;
+}
+
+.workspace-tab:hover {
+  background: #e8edf4;
+  color: var(--ink);
+}
+
+.workspace-tab.active {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 700;
+  margin-bottom: -1px;
+}
+
+.workspace-tab-panel {
+  min-width: 0;
+}
+
 .secondary {
   background: #334155;
 }
