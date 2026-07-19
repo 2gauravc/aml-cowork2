@@ -29,7 +29,7 @@ def answer_cdd_question(
         return _fallback_answer(question, snippets)
 
     llm = ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+        model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
         temperature=0,
         timeout=20,
     )

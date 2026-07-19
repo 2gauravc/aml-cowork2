@@ -3,6 +3,8 @@ jinja2
 langchain-core
 langchain-openai
 langgraph
+openai
+pydantic
 python-dotenv
 requests
 uvicorn

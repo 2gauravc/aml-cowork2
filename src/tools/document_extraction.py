@@ -23,7 +23,7 @@ from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL  # noqa: E402
 load_dotenv(PROJECT_ROOT / ".env")
 
 SCHEMA_DIR = PROJECT_ROOT / "config" / "schemas"
-DEFAULT_MODEL = os.getenv("OPENAI_DOCUMENT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+DEFAULT_MODEL = os.getenv("OPENAI_DOCUMENT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 
 CLASSIFICATION_SCHEMA = {
     "type": "object",

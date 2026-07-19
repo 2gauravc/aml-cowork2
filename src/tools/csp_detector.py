@@ -21,7 +21,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 SKILL_PATH = PROJECT_ROOT / "skills" / "csp-detector" / "SKILL.md"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
-DEFAULT_MODEL = os.getenv("OPENAI_CSP_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+DEFAULT_MODEL = os.getenv("OPENAI_CSP_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 
 CSP_ASSESSMENT_SCHEMA = {
     "type": "object",

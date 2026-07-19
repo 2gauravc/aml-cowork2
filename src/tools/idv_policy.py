@@ -21,7 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 load_dotenv(PROJECT_ROOT / ".env")
 
 DEFAULT_POLICY_PATH = PROJECT_ROOT / "policies" / "idv_policy.txt"
-DEFAULT_MODEL = os.getenv("OPENAI_POLICY_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+DEFAULT_MODEL = os.getenv("OPENAI_POLICY_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 
 IDV_POLICY_SCHEMA = {
     "type": "object",
