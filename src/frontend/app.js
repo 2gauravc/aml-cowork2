@@ -22,6 +22,13 @@ function App() {
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
+  const [cspCompanyName, setCspCompanyName] = useState("");
+  const [cspAddress, setCspAddress] = useState("");
+  const [cspResult, setCspResult] = useState(null);
+  const [cspError, setCspError] = useState("");
+  const [cspAssessing, setCspAssessing] = useState(false);
+  const [cspSkill, setCspSkill] = useState("");
+  const [cspSkillLoading, setCspSkillLoading] = useState(false);
   const [documentLinks, setDocumentLinks] = useState({});
   const [refreshingDocumentKey, setRefreshingDocumentKey] = useState(null);
   const [uploadNotice, setUploadNotice] = useState("");
@@ -302,6 +309,42 @@ function App() {
     }
   }
 
+  async function loadCspSkill() {
+    if (cspSkill || cspSkillLoading) return;
+    setCspSkillLoading(true);
+    try {
+      const response = await fetch("/api/csp/skill");
+      const data = await readJsonResponse(response, "Unable to load CSP skill");
+      setCspSkill(data.skill || "");
+    } catch (err) {
+      setCspError(err.message);
+    } finally {
+      setCspSkillLoading(false);
+    }
+  }
+
+  async function assessCsp() {
+    if (!cspAddress.trim()) return;
+    setCspAssessing(true);
+    setCspError("");
+    setCspResult(null);
+    try {
+      const response = await fetch("/api/csp/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: cspCompanyName.trim() || null,
+          registered_address: cspAddress.trim(),
+        }),
+      });
+      setCspResult(await readJsonResponse(response, "CSP assessment failed"));
+    } catch (err) {
+      setCspError(err.message);
+    } finally {
+      setCspAssessing(false);
+    }
+  }
+
   async function pollSession(activeSessionId) {
     while (activeSessionId) {
       await delay(2000);
@@ -378,6 +421,14 @@ function App() {
               onClick={() => setActiveWorkspace("generation")}
             >
               Documents
+            </button>
+            <button
+              className={`workspace-tab ${activeWorkspace === "csp" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activeWorkspace === "csp"}
+              onClick={() => setActiveWorkspace("csp")}
+            >
+              CSP Detection
             </button>
           </div>
 
@@ -560,7 +611,7 @@ function App() {
             </Section>
           )}
               </>
-            ) : (
+            ) : activeWorkspace === "generation" ? (
               <DocumentManagement
                 requirements={documentRequirements}
                 links={documentLinks}
@@ -572,6 +623,20 @@ function App() {
                 uploadInputRef={uploadInputRef}
                 onUploadChange={handleUploadPlaceholder}
                 uploadNotice={uploadNotice}
+              />
+            ) : (
+              <CSPDetection
+                companyName={cspCompanyName}
+                address={cspAddress}
+                result={cspResult}
+                error={cspError}
+                assessing={cspAssessing}
+                skill={cspSkill}
+                skillLoading={cspSkillLoading}
+                onCompanyNameChange={setCspCompanyName}
+                onAddressChange={setCspAddress}
+                onSkillToggle={(open) => { if (open) loadCspSkill(); }}
+                onAssess={assessCsp}
               />
             )}
           </div>
@@ -587,6 +652,78 @@ function Section({ title, children }) {
       <h2>{title}</h2>
       {children}
     </section>
+  );
+}
+
+function CSPDetection({
+  companyName,
+  address,
+  result,
+  error,
+  assessing,
+  skill,
+  skillLoading,
+  onCompanyNameChange,
+  onAddressChange,
+  onSkillToggle,
+  onAssess,
+}) {
+  const assessment = result?.assessment || {};
+  const presentation = result
+    ? riskPresentation({ category: "csp_address", evidence: result })
+    : null;
+  return (
+    <>
+      <Section title="CSP Detection">
+        <details className="skill-details" onToggle={(event) => onSkillToggle(event.currentTarget.open)}>
+          <summary>Assessment skill</summary>
+          {skillLoading ? <p className="empty">Loading skill…</p> : (
+            <pre className="skill-content">{skill || "Open this section to load the current skill."}</pre>
+          )}
+        </details>
+
+        <div className="csp-form">
+          <input
+            aria-label="Entity name"
+            placeholder="Entity name"
+            value={companyName}
+            onChange={(event) => onCompanyNameChange(event.target.value)}
+          />
+          <textarea
+            aria-label="Registered address"
+            placeholder="Registered address"
+            value={address}
+            onChange={(event) => onAddressChange(event.target.value)}
+          />
+          <button disabled={assessing || !address.trim()} onClick={onAssess}>
+            {assessing ? "Assessing…" : "Assess"}
+          </button>
+        </div>
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <Section title="Assessment Result">
+          <div className="risk csp-assessment-result">
+            <div className="risk-content">
+              <strong>{presentation.title}</strong>
+              <span>{`Evaluation: ${presentation.evaluation}. ${presentation.summary}`}</span>
+              <p>{assessment.explanation}</p>
+            </div>
+          </div>
+          {(result.sources || []).length > 0 && (
+            <div className="csp-sources">
+              <strong>Sources</strong>
+              {(result.sources || []).map((source, index) => (
+                <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
+                  {source.title || source.url || "Source"}
+                </a>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+    </>
   );
 }
 

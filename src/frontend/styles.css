@@ -394,6 +394,63 @@ th {
   min-width: 0;
 }
 
+.skill-details {
+  border: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.skill-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 12px;
+}
+
+.skill-content {
+  background: #f8fafc;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.csp-form {
+  display: grid;
+  gap: 12px;
+}
+
+.csp-form input,
+.csp-form textarea {
+  border: 1px solid var(--line);
+  min-height: 38px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.csp-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.csp-assessment-result p {
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.csp-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.csp-sources a {
+  color: var(--accent-dark);
+  overflow-wrap: anywhere;
+}
+
 .secondary {
   background: #334155;
 }

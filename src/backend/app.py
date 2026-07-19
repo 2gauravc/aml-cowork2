@@ -20,6 +20,7 @@ from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
+from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.members import get_company_members_by_name
@@ -79,6 +80,11 @@ class DocumentActionRequest(BaseModel):
     requirement_ids: list[str] | None = None
 
 
+class CSPAssessmentRequest(BaseModel):
+    company_name: str | None = Field(default=None)
+    registered_address: str = Field(min_length=1)
+
+
 @app.post("/api/chat")
 async def chat(
     request: ChatRequest,
@@ -106,6 +112,25 @@ async def chat(
         content = f"Request failed: {exc}"
         session["messages"].append({"role": "assistant", "content": content})
         return _response(session, status="error", error=str(exc))
+
+
+@app.get("/api/csp/skill")
+async def get_csp_skill() -> dict[str, str]:
+    """Return the current CSP assessment skill without reading session state."""
+    return {"skill": load_csp_skill()}
+
+
+@app.post("/api/csp/assess")
+async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
+    """Run an isolated CSP assessment that does not change an active CDD case."""
+    try:
+        return await asyncio.to_thread(
+            evaluate_csp_address,
+            request.registered_address,
+            company_name=request.company_name,
+        )
+    except CSPAssessmentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/pipeline/run")
