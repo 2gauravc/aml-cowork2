@@ -4,6 +4,7 @@ const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
 
 function App() {
   const [sessionId, setSessionId] = useState(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -92,6 +93,21 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
+    async function loadDemoMode() {
+      try {
+        const response = await fetch("/api/demo/status");
+        const data = await readJsonResponse(response, "Demo Mode status request failed");
+        if (!ignore) setDemoMode(Boolean(data.demo_mode));
+      } catch (err) {
+        if (!ignore) setError(err.message);
+      }
+    }
+    loadDemoMode();
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
@@ -122,6 +138,7 @@ function App() {
     setRiskFlagRecords(data.risk_flags || []);
     setCaseReviewSummary(data.case_review_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
+    if (data.demo_csp_result) setCspResult(data.demo_csp_result);
     setDocuments(data.documents || []);
     setDocumentRequirements(data.document_requirements || []);
     setDocumentLinks((current) => {
@@ -136,6 +153,7 @@ function App() {
     if (data.case_id) setCaseId(String(data.case_id));
     setPipelineProgress(data.pipeline_progress || null);
     setPipelineStatus(data.pipeline_status || data.status || null);
+    if (typeof data.demo_mode === "boolean") setDemoMode(data.demo_mode);
     if (data.error) setError(data.error);
   }
 
@@ -173,7 +191,7 @@ function App() {
   }
 
   async function runPipeline({ generatePdf = false } = {}) {
-    if (!customerName.trim() || !jurisdiction.trim()) return;
+    if (!demoMode && (!customerName.trim() || !jurisdiction.trim())) return;
     setPipelineLoading(true);
     setError(null);
     try {
@@ -199,6 +217,24 @@ function App() {
         ...current,
         { role: "assistant", content: `Something went wrong: ${err.message}` },
       ]);
+    } finally {
+      setPipelineLoading(false);
+    }
+  }
+
+  async function loadDemoCase() {
+    setPipelineLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/demo/load", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Unable to load demo case"));
+      setActiveWorkspace("cdd");
+    } catch (err) {
+      setError(err.message);
     } finally {
       setPipelineLoading(false);
     }
@@ -409,6 +445,7 @@ function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">WBL Bank Onboarding CDD</div>
+        {demoMode && <span className="badge demo">Demo Mode — no external services</span>}
       </header>
 
       <div className="workspace">
@@ -443,7 +480,7 @@ function App() {
               }}
             />
             <div className="send-row">
-              <button disabled={loading} onClick={() => sendChat()}>
+              <button disabled={loading || demoMode} onClick={() => sendChat()}>
                 Ask
               </button>
             </div>
@@ -514,11 +551,12 @@ function App() {
                 onChange={(event) => setCaseId(event.target.value)}
               />
               <button
-                disabled={pipelineLoading || !customerName.trim()}
+                disabled={pipelineLoading || (!demoMode && !customerName.trim())}
                 onClick={() => runPipeline()}
               >
                 Run Full CDD Pipeline
               </button>
+              {demoMode && <button className="secondary" disabled={pipelineLoading} onClick={loadDemoCase}>Load Demo Case</button>}
             </div>
             {pipelineLoading && <p className="empty">{pipelineStatusText}</p>}
           </Section>
@@ -678,6 +716,7 @@ function App() {
                 uploadInputRef={uploadInputRef}
                 onUploadChange={handleUploadPlaceholder}
                 uploadNotice={uploadNotice}
+                demoMode={demoMode}
               />
             ) : activeWorkspace === "case-review" ? (
               <CaseReview
@@ -691,6 +730,7 @@ function App() {
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
+                demoMode={demoMode}
               />
             ) : (
               <CSPDetection
@@ -705,6 +745,7 @@ function App() {
                 onAddressChange={setCspAddress}
                 onSkillToggle={(open) => { if (open) loadCspSkill(); }}
                 onAssess={assessCsp}
+                demoMode={demoMode}
               />
             )}
           </div>
@@ -734,6 +775,7 @@ function CaseReview({
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
+  demoMode,
 }) {
   if (!hasCdd) {
     return (
@@ -755,8 +797,8 @@ function CaseReview({
             </span>
             <p className="review-disclaimer">Decision support only. A human reviewer remains responsible for the case decision.</p>
           </div>
-          <button disabled={loading} onClick={onRefresh}>
-            {loading ? "Refreshing…" : summary ? "Refresh summary" : "Generate summary"}
+          <button disabled={loading || demoMode} onClick={onRefresh}>
+            {demoMode ? "Fixture summary" : (loading ? "Refreshing…" : summary ? "Refresh summary" : "Generate summary")}
           </button>
         </div>
         {!summary ? (
@@ -865,6 +907,7 @@ function CSPDetection({
   onAddressChange,
   onSkillToggle,
   onAssess,
+  demoMode,
 }) {
   const assessment = result?.assessment || {};
   const presentation = result
@@ -873,6 +916,7 @@ function CSPDetection({
   return (
     <>
       <Section title="CSP Detection">
+        {demoMode && <p className="empty">Demo Mode uses the CSP evidence in the loaded case; live address assessment is disabled.</p>}
         <details className="skill-details" onToggle={(event) => onSkillToggle(event.currentTarget.open)}>
           <summary>Assessment skill</summary>
           {skillLoading ? <p className="empty">Loading skill…</p> : (
@@ -893,7 +937,7 @@ function CSPDetection({
             value={address}
             onChange={(event) => onAddressChange(event.target.value)}
           />
-          <button disabled={assessing || !address.trim()} onClick={onAssess}>
+          <button disabled={demoMode || assessing || !address.trim()} onClick={onAssess}>
             {assessing ? "Assessing…" : "Assess"}
           </button>
         </div>
@@ -936,6 +980,7 @@ function DocumentManagement({
   onProcess,
   loading,
   generationStatus,
+  demoMode,
 }) {
   const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
   const hasProcessableDocuments = (requirements || []).some((requirement) =>
@@ -944,7 +989,7 @@ function DocumentManagement({
   return (
     <Section title="Document Management">
       <div className="document-actions">
-        <button className="secondary" onClick={onUploadClick}>Upload Documents</button>
+        <button className="secondary" disabled={demoMode} onClick={onUploadClick}>Upload Documents</button>
         <input
           ref={uploadInputRef}
           type="file"
@@ -954,8 +999,8 @@ function DocumentManagement({
           onChange={onUploadChange}
         />
         {uploadNotice && <span className="upload-note">{uploadNotice}</span>}
-        <button disabled={loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
-        <button disabled={loading || !hasProcessableDocuments} onClick={onProcess}>Process Documents</button>
+        <button disabled={demoMode || loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
+        <button disabled={demoMode || loading || !hasProcessableDocuments} onClick={onProcess}>Process Documents</button>
       </div>
 
       {requirements.length ? (
@@ -973,12 +1018,15 @@ function DocumentManagement({
               const foundInCache = Boolean(requirement.cache_document);
               const provided = !foundInCache && ["customer_upload", "generated"].includes(requirement.source);
               const cacheLink = foundInCache ? links[documentKey(requirement.cache_document)] : null;
+              const demoLink = requirement.demo_url;
               return (
                 <tr key={requirement.id}>
                   <td>{documentLabel(requirement.document_type)} — {requirement.entity_name}</td>
                   <td>
                     {foundInCache && cacheLink?.url ? (
                       <a className="download-link" href={cacheLink.url} target="_blank" rel="noreferrer">Yes</a>
+                    ) : demoLink ? (
+                      <a className="download-link" href={demoLink} target="_blank" rel="noreferrer">Demo</a>
                     ) : (foundInCache ? "Yes" : "No")}
                   </td>
                   <td className={foundInCache ? "document-muted" : ""}>

@@ -1,188 +1,139 @@
-# aml-cowork2
+# AML Case Review Workspace
 
-## Install
+An evidence-first workspace for corporate customer due diligence (CDD). It brings
+registry data, ownership structure, identity-verification requirements, AML
+signals, and company-service-provider (CSP) address indicators into one
+reviewable case. A structured AI review turns the completed evidence packet into
+a **Case Review** brief; it does not make the compliance decision.
 
-From the repo root:
+## Why this exists
 
-```bash
-python -m pip install -r requirements.txt
+CDD reviewers often have to reconcile ownership records, adverse AML signals,
+registered-address evidence, and missing documents across separate systems.
+AML Case Review Workspace makes that work easier to audit: every generated review
+is grounded in the retained CDD object, risk flags, and collected evidence.
+
+## Features
+
+- **Full CDD pipeline:** creates or reuses a KYC case and collects the company
+  profile, members, ownership chart, and ID&V requirements.
+- **Evidence-first risk flags:** checks for ownership gaps, AML-positive
+  controlling members, and CSP-address indicators.
+- **CSP Detection:** searches the registered address with Tavily and applies the
+  reusable [`csp-detector` skill](skills/csp-detector/SKILL.md) through a strict
+  structured assessment.
+- **Case Review:** uses the reusable [`case-review` skill](skills/case-review/SKILL.md)
+  to synthesize evidence, limitations, internal actions, and draft customer
+  Requests for Information (RFIs).
+- **Human controls:** a reviewer records **Approve**, **Request information**, or
+  **Escalate** with an optional note. The model cannot override the deterministic
+  CDD outcome or clear an open risk flag.
+- **Reviewable output:** source references, PDF generation, and structured CDD
+  JSON are available in the workspace.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  UI[React workspace] --> API[FastAPI session API]
+  API --> Graph[LangGraph CDD pipeline]
+  Graph --> KYC[KYC registry and ownership data]
+  Graph --> Flags[Ownership, AML, and CSP checks]
+  Flags --> CSP[Tavily search + CSP skill]
+  Graph --> Finalize[Deterministic CDD outcome]
+  Finalize --> Review[Case Review skill]
+  Review --> UI
+  Review --> Decision[Human reviewer decision]
 ```
 
-Create a `.env` file or export these environment variables:
+### CDD and Case Review flow
+
+```text
+Company + jurisdiction
+  → registry profile, ownership, members, and documents
+  → ownership / AML / CSP risk flags with retained evidence
+  → deterministic outcome: ready to complete or human review required
+  → Case Review skill
+  → evidence summary, limitations, analyst actions, and draft RFIs
+  → human reviewer records a decision
+```
+
+## Quick start
+
+### Prerequisites
+
+- Python 3.11+
+- Credentials for the KYC sandbox/API
+- An OpenAI API key
+- A Tavily API key for CSP-address assessment
+
+### Install
 
 ```bash
+git clone https://github.com/2gauravc/aml-cowork2.git
+cd aml-cowork2
+python -m pip install -r requirements.lock
+```
+
+### Run Demo Mode
+
+Copy the example configuration and leave `DEMO_MODE=true`. No KYC, S3, Tavily,
+or OpenAI credentials are needed.
+
+```bash
+cp .env.example .env
+python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8000
+```
+
+Open [http://localhost:8000](http://localhost:8000) and select **Load Demo
+Case**. The fixture populates the normal CDD, Documents, CSP evidence, and Case
+Review screens without any external request. Its Case Review is deliberately
+pre-generated demo content; use Live Mode to run the AI workflows against live
+evidence.
+
+### Run Live Mode
+
+Set `DEMO_MODE=false` in `.env`, then add the required credentials. Do not
+commit `.env`.
+
+```dotenv
 KYCBASEURL=https://api.knowyourcustomer.dev
 KYCCLIENTID=your_client_id
 KYCCLIENTSECRET=your_client_secret
-TAVILY_API_KEY=tvly-your_tavily_key
 OPENAI_API_KEY=your_openai_api_key
-# Optional overrides; all OpenAI workflows default to gpt-5.6.
+TAVILY_API_KEY=tvly-your_tavily_key
+
+# All OpenAI workflows default to GPT-5.6. These are optional overrides.
 OPENAI_MODEL=gpt-5.6
+OPENAI_CSP_MODEL=gpt-5.6
+OPENAI_CASE_REVIEW_MODEL=gpt-5.6
+OPENAI_DOCUMENT_MODEL=gpt-5.6
+OPENAI_POLICY_MODEL=gpt-5.6
 ```
 
-## Members Tool
+Optional S3 document storage requires `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY`. Set `S3_DOCUMENT_BUCKET_URL` or
+`AWS_S3_BUCKET_URL` to override the default document bucket URL.
 
-`src/tools/members.py` creates a KYC company case from a company name and
-jurisdiction, waits for the case to become ready, then prints cleaned ownership
-JSON for:
-
-- controlling members
-- shareholders / beneficial owners
-- ultimate beneficial owners
-
-The LLM-facing function is:
-
-```python
-get_company_members_by_name(company_name, jurisdiction)
-```
-
-## Org Chart Tool
-
-`src/tools/orgchart.py` creates a KYC company case from a company name and
-jurisdiction, waits for the case to become ready, then prints cleaned recursive
-ownership tree JSON for the company org chart.
-
-The LLM-facing function is:
-
-```python
-get_company_org_chart_by_name(company_name, jurisdiction)
-```
-
-## Customer Static Tool
-
-`src/tools/customer_static.py` creates a KYC company case from a company name and
-jurisdiction, waits for the case to become ready, then prints cleaned static
-company profile JSON. Use it for company type, registration number, company
-status, registration/incorporation dates, total shares, share capital, activity
-type, previous names, and registered address.
-
-The tool normalizes common registry field names into stable output keys and
-also includes the raw `registry_properties` block, so registry-specific fields
-are still available when a jurisdiction uses different labels.
-
-The LLM-facing function is:
-
-```python
-get_customer_static_by_name(company_name, jurisdiction)
-```
-
-## Case Finder Tool
-
-`src/tools/case_finder.py` helps inspect the sandbox case list without dumping the
-entire JSON file. It returns summary counts, a small set of selected cases, and
-notes when more matches are available.
-
-The LLM-facing function is:
-
-```python
-find_test_cases(query=None, jurisdiction=None, country=None, origin=None)
-```
-
-Examples:
-
-```bash
-python src/tools/case_finder.py
-python src/tools/case_finder.py --jurisdiction HK
-python src/tools/case_finder.py --query ubizense
-python src/tools/case_finder.py --origin golden
-```
-
-## LangGraph CDD Agent
-
-`src/agents/graph.py` runs the full CDD graph. It creates or reuses one KYC case,
-fetches customer static data, org-chart data, and members data, then returns the
-final `CDD` JSON object from graph state.
-
-Run the full graph with a company name and jurisdiction:
-
-```bash
-python -m src.agents.graph \
-  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
-  --jurisdiction GB
-```
-
-Generate a PDF report in `outputs/cdd/` while running the graph:
-
-```bash
-python -m src.agents.graph \
-  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
-  --jurisdiction GB \
-  --generate-pdf true
-```
-
-Reuse an existing KYC case to avoid creating and polling a new case:
-
-```bash
-python -m src.agents.graph \
-  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
-  --jurisdiction GB \
-  --case-id 1000000690
-```
-
-You can combine `--case-id` and `--generate-pdf true`:
-
-```bash
-python -m src.agents.graph \
-  --customer-name "CROPWELL BISHOP CREAMERY LIMITED" \
-  --jurisdiction GB \
-  --case-id 1000000690 \
-  --generate-pdf true
-```
-
-If customer name or jurisdiction is missing, the graph returns an incomplete
-CDD JSON object showing the missing required inputs instead of calling the API.
-
-## Chatbot Web App
-
-The chatbot UI is served by FastAPI from `src/backend/app.py`. It provides a React
-chat panel, structured CDD workspace, PDF generation, and PDF download.
-
-Start the web app:
+### Start the web app
 
 ```bash
 python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8000
 ```
 
-Then open:
+Open [http://localhost:8000](http://localhost:8000), enter a company and
+jurisdiction, then select **Run Full CDD Pipeline**.
 
-```text
-http://localhost:8000
-```
+### Demo workflow
 
-The backend keeps the KYC and OpenAI API keys server-side through `.env`.
-Generated document PDFs are uploaded to S3 when `.env` includes
-`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The default document bucket URL
-is `https://onbo-bkt.s3.us-east-1.amazonaws.com`; override it with
-`S3_DOCUMENT_BUCKET_URL` or `AWS_S3_BUCKET_URL` if needed.
+1. Run a full CDD case from the **CDD** tab.
+2. Review the company profile, ownership structure, ID&V requirements, and risk
+   flags.
+3. Open **Case Review** to see the evidence synthesis and draft RFIs.
+4. Use **Refresh summary** after evidence changes.
+5. Record the reviewer decision and optional note.
 
-The UI separates two modes:
-
-- Open-ended chat: always available through `/api/chat`. The LLM router can use
-  the LLM-facing tools directly: `find_test_cases`,
-  `get_customer_static_by_name`, `get_company_members_by_name`, and
-  `get_company_org_chart_by_name`. This lets a user ask for test entities or
-  partial KYC data before running a full case.
-- Deterministic CDD pipeline: launched from the workspace panel through
-  `/api/pipeline/run`, or by asking the chat to run full CDD. This executes the
-  LangGraph nodes and writes the final `CDD` JSON into the session.
-
-After a CDD run, follow-up questions are answered from the full graph session
-state: the final `CDD` JSON, risk flags, tagged evidence captured from the
-underlying KYC tool calls, and any previous individual tool results. OpenAI is
-used automatically for richer natural-language explanations when
-`OPENAI_API_KEY` is configured; set `OPENAI_QA_ENABLED=false` to force
-deterministic CDD/evidence lookup.
-
-## Red Flags and CSP Address Assessment
-
-The CDD graph delegates red-flag checks to a focused subgraph. Its current
-indicators cover missing UBOs, AML-positive controlling members, and whether a
-registered address appears to be used by a company service provider (CSP).
-CSP searches use Tavily and an OpenAI structured assessment; the cited results
-and assessment are retained as evidence. A CSP indicator is a review item, not
-proof of wrongdoing.
-
-Run the CSP check independently:
+For an isolated CSP check, use the **CSP Detection** tab or run:
 
 ```bash
 python -m src.tools.csp_detector \
@@ -190,81 +141,77 @@ python -m src.tools.csp_detector \
   --company-name "Example Ltd"
 ```
 
-## Case Review
+## AI-assisted workflows
 
-After the deterministic CDD pipeline finishes, it creates a separate **Case
-Review** workspace tab. GPT-5.6 loads the reusable
-[`skills/case-review/SKILL.md`](skills/case-review/SKILL.md) instructions, then
-receives a compact packet containing the completed CDD object, retained risk
-flags, and tagged evidence. It returns a strictly structured reviewer brief
-with:
+The application uses structured AI in core product workflows:
 
-- key evidence and source references;
-- uncertainty and limitations;
-- recommended internal analyst actions; and
-- customer-facing Requests for Information (RFIs) that could resolve material
-  gaps.
+- **Document extraction:** converts supported PDFs into strict JSON schemas.
+- **ID&V policy interpretation:** turns policy text into structured document
+  requirements.
+- **CSP assessment:** evaluates compact, cited web-search evidence using the
+  [`csp-detector` skill](skills/csp-detector/SKILL.md).
+- **Case Review:** loads the [`case-review` skill](skills/case-review/SKILL.md)
+  and produces a strict JSON reviewer brief from the completed CDD object,
+  retained risk flags, and tagged evidence.
 
-The deterministic CDD recommendation remains the guardrail: the model cannot
-clear an open risk flag or approve/reject/escalate a case. A human reviewer can
-record **Approve**, **Request information**, or **Escalate**, with an optional
-note. RFIs are drafts only; the application does not send them to customers.
+All structured workflows use strict JSON schemas. The default model is
+configurable through `OPENAI_MODEL` and the feature-specific environment
+variables. Case Review receives the deterministic outcome as non-editable
+context; it explains and prioritizes the case but cannot approve, reject,
+escalate, or clear risk flags.
 
-Use **Refresh summary** in the Case Review tab to regenerate the brief from the
-latest session evidence.
+## Responsible AI and limitations
 
-## Run
+- This software is decision support, not an automated compliance decision.
+- A CSP indicator or AML signal is a review item, not proof of wrongdoing.
+- Search results and registry data may be incomplete, stale, unavailable, or
+  contradictory. The Case Review tab surfaces these limitations explicitly.
+- RFIs are drafts for a reviewer; the app does not contact customers.
+- Reviewers must verify source material, follow their organisation's policy, and
+  protect personal data when operating the system.
 
-Live API call:
+## Testing
+
+Run the complete test suite:
 
 ```bash
-python src/tools/members.py --company-name "Ubizense Limited" --jurisdiction HK
-python src/tools/orgchart.py --company-name "Ubizense Limited" --jurisdiction HK
-python src/tools/customer_static.py --company-name "Ubizense Limited" --jurisdiction HK
+python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-By default, the API-backed tools wait up to 5 minutes for the created case to
-become ready:
+The tests cover CDD graph behavior, CSP assessment, Case Review structured
+output and guardrails, document processing, and pipeline progress.
+
+### Verify a clean Demo Mode install
+
+From a new clone, install the pinned dependencies, copy the example environment,
+and start the server. This path requires no live credentials:
+
+```bash
+python -m pip install -r requirements.lock
+cp .env.example .env
+python -m uvicorn src.backend.app:app --port 8000
+```
+
+Open the local app and select **Load Demo Case**. The CDD, Documents, CSP, and
+Case Review tabs should populate without sending an external request.
+
+## Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| The app starts but the demo button is absent | Copy `.env.example` to `.env` and set `DEMO_MODE=true`, then restart the server. |
+| A live workflow reports missing credentials | Set `DEMO_MODE=false` and provide the required KYC, OpenAI, and Tavily variables. S3 credentials are optional. |
+| A document action needs S3 credentials | Use Demo Mode for fixture data, or configure AWS credentials only when using live S3 document storage. |
+| An OpenAI request fails after a model change | Confirm the configured model is available to the account and restart the server after changing `.env`. |
+| Dependencies fail to install | Use Python 3.11+ and install the pinned set with `python -m pip install -r requirements.lock`. |
+
+## Project layout
 
 ```text
-60 attempts x 5 seconds = 300 seconds
+src/backend/       FastAPI routes and session handling
+src/agents/        LangGraph CDD pipeline and chat workflow
+src/tools/         KYC, Tavily, OpenAI, document, and assessment integrations
+src/frontend/      React workspace served by FastAPI
+skills/            Reusable CSP and Case Review instructions
+tests/             Unit and workflow tests
 ```
-
-Override the wait if needed:
-
-```bash
-python src/tools/members.py \
-  --company-name "Ubizense Limited" \
-  --jurisdiction HK \
-  --poll-attempts 120 \
-  --poll-interval-seconds 5
-
-python src/tools/orgchart.py \
-  --company-name "Ubizense Limited" \
-  --jurisdiction HK \
-  --poll-attempts 120 \
-  --poll-interval-seconds 5
-
-python src/tools/customer_static.py \
-  --company-name "Ubizense Limited" \
-  --jurisdiction HK \
-  --poll-attempts 120 \
-  --poll-interval-seconds 5
-```
-
-Offline cleanup test using the saved sample response:
-
-```bash
-python src/tools/members.py --from-file notebooks/members.json
-python src/tools/orgchart.py --from-file notebooks/org-chart.json
-python src/tools/customer_static.py --from-file company-detail.json
-```
-
-## Output
-
-The commands print JSON to the screen. On success, the members tool includes
-cleaned member lists and case metadata, the org-chart tool includes a cleaned
-recursive ownership tree and case metadata, and the customer-static tool
-includes cleaned static company profile fields and case metadata. On failure,
-they return a JSON object with an `error` field and context so an LLM can
-explain or recover from the issue.

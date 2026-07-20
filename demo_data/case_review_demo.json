@@ -1,0 +1,262 @@
+{
+  "customer_name": "Northstar Trading Ltd",
+  "jurisdiction": "GB",
+  "case_id": "demo-northstar-001",
+  "pipeline_status": "complete",
+  "pipeline_progress": {
+    "node": "generate_case_review",
+    "node_number": 16,
+    "total_nodes": 16,
+    "message": "Demo case loaded",
+    "using_cache": true,
+    "status": "complete"
+  },
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Demo case loaded. This fixture contains pre-generated CDD evidence and a Case Review; no external services were called."
+    }
+  ],
+  "cdd": {
+    "status": "incomplete",
+    "started_at": "2026-07-13T09:00:00+00:00",
+    "company_business_profile": {
+      "status": "complete",
+      "customer_static": {
+        "name": "Northstar Trading Ltd",
+        "jurisdiction": "GB",
+        "registration_number": "12345678",
+        "company_status": "Active",
+        "company_type": "Private limited company",
+        "activity_type": "Import and export of consumer goods",
+        "incorporation_date": "2018-04-12",
+        "registered_address": {
+          "full_address": "10 Example House, London, EC1A 1BB, United Kingdom"
+        },
+        "source": {
+          "name": "Demo fixture",
+          "registration_number": "Demo fixture",
+          "registered_address": "Demo fixture"
+        }
+      }
+    },
+    "ownership_and_control": {
+      "status": "complete",
+      "ubos": [
+        {
+          "name": "Maya Chen",
+          "effective_shareholding_percent": 60
+        }
+      ],
+      "shareholders_over_10_percent": [
+        {
+          "name": "Maya Chen",
+          "type": "Individual",
+          "effective_shareholding_percent": 60
+        },
+        {
+          "name": "Northstar Holdings LLP",
+          "type": "Corporate",
+          "effective_shareholding_percent": 40
+        }
+      ],
+      "related_parties": [
+        {
+          "name": "Maya Chen",
+          "role": "Director",
+          "related_entity": "Northstar Trading Ltd",
+          "reason": "Company officer"
+        }
+      ],
+      "members": {
+        "controlling_members": [
+          {
+            "name": "Maya Chen",
+            "kyc": {
+              "is_aml_positive": false
+            }
+          }
+        ]
+      }
+    },
+    "individual_identity_verification": {
+      "status": "complete",
+      "required_individuals": [
+        {
+          "name": "Maya Chen",
+          "roles": ["UBO", "Director"],
+          "required_documents": ["passport", "proof_of_address"],
+          "selected_document_type": "passport",
+          "status": "processed",
+          "document": {
+            "document_type": "passport",
+            "document_number": "P-DEMO-48291",
+            "nationality": "Singaporean",
+            "date_of_birth": "1987-09-14",
+            "expiry_date": "2031-09-13",
+            "document_url": "/demo-data/documents/maya-chen-passport.html"
+          }
+        }
+      ]
+    },
+    "documents": []
+  },
+  "documents": [],
+  "demo_csp_result": {
+    "registered_address": "10 Example House, London, EC1A 1BB, United Kingdom",
+    "company_name": "Northstar Trading Ltd",
+    "search_query": "Demo fixture — no live query was sent.",
+    "assessment": {
+      "is_csp": "inconclusive",
+      "confidence": "medium",
+      "explanation": "The supplied evidence is building-level and does not verify an exact registered-office provider relationship."
+    },
+    "sources": [
+      {
+        "title": "Example House business directory (demo source)",
+        "url": "https://example.test/example-house-directory",
+        "content": "Representative demo source only; not a live search result."
+      }
+    ]
+  },
+  "document_requirements": [
+    {
+      "id": "demo-registry-document",
+      "entity_name": "Northstar Trading Ltd",
+      "document_type": "registry_document",
+      "individual": {},
+      "status": "processed",
+      "source": "demo_fixture",
+      "demo_url": "/demo-data/documents/northstar-registry-business-profile.html",
+      "cache_document": null,
+      "match": {
+        "confidence": 1,
+        "reason": "Pre-generated synthetic registry profile",
+        "classification": "registry_document"
+      }
+    },
+    {
+      "id": "demo-idv-1-passport",
+      "entity_name": "Maya Chen",
+      "document_type": "passport",
+      "individual": {
+        "name": "Maya Chen",
+        "selected_document_type": "passport"
+      },
+      "status": "processed",
+      "source": "demo_fixture",
+      "demo_url": "/demo-data/documents/maya-chen-passport.html",
+      "cache_document": null,
+      "match": {
+        "confidence": 1,
+        "reason": "Pre-processed demo document",
+        "classification": "passport"
+      }
+    }
+  ],
+  "risk_flags": [
+    {
+      "category": "ownership",
+      "severity": "low",
+      "status": "cleared",
+      "description": "Ownership: Evaluation: No. Individual UBOs above 25% were identified: Maya Chen.",
+      "source": "demo_fixture"
+    },
+    {
+      "category": "aml",
+      "severity": "low",
+      "status": "cleared",
+      "description": "AML: Evaluation: No. No controlling member has an AML-positive result.",
+      "source": "demo_fixture"
+    },
+    {
+      "category": "csp_address",
+      "severity": "medium",
+      "status": "open",
+      "description": "CSP: Evaluation: Inconclusive. Search evidence identifies corporate-services activity at the building, but does not establish a provider at the exact address.",
+      "source": "csp_address_assessment",
+      "evidence_tool": "csp_address_assessment",
+      "evidence": {
+        "assessment": {
+          "is_csp": "inconclusive",
+          "confidence": "medium",
+          "explanation": "The supplied evidence is building-level and does not verify an exact registered-office provider relationship."
+        },
+        "sources": [
+          {
+            "title": "Example House business directory",
+            "url": "https://example.test/example-house-directory",
+            "content": "Representative demo source only; not a live search result."
+          }
+        ]
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "Demo fixture",
+      "tool": "csp_address_assessment",
+      "description": "Pre-generated CSP address evidence for the demo case.",
+      "relevance_tags": ["risk_flag", "csp_address", "registered_address"],
+      "data": {
+        "assessment": {
+          "is_csp": "inconclusive",
+          "confidence": "medium",
+          "explanation": "The supplied evidence is building-level and does not verify an exact registered-office provider relationship."
+        },
+        "sources": [
+          {
+            "title": "Example House business directory",
+            "url": "https://example.test/example-house-directory"
+          }
+        ]
+      },
+      "collected_at": "2026-07-13T09:00:00+00:00"
+    }
+  ],
+  "final_recommendation": "human_review",
+  "case_review_summary": {
+    "status": "available",
+    "demo_fixture": true,
+    "outcome": "human_review_required",
+    "executive_summary": "Northstar Trading Ltd has a documented individual UBO and no AML-positive controlling member in this demonstration case. The registered-address assessment remains inconclusive because the retained evidence is limited to the building level, so human review is required.",
+    "key_evidence": [
+      {
+        "category": "Ownership",
+        "finding": "Maya Chen is identified as a 60% individual UBO and director.",
+        "source_refs": ["risk:ownership:1"]
+      },
+      {
+        "category": "CSP address",
+        "finding": "The address evidence is building-level and does not confirm a company-service provider at the exact address.",
+        "source_refs": ["risk:csp_address:3", "evidence:csp_address_assessment:1"]
+      }
+    ],
+    "limitations": [
+      "This is a pre-generated demo fixture; no live KYC, Tavily, S3, or OpenAI call was made.",
+      "The CSP evidence does not establish an exact-unit provider relationship."
+    ],
+    "recommended_actions": [
+      "Review the customer explanation and supporting evidence for use of the registered address.",
+      "Verify the source records before recording a live-case decision."
+    ],
+    "requests_for_information": [
+      {
+        "request": "Provide evidence of the company's operating address and an explanation of its use of the registered address.",
+        "reason": "This would help resolve the building-level CSP-address review item.",
+        "risk_or_gap": "CSP address",
+        "priority": "medium"
+      }
+    ],
+    "evidence_index": [
+      {
+        "id": "evidence:csp_address_assessment:1",
+        "tool": "csp_address_assessment",
+        "description": "Pre-generated CSP address evidence for the demo case.",
+        "urls": ["https://example.test/example-house-directory"]
+      }
+    ]
+  },
+  "case_review_decision": null,
+  "tool_results": []
+}

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import json
+import os
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -45,6 +47,7 @@ FRONTEND_DIR = PROJECT_ROOT / "src" / "frontend"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 DOCUMENT_STAGING_DIR = OUTPUT_DIR / "document-staging"
 SANDBOX_CASES_PATH = PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
+DEMO_CASE_PATH = PROJECT_ROOT / "demo_data" / "case_review_demo.json"
 
 app = FastAPI(title="WBL Bank CDD Chatbot")
 SESSIONS: dict[str, dict[str, Any]] = {}
@@ -96,12 +99,26 @@ class CaseReviewRefreshRequest(BaseModel):
     session_id: str
 
 
+class DemoLoadRequest(BaseModel):
+    session_id: str | None = None
+
+
 @app.post("/api/chat")
 async def chat(
     request: ChatRequest,
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     session = _session(request.session_id)
+    if _demo_mode_enabled():
+        if request.message:
+            session["messages"].append({"role": "user", "content": request.message})
+        session["messages"].append(
+            {
+                "role": "assistant",
+                "content": "Demo Mode does not call external services. Load the demo case to explore the fixture-backed CDD and Case Review workflow.",
+            }
+        )
+        return _response(session, status="demo_read_only")
     if request.message:
         session["messages"].append({"role": "user", "content": request.message})
 
@@ -131,9 +148,24 @@ async def get_csp_skill() -> dict[str, str]:
     return {"skill": load_csp_skill()}
 
 
+@app.get("/api/demo/status")
+async def demo_status() -> dict[str, bool]:
+    """Tell the frontend whether fixture-backed Demo Mode is enabled."""
+    return {"demo_mode": _demo_mode_enabled()}
+
+
+@app.post("/api/demo/load")
+async def load_demo_case(request: DemoLoadRequest) -> dict[str, Any]:
+    if not _demo_mode_enabled():
+        raise HTTPException(status_code=404, detail="Demo Mode is disabled")
+    return _load_demo_case(_session(request.session_id))
+
+
 @app.post("/api/csp/assess")
 async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
     """Run an isolated CSP assessment that does not change an active CDD case."""
+    if _demo_mode_enabled():
+        raise HTTPException(status_code=400, detail="CSP assessment is disabled in Demo Mode; load the demo case to inspect fixture evidence.")
     try:
         return await asyncio.to_thread(
             evaluate_csp_address,
@@ -149,6 +181,8 @@ async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, An
     session = SESSIONS.get(request.session_id)
     if not session or not session.get("cdd"):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
     try:
         summary = await asyncio.to_thread(
             generate_case_review_summary,
@@ -182,6 +216,8 @@ async def run_pipeline(
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     session = _session(request.session_id)
+    if _demo_mode_enabled():
+        return _load_demo_case(session)
     return await _run_pipeline_for_session(
         session,
         customer_name=request.customer_name,
@@ -267,6 +303,8 @@ async def upload_case_document(
     session = SESSIONS.get(session_id)
     if not session or not session.get("document_requirements"):
         raise HTTPException(status_code=404, detail="Document requirements not found")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
@@ -308,6 +346,8 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
     session = SESSIONS.get(request.session_id)
     if not session or not session.get("document_requirements"):
         raise HTTPException(status_code=404, detail="Document requirements not found")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
     selected = set(request.requirement_ids or [])
     for requirement in session["document_requirements"]:
         if selected and requirement["id"] not in selected:
@@ -329,6 +369,8 @@ async def process_case_documents(request: DocumentActionRequest) -> dict[str, An
     session = SESSIONS.get(request.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="CDD session not found")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
     await _resume_if_ready(session)
     return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
@@ -366,6 +408,24 @@ def _session(session_id: str | None) -> dict[str, Any]:
     return session
 
 
+def _demo_mode_enabled() -> bool:
+    return os.getenv("DEMO_MODE", "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
+    """Populate a normal session with static data and never call external services."""
+    try:
+        fixture = json.loads(DEMO_CASE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Demo fixture could not be loaded: {exc}") from exc
+    session_id = session["session_id"]
+    session.clear()
+    session.update(deepcopy(fixture))
+    session["session_id"] = session_id
+    session["demo_mode"] = True
+    return _response(session, status="complete")
+
+
 def _response(
     session: dict[str, Any],
     *,
@@ -387,11 +447,13 @@ def _response(
         "final_recommendation": session.get("final_recommendation"),
         "case_review_summary": session.get("case_review_summary"),
         "case_review_decision": session.get("case_review_decision"),
+        "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
         "pdf_url": pdf_url,
         "error": error,
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
+        "demo_mode": bool(session.get("demo_mode")) or _demo_mode_enabled(),
     }
 
 
@@ -865,6 +927,9 @@ def _merge_session_args(args: dict[str, Any], session: dict[str, Any]) -> dict[s
         merged["case_id"] = session.get("case_id")
     return merged
 
+
+if DEMO_CASE_PATH.parent.exists():
+    app.mount("/demo-data", StaticFiles(directory=DEMO_CASE_PATH.parent), name="demo-data")
 
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

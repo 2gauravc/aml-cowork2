@@ -91,6 +91,11 @@ button:disabled {
   color: #166534;
 }
 
+.badge.demo {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(330px, 390px) minmax(0, 1fr);
