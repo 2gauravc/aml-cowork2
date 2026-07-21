@@ -38,6 +38,28 @@ class OpenAIModelParameterTests(unittest.TestCase):
         self.assertEqual(request["model"], "gpt-5.6")
         self.assertNotIn("temperature", request)
 
+    def test_document_extraction_uses_image_input_for_png(self) -> None:
+        response = Mock()
+        response.output_text = '{"document_number":"ABC123"}'
+        client = Mock()
+        client.responses.create.return_value = response
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
+            "src.tools.document_extraction.OpenAI", return_value=client
+        ), patch.object(Path, "exists", return_value=True), patch.object(
+            Path, "read_bytes", return_value=b"\x89PNG\r\n\x1a\nimage"
+        ):
+            _run_schema_prompt(
+                pdf_path=Path("fixture.png"),
+                schema_name="passport_extraction",
+                schema={"type": "object", "additionalProperties": False, "properties": {}, "required": []},
+                prompt="Extract the document.",
+            )
+
+        content = client.responses.create.call_args.kwargs["input"][0]["content"]
+        self.assertEqual(content[0]["type"], "input_image")
+        self.assertTrue(content[0]["image_url"].startswith("data:image/png;base64,"))
+
 
 if __name__ == "__main__":
     unittest.main()

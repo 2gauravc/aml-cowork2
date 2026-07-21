@@ -46,6 +46,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = PROJECT_ROOT / "src" / "frontend"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 DOCUMENT_STAGING_DIR = OUTPUT_DIR / "document-staging"
+DOCUMENT_EXTRACTION_STAGING_DIR = OUTPUT_DIR / "document-extraction-staging"
+STANDALONE_DOCUMENT_CONTENT_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+}
 SANDBOX_CASES_PATH = PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
 DEMO_CASE_PATH = PROJECT_ROOT / "demo_data" / "case_review_demo.json"
 
@@ -174,6 +182,51 @@ async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
         )
     except CSPAssessmentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/document-extraction/extract")
+async def extract_standalone_document(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Extract a PDF or image without reading from or writing to a CDD session."""
+    if _demo_mode_enabled():
+        raise HTTPException(
+            status_code=400,
+            detail="Document extraction is disabled in Demo Mode.",
+        )
+    if file.content_type not in STANDALONE_DOCUMENT_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Supported document formats are PDF, PNG, JPEG, WEBP, and GIF",
+        )
+
+    data = await file.read()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Upload must be a document no larger than 20 MB")
+    if not _is_supported_document_content(data, file.content_type):
+        raise HTTPException(status_code=400, detail="Uploaded file does not match its declared document type")
+
+    DOCUMENT_EXTRACTION_STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = {
+        "application/pdf": ".pdf",
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }[file.content_type]
+    path = DOCUMENT_EXTRACTION_STAGING_DIR / f"{uuid.uuid4()}-document{suffix}"
+    path.write_bytes(data)
+    artifact = {"pdf_path": str(path), "source": "Standalone document extraction"}
+    try:
+        classification = await asyncio.to_thread(classify_document, path)
+        extraction = await asyncio.to_thread(
+            extract_document,
+            artifact,
+            classification=classification,
+        )
+        return {"classification": classification, "extraction": extraction}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Document extraction failed: {exc}") from exc
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @app.post("/api/case-review/refresh")
@@ -410,6 +463,19 @@ def _session(session_id: str | None) -> dict[str, Any]:
 
 def _demo_mode_enabled() -> bool:
     return os.getenv("DEMO_MODE", "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _is_supported_document_content(data: bytes, content_type: str) -> bool:
+    """Verify the upload signature before sending a document to the model."""
+    signatures = {
+        "application/pdf": lambda value: value.lstrip().startswith(b"%PDF-"),
+        "image/png": lambda value: value.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg": lambda value: value.startswith(b"\xff\xd8\xff"),
+        "image/webp": lambda value: value.startswith(b"RIFF") and value[8:12] == b"WEBP",
+        "image/gif": lambda value: value.startswith((b"GIF87a", b"GIF89a")),
+    }
+    validator = signatures.get(content_type)
+    return bool(validator and validator(data))
 
 
 def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:

@@ -439,6 +439,30 @@ th {
   resize: vertical;
 }
 
+.field-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.field-list > div {
+  background: var(--band);
+  border: 1px solid #e2e7ef;
+  padding: 10px;
+}
+
+.field-list dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.field-list dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
 .csp-assessment-result p {
   line-height: 1.5;
   margin: 6px 0 0;

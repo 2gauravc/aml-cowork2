@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify and extract generated document data for CDD enrichment."""
+"""Classify and extract PDF or image document data for CDD enrichment."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class DocumentExtractionError(RuntimeError):
 
 
 def classify_document(path: str | Path) -> dict[str, Any]:
-    """Classify a PDF document using OpenAI."""
+    """Classify a PDF or supported image document using OpenAI."""
     result = _run_schema_prompt(
         pdf_path=Path(path),
         schema_name="document_classification",
@@ -70,7 +70,7 @@ def extract_document(
     *,
     classification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Extract structured values from a PDF document using OpenAI and a schema."""
+    """Extract structured values from a document using OpenAI and a schema."""
     pdf_path = artifact.get("pdf_path") or artifact.get("path")
     if not pdf_path:
         raise ValueError("Document artifact is missing pdf_path")
@@ -141,7 +141,7 @@ def _run_schema_prompt(
         raise FileNotFoundError(pdf_path)
 
     client = OpenAI()
-    file_data = _pdf_file_data(pdf_path)
+    document_content = _document_input_content(pdf_path)
     try:
         response = client.responses.create(
             model=DEFAULT_MODEL,
@@ -149,11 +149,7 @@ def _run_schema_prompt(
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "input_file",
-                            "filename": pdf_path.name,
-                            "file_data": file_data,
-                        },
+                        document_content,
                         {
                             "type": "input_text",
                             "text": prompt,
@@ -179,6 +175,40 @@ def _run_schema_prompt(
 def _pdf_file_data(path: Path) -> str:
     encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
     return f"data:application/pdf;base64,{encoded}"
+
+
+def _document_input_content(path: Path) -> dict[str, str]:
+    """Build the Responses API content item for a PDF or supported image."""
+    if path.suffix.casefold() == ".pdf":
+        return {
+            "type": "input_file",
+            "filename": path.name,
+            "file_data": _pdf_file_data(path),
+        }
+
+    media_type = _image_media_type(path)
+    encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+    return {
+        "type": "input_image",
+        "image_url": f"data:{media_type};base64,{encoded}",
+        "detail": "high",
+    }
+
+
+def _image_media_type(path: Path) -> str:
+    supported = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    media_type = supported.get(path.suffix.casefold())
+    if not media_type:
+        raise DocumentExtractionError(
+            "Supported document formats are PDF, PNG, JPEG, WEBP, and non-animated GIF"
+        )
+    return media_type
 
 
 def _parse_response_json(response: Any) -> dict[str, Any]:

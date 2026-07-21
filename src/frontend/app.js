@@ -35,6 +35,10 @@ function App() {
   const [cspAssessing, setCspAssessing] = useState(false);
   const [cspSkill, setCspSkill] = useState("");
   const [cspSkillLoading, setCspSkillLoading] = useState(false);
+  const [extractionFile, setExtractionFile] = useState(null);
+  const [extractionResult, setExtractionResult] = useState(null);
+  const [extractionError, setExtractionError] = useState("");
+  const [extractingDocument, setExtractingDocument] = useState(false);
   const [documentLinks, setDocumentLinks] = useState({});
   const [refreshingDocumentKey, setRefreshingDocumentKey] = useState(null);
   const [uploadNotice, setUploadNotice] = useState("");
@@ -47,6 +51,7 @@ function App() {
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
   const uploadInputRef = useRef(null);
+  const extractionInputRef = useRef(null);
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
@@ -428,6 +433,29 @@ function App() {
     }
   }
 
+  function selectExtractionFile(event) {
+    setExtractionFile(event.target.files?.[0] || null);
+    setExtractionResult(null);
+    setExtractionError("");
+  }
+
+  async function extractStandaloneDocument() {
+    if (!extractionFile) return;
+    setExtractingDocument(true);
+    setExtractionError("");
+    setExtractionResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", extractionFile);
+      const response = await fetch("/api/document-extraction/extract", { method: "POST", body });
+      setExtractionResult(await readJsonResponse(response, "Document extraction failed"));
+    } catch (err) {
+      setExtractionError(err.message);
+    } finally {
+      setExtractingDocument(false);
+    }
+  }
+
   async function pollSession(activeSessionId) {
     while (activeSessionId) {
       await delay(2000);
@@ -521,6 +549,14 @@ function App() {
               onClick={() => setActiveWorkspace("csp")}
             >
               CSP Detection
+            </button>
+            <button
+              className={`workspace-tab ${activeWorkspace === "document-extraction" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activeWorkspace === "document-extraction"}
+              onClick={() => setActiveWorkspace("document-extraction")}
+            >
+              Document Extraction
             </button>
           </div>
 
@@ -732,7 +768,7 @@ function App() {
                 onSaveDecision={saveCaseReviewDecision}
                 demoMode={demoMode}
               />
-            ) : (
+            ) : activeWorkspace === "csp" ? (
               <CSPDetection
                 companyName={cspCompanyName}
                 address={cspAddress}
@@ -745,6 +781,17 @@ function App() {
                 onAddressChange={setCspAddress}
                 onSkillToggle={(open) => { if (open) loadCspSkill(); }}
                 onAssess={assessCsp}
+                demoMode={demoMode}
+              />
+            ) : (
+              <DocumentExtraction
+                file={extractionFile}
+                result={extractionResult}
+                error={extractionError}
+                extracting={extractingDocument}
+                inputRef={extractionInputRef}
+                onFileChange={selectExtractionFile}
+                onExtract={extractStandaloneDocument}
                 demoMode={demoMode}
               />
             )}
@@ -964,6 +1011,47 @@ function CSPDetection({
             </div>
           )}
         </Section>
+      )}
+    </>
+  );
+}
+
+function DocumentExtraction({ file, result, error, extracting, inputRef, onFileChange, onExtract, demoMode }) {
+  return (
+    <>
+      <Section title="Document Extraction">
+        {demoMode && <p className="empty">Document extraction is disabled in Demo Mode.</p>}
+        <p className="empty">Upload a PDF or image to classify it and extract supported document data without changing the active CDD case.</p>
+        <div className="csp-form">
+          <input
+            ref={inputRef}
+            aria-label="Document file"
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp,image/gif,.pdf,.png,.jpg,.jpeg,.webp,.gif"
+            disabled={demoMode || extracting}
+            onChange={onFileChange}
+          />
+          <button disabled={demoMode || extracting || !file} onClick={onExtract}>
+            {extracting ? "Extracting…" : "Extract"}
+          </button>
+        </div>
+        {file && <p className="upload-note">Selected: {file.name}</p>}
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <>
+          <Section title="Classification">
+            <dl className="field-list">
+              <div><dt>Document type</dt><dd>{result.classification?.document_type || "Unknown"}</dd></div>
+              <div><dt>Confidence</dt><dd>{result.classification?.confidence ?? "-"}</dd></div>
+              <div><dt>Reason</dt><dd>{result.classification?.reason || "-"}</dd></div>
+            </dl>
+          </Section>
+          <Section title="Extracted JSON">
+            <pre className="json-view">{JSON.stringify(result.extraction, null, 2)}</pre>
+          </Section>
+        </>
       )}
     </>
   );
