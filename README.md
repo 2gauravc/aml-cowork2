@@ -75,6 +75,34 @@ cd aml-cowork2
 python -m pip install -r requirements.lock
 ```
 
+### Enable Codex
+
+#### Install Codex
+
+```bash
+npm install -g @openai/codex
+```
+
+#### Log in to Codex
+
+Start Codex and sign in with ChatGPT when prompted:
+
+```bash
+codex
+```
+
+> **Note:** When accessing the app from another machine, replace `localhost`
+> in the app URL with the machine's IP address.
+
+#### Install supporting tools
+
+```bash
+sudo apt update
+sudo apt install -y ripgrep
+sudo apt install -y bubblewrap
+npm install -g playwright
+```
+
 ### Run Demo Mode
 
 Copy the example configuration and leave `DEMO_MODE=true`. No KYC, S3, Tavily,
