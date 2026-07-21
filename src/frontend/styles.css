@@ -97,21 +97,28 @@ button:disabled {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(330px, 390px) minmax(0, 1fr);
   min-height: 0;
 }
 
 .chat {
   background: var(--panel);
-  border-right: 1px solid var(--line);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgb(16 33 63 / 0.22);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  min-height: 0;
+  height: min(680px, calc(100vh - 96px));
+  position: fixed;
+  right: 24px;
+  bottom: 88px;
+  width: min(420px, calc(100vw - 32px));
+  z-index: 10;
 }
 
 .chat-head {
+  align-items: center;
   border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
   padding: 16px;
 }
 
@@ -123,6 +130,32 @@ button:disabled {
 .chat-head p {
   color: var(--muted);
   margin: 0;
+}
+
+.chat-close {
+  background: transparent;
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1;
+  min-height: 32px;
+  padding: 0 7px;
+}
+
+.chat-close:hover {
+  background: #e8edf4;
+}
+
+.chat-launcher {
+  align-items: center;
+  border-radius: 999px;
+  bottom: 24px;
+  box-shadow: 0 6px 16px rgb(16 33 63 / 0.3);
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+  position: fixed;
+  right: 24px;
+  z-index: 11;
 }
 
 .messages {
@@ -753,15 +786,6 @@ th {
 }
 
 @media (max-width: 900px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .chat {
-    border-right: 0;
-    min-height: 520px;
-  }
-
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -791,5 +815,17 @@ th {
 
   .document-controls {
     justify-content: flex-start;
+  }
+
+  .chat {
+    bottom: 76px;
+    height: min(680px, calc(100vh - 140px));
+    right: 16px;
+    width: calc(100vw - 32px);
+  }
+
+  .chat-launcher {
+    bottom: 16px;
+    right: 16px;
   }
 }

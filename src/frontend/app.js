@@ -28,6 +28,7 @@ function App() {
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
+  const [chatOpen, setChatOpen] = useState(false);
   const [cspCompanyName, setCspCompanyName] = useState("");
   const [cspAddress, setCspAddress] = useState("");
   const [cspResult, setCspResult] = useState(null);
@@ -62,6 +63,8 @@ function App() {
   const [now, setNow] = useState(Date.now());
   const uploadInputRef = useRef(null);
   const extractionInputRef = useRef(null);
+  const chatLauncherRef = useRef(null);
+  const chatCloseRef = useRef(null);
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
@@ -126,6 +129,27 @@ function App() {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (activeWorkspace !== "cdd") setChatOpen(false);
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (!chatOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setChatOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [chatOpen]);
+
+  useEffect(() => {
+    if (chatOpen) {
+      chatCloseRef.current?.focus();
+    } else if (activeWorkspace === "cdd") {
+      chatLauncherRef.current?.focus();
+    }
+  }, [activeWorkspace, chatOpen]);
 
   useEffect(() => {
     if (!sessionId || !documents.length) return;
@@ -534,45 +558,6 @@ function App() {
       </header>
 
       <div className="workspace">
-        <aside className="chat">
-          <div className="chat-head">
-            <h1>Onboarding Chat - for deeper probing</h1>
-          </div>
-
-          <div className="messages">
-            {messages.map((item, index) => (
-              <div className={`message ${item.role}`} key={`${item.role}-${index}`}>
-                <MarkdownMessage content={item.content} />
-              </div>
-            ))}
-            {loading && (
-              <div className="message assistant">
-                Thinking...
-              </div>
-            )}
-          </div>
-
-          <div className="composer">
-            <textarea
-              aria-label="Message"
-              placeholder='Try "what test cases are available in GB?" or "fetch the org chart for Cropwell Bishop Creamery Limited, GB"'
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                  sendChat();
-                }
-              }}
-            />
-            <div className="send-row">
-              <button disabled={loading || demoMode} onClick={() => sendChat()}>
-                Ask
-              </button>
-            </div>
-            {error && <div className="risk">{error}</div>}
-          </div>
-        </aside>
-
         <main className="main">
           <div className="workspace-tabs" role="tablist" aria-label="Workspace">
             <button
@@ -872,6 +857,61 @@ function App() {
             )}
           </div>
         </main>
+
+        {activeWorkspace === "cdd" && (
+          <>
+            <button
+              className="chat-launcher"
+              ref={chatLauncherRef}
+              aria-label="Open onboarding chat"
+              aria-expanded={chatOpen}
+              aria-controls="onboarding-chat"
+              onClick={() => setChatOpen(true)}
+            >
+              <span aria-hidden="true">💬</span>
+              <span className="chat-launcher-label">Chat</span>
+            </button>
+
+            {chatOpen && (
+              <aside
+                className="chat"
+                id="onboarding-chat"
+                role="dialog"
+                aria-label="Onboarding chat"
+              >
+                <div className="chat-head">
+                  <h1>Onboarding Chat - for deeper probing</h1>
+                  <button ref={chatCloseRef} className="chat-close" aria-label="Close onboarding chat" onClick={() => setChatOpen(false)}>×</button>
+                </div>
+
+                <div className="messages">
+                  {messages.map((item, index) => (
+                    <div className={`message ${item.role}`} key={`${item.role}-${index}`}>
+                      <MarkdownMessage content={item.content} />
+                    </div>
+                  ))}
+                  {loading && <div className="message assistant">Thinking...</div>}
+                </div>
+
+                <div className="composer">
+                  <textarea
+                    aria-label="Message"
+                    placeholder='Try "what test cases are available in GB?" or "fetch the org chart for Cropwell Bishop Creamery Limited, GB"'
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) sendChat();
+                    }}
+                  />
+                  <div className="send-row">
+                    <button disabled={loading || demoMode} onClick={() => sendChat()}>Ask</button>
+                  </div>
+                  {error && <div className="risk">{error}</div>}
+                </div>
+              </aside>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
