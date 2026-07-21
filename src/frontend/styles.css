@@ -535,6 +535,24 @@ th {
   grid-template-columns: minmax(220px, 2fr) 90px minmax(130px, 1fr) auto auto;
 }
 
+.idv-generation-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.idv-generation-form input,
+.idv-generation-form select {
+  border: 1px solid var(--line);
+  min-height: 38px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.idv-generation-form button {
+  justify-self: start;
+}
+
 .case-documents {
   display: grid;
   gap: 10px;
@@ -766,6 +784,7 @@ th {
   .quick-form,
   .cdd-metadata,
   .pipeline-form,
+  .idv-generation-form,
   .document-row {
     grid-template-columns: 1fr;
   }

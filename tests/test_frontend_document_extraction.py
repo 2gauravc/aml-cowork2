@@ -11,3 +11,6 @@ def test_document_extraction_workspace_calls_stateless_endpoint() -> None:
     assert 'fetch("/api/document-extraction/extract", { method: "POST", body })' in app
     assert "<DocumentExtraction" in app
     assert "image/png" in app
+    assert "ID&V Document Generation" in app
+    assert 'fetch("/api/idv-document-generation/generate"' in app
+    assert "downloadStandaloneIdvDocument" in app

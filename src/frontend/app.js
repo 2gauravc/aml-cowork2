@@ -39,6 +39,16 @@ function App() {
   const [extractionResult, setExtractionResult] = useState(null);
   const [extractionError, setExtractionError] = useState("");
   const [extractingDocument, setExtractingDocument] = useState(false);
+  const [idvDocumentForm, setIdvDocumentForm] = useState({
+    full_name: "",
+    document_type: "passport",
+    nationality: "",
+    issuing_country: "",
+    address: "",
+  });
+  const [idvDocumentResult, setIdvDocumentResult] = useState(null);
+  const [idvDocumentError, setIdvDocumentError] = useState("");
+  const [generatingIdvDocument, setGeneratingIdvDocument] = useState(false);
   const [documentLinks, setDocumentLinks] = useState({});
   const [refreshingDocumentKey, setRefreshingDocumentKey] = useState(null);
   const [uploadNotice, setUploadNotice] = useState("");
@@ -456,6 +466,53 @@ function App() {
     }
   }
 
+  function updateIdvDocumentForm(field, value) {
+    setIdvDocumentForm((current) => ({ ...current, [field]: value }));
+    setIdvDocumentResult(null);
+    setIdvDocumentError("");
+  }
+
+  async function generateStandaloneIdvDocument() {
+    if (!idvDocumentForm.full_name.trim()) return;
+    setGeneratingIdvDocument(true);
+    setIdvDocumentError("");
+    setIdvDocumentResult(null);
+    try {
+      const response = await fetch("/api/idv-document-generation/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...idvDocumentForm,
+          full_name: idvDocumentForm.full_name.trim(),
+          nationality: idvDocumentForm.nationality.trim() || null,
+          issuing_country: idvDocumentForm.issuing_country.trim() || null,
+          address: idvDocumentForm.address.trim() || null,
+        }),
+      });
+      const result = await readJsonResponse(response, "ID&V document generation failed");
+      await downloadStandaloneIdvDocument(result);
+      setIdvDocumentResult(result);
+    } catch (err) {
+      setIdvDocumentError(err.message);
+    } finally {
+      setGeneratingIdvDocument(false);
+    }
+  }
+
+  async function downloadStandaloneIdvDocument(result) {
+    const response = await fetch(result.pdf_url);
+    if (!response.ok) throw new Error("Generated document download failed");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `synthetic-${result.document_type || "identity-document"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function pollSession(activeSessionId) {
     while (activeSessionId) {
       await delay(2000);
@@ -557,6 +614,14 @@ function App() {
               onClick={() => setActiveWorkspace("document-extraction")}
             >
               Document Extraction
+            </button>
+            <button
+              className={`workspace-tab ${activeWorkspace === "idv-document-generation" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activeWorkspace === "idv-document-generation"}
+              onClick={() => setActiveWorkspace("idv-document-generation")}
+            >
+              ID&V Document Generation
             </button>
           </div>
 
@@ -783,7 +848,7 @@ function App() {
                 onAssess={assessCsp}
                 demoMode={demoMode}
               />
-            ) : (
+            ) : activeWorkspace === "document-extraction" ? (
               <DocumentExtraction
                 file={extractionFile}
                 result={extractionResult}
@@ -792,6 +857,16 @@ function App() {
                 inputRef={extractionInputRef}
                 onFileChange={selectExtractionFile}
                 onExtract={extractStandaloneDocument}
+                demoMode={demoMode}
+              />
+            ) : (
+              <IDVDocumentGeneration
+                form={idvDocumentForm}
+                result={idvDocumentResult}
+                error={idvDocumentError}
+                generating={generatingIdvDocument}
+                onChange={updateIdvDocumentForm}
+                onGenerate={generateStandaloneIdvDocument}
                 demoMode={demoMode}
               />
             )}
@@ -1052,6 +1127,39 @@ function DocumentExtraction({ file, result, error, extracting, inputRef, onFileC
             <pre className="json-view">{JSON.stringify(result.extraction, null, 2)}</pre>
           </Section>
         </>
+      )}
+    </>
+  );
+}
+
+function IDVDocumentGeneration({ form, result, error, generating, onChange, onGenerate, demoMode }) {
+  return (
+    <>
+      <Section title="ID&V Document Generation">
+        {demoMode && <p className="empty">ID&V document generation is disabled in Demo Mode.</p>}
+        <p className="empty">Generate a synthetic demo identity document. It is not valid for identity verification.</p>
+        <div className="idv-generation-form">
+          <input aria-label="Full name" placeholder="Full name" value={form.full_name} disabled={demoMode || generating} onChange={(event) => onChange("full_name", event.target.value)} />
+          <select aria-label="Document type" value={form.document_type} disabled={demoMode || generating} onChange={(event) => onChange("document_type", event.target.value)}>
+            <option value="passport">Passport</option>
+            <option value="national_id">National ID</option>
+          </select>
+          <input aria-label="Nationality" placeholder="Nationality (optional)" value={form.nationality} disabled={demoMode || generating} onChange={(event) => onChange("nationality", event.target.value)} />
+          <input aria-label="Issuing country" placeholder="Issuing country (optional)" value={form.issuing_country} disabled={demoMode || generating} onChange={(event) => onChange("issuing_country", event.target.value)} />
+          {form.document_type === "national_id" && <input aria-label="Address" placeholder="Address (optional)" value={form.address} disabled={demoMode || generating} onChange={(event) => onChange("address", event.target.value)} />}
+          <button disabled={demoMode || generating || !form.full_name.trim()} onClick={onGenerate}>
+            {generating ? "Generating…" : "Generate document"}
+          </button>
+        </div>
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <Section title="Generated Document">
+          <p className="risk">{result.notice}</p>
+          <p><strong>{result.person_name}</strong> — {documentLabel(result.document_type)}</p>
+          <p className="empty">The PDF download has started. The generated server files are now removed.</p>
+        </Section>
       )}
     </>
   );

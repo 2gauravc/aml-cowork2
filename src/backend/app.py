@@ -17,6 +17,7 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
@@ -47,6 +48,7 @@ FRONTEND_DIR = PROJECT_ROOT / "src" / "frontend"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 DOCUMENT_STAGING_DIR = OUTPUT_DIR / "document-staging"
 DOCUMENT_EXTRACTION_STAGING_DIR = OUTPUT_DIR / "document-extraction-staging"
+STANDALONE_IDV_DOCUMENT_DIR = OUTPUT_DIR / "standalone-idv-documents"
 STANDALONE_DOCUMENT_CONTENT_TYPES = {
     "application/pdf",
     "image/png",
@@ -59,6 +61,7 @@ DEMO_CASE_PATH = PROJECT_ROOT / "demo_data" / "case_review_demo.json"
 
 app = FastAPI(title="WBL Bank CDD Chatbot")
 SESSIONS: dict[str, dict[str, Any]] = {}
+STANDALONE_IDV_DOCUMENTS: dict[str, dict[str, Path]] = {}
 
 
 class ChatRequest(BaseModel):
@@ -95,6 +98,15 @@ class DocumentActionRequest(BaseModel):
 class CSPAssessmentRequest(BaseModel):
     company_name: str | None = Field(default=None)
     registered_address: str = Field(min_length=1)
+
+
+class StandaloneIDVDocumentRequest(BaseModel):
+    full_name: str = Field(min_length=1, max_length=150)
+    document_type: Literal["passport", "national_id"]
+    nationality: str | None = Field(default=None, max_length=80)
+    issuing_country: str | None = Field(default=None, max_length=80)
+    address: str | None = Field(default=None, max_length=300)
+    case_common_id: str | None = Field(default=None, max_length=100)
 
 
 class CaseReviewDecisionRequest(BaseModel):
@@ -227,6 +239,68 @@ async def extract_standalone_document(file: UploadFile = File(...)) -> dict[str,
         raise HTTPException(status_code=400, detail=f"Document extraction failed: {exc}") from exc
     finally:
         path.unlink(missing_ok=True)
+
+
+@app.post("/api/idv-document-generation/generate")
+async def generate_standalone_idv_document(
+    request: StandaloneIDVDocumentRequest,
+) -> dict[str, Any]:
+    """Generate a synthetic ID&V document without accessing a CDD session."""
+    if _demo_mode_enabled():
+        raise HTTPException(status_code=400, detail="ID&V document generation is disabled in Demo Mode.")
+
+    individual = {
+        "name": request.full_name.strip(),
+        "selected_document_type": request.document_type,
+        "nationality": _optional_text(request.nationality),
+        "issuing_country": _optional_text(request.issuing_country),
+        "address": _optional_text(request.address),
+        "case_common_id": _optional_text(request.case_common_id),
+    }
+    if not individual["name"]:
+        raise HTTPException(status_code=400, detail="Full name is required")
+
+    try:
+        artifact = await asyncio.to_thread(
+            generate_idv_document,
+            individual,
+            output_dir=STANDALONE_IDV_DOCUMENT_DIR,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"ID&V document generation failed: {exc}") from exc
+
+    pdf_path = Path(artifact["pdf_path"])
+    if not pdf_path.exists():
+        raise HTTPException(status_code=500, detail="Generated PDF is missing")
+    artifact_id = str(uuid.uuid4())
+    STANDALONE_IDV_DOCUMENTS[artifact_id] = {
+        key: Path(artifact[key])
+        for key in ("pdf_path", "html_path", "json_path")
+        if artifact.get(key)
+    }
+    return {
+        "artifact_id": artifact_id,
+        "document_type": artifact["document_type"],
+        "person_name": artifact["person_name"],
+        "generated_at": artifact["generated_at"],
+        "pdf_url": f"/api/idv-document-generation/{artifact_id}/pdf",
+        "notice": "Synthetic demo document — not valid for identity verification.",
+    }
+
+
+@app.get("/api/idv-document-generation/{artifact_id}/pdf")
+async def download_standalone_idv_document(artifact_id: str) -> FileResponse:
+    """Return a generated synthetic PDF using its opaque artifact identifier."""
+    artifact = STANDALONE_IDV_DOCUMENTS.get(artifact_id)
+    pdf_path = artifact.get("pdf_path") if artifact else None
+    if not pdf_path or not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Generated document not found")
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=pdf_path.name,
+        background=BackgroundTask(_delete_standalone_idv_artifact, artifact_id),
+    )
 
 
 @app.post("/api/case-review/refresh")
@@ -463,6 +537,18 @@ def _session(session_id: str | None) -> dict[str, Any]:
 
 def _demo_mode_enabled() -> bool:
     return os.getenv("DEMO_MODE", "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _optional_text(value: str | None) -> str | None:
+    return value.strip() or None if value else None
+
+
+def _delete_standalone_idv_artifact(artifact_id: str) -> None:
+    """Remove one-time synthetic document artifacts after their PDF is sent."""
+    artifact = STANDALONE_IDV_DOCUMENTS.pop(artifact_id, None)
+    if artifact:
+        for path in artifact.values():
+            path.unlink(missing_ok=True)
 
 
 def _is_supported_document_content(data: bytes, content_type: str) -> bool:
