@@ -91,7 +91,7 @@ Start Codex and sign in with ChatGPT when prompted:
 codex
 ```
 
-> **Note:** When accessing the app from another machine, replace `localhost`
+> **Note:** When accessing the app from a Cloud VM, replace `localhost`
 > in the app URL with the machine's IP address.
 
 #### Install supporting tools
