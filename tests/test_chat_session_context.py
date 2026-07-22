@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from src.agents.chat_graph import _execute_tool_call, _record_tool_result, _tool_specs
+from langchain_core.messages import AIMessage, HumanMessage
+
+from src.agents.chat_graph import _agent_node, _execute_tool_call, _record_tool_result, _tool_specs
 
 
 class ChatSessionContextTests(unittest.TestCase):
@@ -113,6 +115,26 @@ class ChatSessionContextTests(unittest.TestCase):
 
         self.assertIn("authoritative source", tool.description)
         self.assertIn("pre-signed URL", tool.description)
+
+    @patch("src.agents.chat_graph.ChatOpenAI")
+    def test_tool_enabled_chat_uses_responses_api_for_gpt_5_6(self, chat_openai) -> None:
+        bound_llm = Mock()
+        bound_llm.invoke.return_value = AIMessage(content="I can help with that.")
+        chat_openai.return_value.bind_tools.return_value = bound_llm
+
+        result = _agent_node(
+            {
+                "messages": [HumanMessage(content="What can you do?")],
+                "session": {"messages": []},
+            }
+        )
+
+        chat_openai.assert_called_once_with(
+            model="gpt-5.6",
+            timeout=30,
+            use_responses_api=True,
+        )
+        self.assertEqual(result["status"], "answered")
 
     @patch("src.agents.chat_graph.evaluate_csp_address")
     def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp) -> None:

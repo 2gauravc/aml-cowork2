@@ -213,6 +213,7 @@ def _agent_node(state: ChatGraphState) -> dict[str, Any]:
     llm = ChatOpenAI(
         model=os.getenv("OPENAI_MODEL", "gpt-5.6"),
         timeout=30,
+        use_responses_api=True,
     ).bind_tools(_tool_specs())
     try:
         response = llm.invoke(messages)
