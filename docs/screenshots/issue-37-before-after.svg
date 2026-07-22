@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="390" viewBox="0 0 900 390">
+  <rect width="900" height="390" fill="#edf1f5"/>
+  <text x="30" y="35" font-family="Arial" font-size="22" font-weight="bold" fill="#152033">Issue #37 — chatbot response capture</text>
+  <rect x="25" y="60" width="410" height="300" fill="#fff" stroke="#d8dee8"/>
+  <text x="45" y="95" font-family="Arial" font-size="18" font-weight="bold" fill="#152033">Before</text>
+  <rect x="45" y="115" width="370" height="75" fill="#f7f9fc" stroke="#d8dee8"/>
+  <text x="60" y="145" font-family="Arial" font-size="15" fill="#152033">[{'type': 'reasoning',</text>
+  <text x="60" y="170" font-family="Arial" font-size="15" fill="#152033">'encrypted_content': 'gAAAAAB...'},</text>
+  <text x="60" y="215" font-family="Arial" font-size="15" fill="#152033">{'type': 'text', 'text': 'There is no</text>
+  <text x="60" y="240" font-family="Arial" font-size="15" fill="#152033">UBO above 25%.'}]</text>
+  <rect x="465" y="60" width="410" height="300" fill="#fff" stroke="#d8dee8"/>
+  <text x="485" y="95" font-family="Arial" font-size="18" font-weight="bold" fill="#152033">After</text>
+  <rect x="485" y="115" width="370" height="75" fill="#f7f9fc" stroke="#d8dee8"/>
+  <text x="500" y="155" font-family="Arial" font-size="16" fill="#152033">There is no UBO above 25%.</text>
+</svg>
