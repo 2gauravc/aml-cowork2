@@ -811,7 +811,7 @@ async def _run_pipeline_for_session(
     session["pipeline_progress"] = {
         "node": "collect_required_inputs",
         "node_number": 1,
-        "total_nodes": 15,
+        "total_nodes": 16,
         "message": "Collecting Inputs",
         "using_cache": False,
         "status": "queued",
