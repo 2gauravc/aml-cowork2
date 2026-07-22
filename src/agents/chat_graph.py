@@ -231,11 +231,27 @@ def _agent_node(state: ChatGraphState) -> dict[str, Any]:
     next_messages = [*messages, response]
     if not getattr(response, "tool_calls", None):
         session = deepcopy(state.get("session", {}))
-        content = str(response.content or "")
+        content = _displayable_response_text(response.content)
         if content:
             session.setdefault("messages", []).append({"role": "assistant", "content": content})
         return {"messages": next_messages, "session": session, "status": "answered"}
     return {"messages": next_messages}
+
+
+def _displayable_response_text(content: Any) -> str:
+    """Return only user-facing text from a Chat Completions or Responses result."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+
+    return "\n".join(
+        block["text"]
+        for block in content
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+    )
 
 
 def _route_after_agent(state: ChatGraphState) -> str:

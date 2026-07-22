@@ -8,7 +8,13 @@ from unittest.mock import Mock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.agents.chat_graph import _agent_node, _execute_tool_call, _record_tool_result, _tool_specs
+from src.agents.chat_graph import (
+    _agent_node,
+    _displayable_response_text,
+    _execute_tool_call,
+    _record_tool_result,
+    _tool_specs,
+)
 
 
 class ChatSessionContextTests(unittest.TestCase):
@@ -135,6 +141,26 @@ class ChatSessionContextTests(unittest.TestCase):
             use_responses_api=True,
         )
         self.assertEqual(result["status"], "answered")
+
+    def test_response_text_omits_responses_reasoning_blocks(self) -> None:
+        content = _displayable_response_text(
+            [
+                {
+                    "type": "reasoning",
+                    "encrypted_content": "encrypted reasoning must not reach the UI",
+                },
+                {"type": "text", "text": "The customer has no UBO above 25%."},
+            ]
+        )
+
+        self.assertEqual(content, "The customer has no UBO above 25%.")
+        self.assertNotIn("encrypted", content)
+
+    def test_response_text_preserves_legacy_string_content(self) -> None:
+        self.assertEqual(
+            _displayable_response_text("A normal chat completion."),
+            "A normal chat completion.",
+        )
 
     @patch("src.agents.chat_graph.evaluate_csp_address")
     def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp) -> None:
