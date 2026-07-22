@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Single-instance EC2 demo deployment for AML Case Review Workspace.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC containing a public subnet with an internet gateway route.
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for the demo instance.
+  DomainName:
+    Type: String
+    Description: Fully qualified DNS name that will point to the Elastic IP for HTTPS (for example, demo.example.com).
+  RepositoryUrl:
+    Type: String
+    Default: https://github.com/2gauravc/aml-cowork2.git
+    Description: Public Git repository cloned by the instance bootstrap.
+  RepositoryRawUrl:
+    Type: String
+    Default: https://raw.githubusercontent.com/2gauravc/aml-cowork2
+    Description: Raw GitHub repository URL used to download the bootstrap script.
+  RepositoryBranch:
+    Type: String
+    Default: main
+    Description: Branch containing the deployment assets.
+  S3BucketName:
+    Type: String
+    Default: ''
+    Description: Optional existing document bucket name. Leave empty to omit S3 permissions.
+  S3Prefix:
+    Type: String
+    Default: ''
+    Description: Optional object prefix within the document bucket.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Amazon Linux 2023 AMI SSM parameter.
+
+Conditions:
+  HasS3Access: !Not [!Equals [!Ref S3BucketName, '']]
+
+Resources:
+  DemoSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS access for the AML Case Review Workspace demo.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP required for Caddy ACME certificate validation and redirect handling.
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS application access.
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo-sg
+
+  DemoInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: OptionalDocumentBucketAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - !If
+                - HasS3Access
+                - Effect: Allow
+                  Action: s3:ListBucket
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${S3BucketName}
+                  Condition:
+                    StringLike:
+                      s3:prefix:
+                        - !If [HasS3Access, !Sub '${S3Prefix}*', '']
+                - !Ref AWS::NoValue
+              - !If
+                - HasS3Access
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${S3BucketName}/${S3Prefix}*
+                - !Ref AWS::NoValue
+
+  DemoInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref DemoInstanceRole
+
+  DemoInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.medium
+      IamInstanceProfile: !Ref DemoInstanceProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !GetAtt DemoSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo
+      UserData:
+        Fn::Base64: !Sub |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          bootstrap_url="${RepositoryRawUrl}/${RepositoryBranch}/infrastructure/ec2/user-data.sh"
+          for attempt in $(seq 1 30); do
+            if curl --fail --location --retry 3 "$bootstrap_url" --output /tmp/aml-cowork2-user-data.sh; then
+              chmod +x /tmp/aml-cowork2-user-data.sh
+              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${DomainName}"
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+  DemoElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo-eip
+
+  DemoElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt DemoElasticIp.AllocationId
+      InstanceId: !Ref DemoInstance
+
+Outputs:
+  InstanceId:
+    Description: EC2 instance ID.
+    Value: !Ref DemoInstance
+  ElasticIp:
+    Description: Elastic IP address. Create an A record for DomainName pointing here.
+    Value: !Ref DemoElasticIp
+  ApplicationUrl:
+    Description: Application URL after DNS propagation and Caddy certificate issuance.
+    Value: !Sub https://${DomainName}
+  SessionManagerCommand:
+    Description: Start an operator shell without opening SSH.
+    Value: !Sub aws ssm start-session --target ${DemoInstance}
