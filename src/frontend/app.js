@@ -217,7 +217,10 @@ function App() {
     setDocuments(data.documents || []);
     setDocumentRequirements(data.document_requirements || []);
     setDocumentLinks((current) => {
-      const keys = new Set((data.documents || []).map((document) => documentKey(document)));
+      const keys = new Set([
+        ...(data.documents || []).map((document) => documentKey(document)),
+        ...(data.document_requirements || []).map((requirement) => documentKey(requirement.cache_document)),
+      ].filter(Boolean));
       return Object.fromEntries(
         Object.entries(current).filter(([key]) => keys.has(key)),
       );
