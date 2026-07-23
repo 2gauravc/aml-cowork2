@@ -81,6 +81,7 @@ function App() {
     ? formatPipelineProgress(pipelineProgress)
     : latestAssistantMessage(messages) || "Setting up";
   const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
+  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review";
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
     [documents],
@@ -131,8 +132,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (activeWorkspace !== "cdd") setChatOpen(false);
-  }, [activeWorkspace]);
+    if (!chatWorkspaceActive) setChatOpen(false);
+  }, [chatWorkspaceActive]);
 
   useEffect(() => {
     if (!chatOpen) return undefined;
@@ -146,10 +147,10 @@ function App() {
   useEffect(() => {
     if (chatOpen) {
       chatCloseRef.current?.focus();
-    } else if (activeWorkspace === "cdd") {
+    } else if (chatWorkspaceActive) {
       chatLauncherRef.current?.focus();
     }
-  }, [activeWorkspace, chatOpen]);
+  }, [chatOpen, chatWorkspaceActive]);
 
   useEffect(() => {
     if (!sessionId || !documents.length) return;
@@ -569,20 +570,20 @@ function App() {
               CDD
             </button>
             <button
-              className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "generation"}
-              onClick={() => setActiveWorkspace("generation")}
-            >
-              Documents
-            </button>
-            <button
               className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
               role="tab"
               aria-selected={activeWorkspace === "case-review"}
               onClick={() => setActiveWorkspace("case-review")}
             >
               Case Review
+            </button>
+            <button
+              className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
+              role="tab"
+              aria-selected={activeWorkspace === "generation"}
+              onClick={() => setActiveWorkspace("generation")}
+            >
+              Documents
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "csp" ? "active" : ""}`}
@@ -858,7 +859,7 @@ function App() {
           </div>
         </main>
 
-        {activeWorkspace === "cdd" && (
+        {chatWorkspaceActive && (
           <>
             <button
               className="chat-launcher"
