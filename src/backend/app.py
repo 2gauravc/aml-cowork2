@@ -25,6 +25,7 @@ from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
+from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint, load_digital_footprint_skill
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.members import get_company_members_by_name
@@ -101,6 +102,14 @@ class CSPAssessmentRequest(BaseModel):
     registered_address: str = Field(min_length=1)
 
 
+class DigitalFootprintRequest(BaseModel):
+    company_name: str = Field(min_length=1, max_length=250)
+    jurisdiction: str | None = Field(default=None, max_length=80)
+    registration_number: str | None = Field(default=None, max_length=120)
+    known_domain: str | None = Field(default=None, max_length=250)
+    registered_address: str | None = Field(default=None, max_length=500)
+
+
 class StandaloneIDVDocumentRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     document_type: Literal["passport", "national_id"]
@@ -169,6 +178,12 @@ async def get_csp_skill() -> dict[str, str]:
     return {"skill": load_csp_skill()}
 
 
+@app.get("/api/digital-footprint/skill")
+async def get_digital_footprint_skill() -> dict[str, str]:
+    """Return the standalone digital-footprint skill without session state."""
+    return {"skill": load_digital_footprint_skill()}
+
+
 @app.get("/api/demo/status")
 async def demo_status() -> dict[str, bool]:
     """Tell the frontend whether fixture-backed Demo Mode is enabled."""
@@ -194,6 +209,24 @@ async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
             company_name=request.company_name,
         )
     except CSPAssessmentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/digital-footprint/assess")
+async def assess_digital_footprint(request: DigitalFootprintRequest) -> dict[str, Any]:
+    """Run standalone footprint research without reading or writing CDD session state."""
+    if _demo_mode_enabled():
+        raise HTTPException(status_code=400, detail="Digital-footprint assessment is disabled in Demo Mode.")
+    try:
+        return await asyncio.to_thread(
+            evaluate_digital_footprint,
+            request.company_name,
+            jurisdiction=request.jurisdiction,
+            registration_number=request.registration_number,
+            known_domain=request.known_domain,
+            registered_address=request.registered_address,
+        )
+    except DigitalFootprintError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

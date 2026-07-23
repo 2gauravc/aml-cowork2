@@ -3,6 +3,7 @@ const { useEffect, useMemo, useRef, useState } = React;
 const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
 const TOOL_WORKSPACES = [
   { id: "csp", label: "CSP Detection" },
+  { id: "digital-footprint", label: "Digital Footprint" },
   { id: "document-extraction", label: "Document Extraction" },
   { id: "idv-document-generation", label: "ID&V Document Generation" },
 ];
@@ -46,6 +47,12 @@ function App() {
   const [cspAssessing, setCspAssessing] = useState(false);
   const [cspSkill, setCspSkill] = useState("");
   const [cspSkillLoading, setCspSkillLoading] = useState(false);
+  const [digitalFootprintForm, setDigitalFootprintForm] = useState({ company_name: "", jurisdiction: "", registration_number: "", known_domain: "", registered_address: "" });
+  const [digitalFootprintResult, setDigitalFootprintResult] = useState(null);
+  const [digitalFootprintError, setDigitalFootprintError] = useState("");
+  const [digitalFootprintAssessing, setDigitalFootprintAssessing] = useState(false);
+  const [digitalFootprintSkill, setDigitalFootprintSkill] = useState("");
+  const [digitalFootprintSkillLoading, setDigitalFootprintSkillLoading] = useState(false);
   const [extractionFile, setExtractionFile] = useState(null);
   const [extractionResult, setExtractionResult] = useState(null);
   const [extractionError, setExtractionError] = useState("");
@@ -537,6 +544,43 @@ function App() {
     }
   }
 
+  async function loadDigitalFootprintSkill() {
+    if (digitalFootprintSkill || digitalFootprintSkillLoading) return;
+    setDigitalFootprintSkillLoading(true);
+    try {
+      const response = await fetch("/api/digital-footprint/skill");
+      const data = await readJsonResponse(response, "Unable to load Digital Footprint skill");
+      setDigitalFootprintSkill(data.skill || "");
+    } catch (err) {
+      setDigitalFootprintError(err.message);
+    } finally {
+      setDigitalFootprintSkillLoading(false);
+    }
+  }
+
+  function updateDigitalFootprintForm(field, value) {
+    setDigitalFootprintForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function assessDigitalFootprint() {
+    if (!digitalFootprintForm.company_name.trim()) return;
+    setDigitalFootprintAssessing(true);
+    setDigitalFootprintError("");
+    setDigitalFootprintResult(null);
+    try {
+      const response = await fetch("/api/digital-footprint/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(Object.entries(digitalFootprintForm).map(([key, value]) => [key, value.trim() || null]))),
+      });
+      setDigitalFootprintResult(await readJsonResponse(response, "Digital Footprint assessment failed"));
+    } catch (err) {
+      setDigitalFootprintError(err.message);
+    } finally {
+      setDigitalFootprintAssessing(false);
+    }
+  }
+
   function selectExtractionFile(event) {
     setExtractionFile(event.target.files?.[0] || null);
     setExtractionResult(null);
@@ -923,6 +967,19 @@ function App() {
                 onAssess={assessCsp}
                 demoMode={demoMode}
               />
+            ) : activeWorkspace === "digital-footprint" ? (
+              <DigitalFootprint
+                form={digitalFootprintForm}
+                result={digitalFootprintResult}
+                error={digitalFootprintError}
+                assessing={digitalFootprintAssessing}
+                skill={digitalFootprintSkill}
+                skillLoading={digitalFootprintSkillLoading}
+                onChange={updateDigitalFootprintForm}
+                onSkillToggle={(open) => { if (open) loadDigitalFootprintSkill(); }}
+                onAssess={assessDigitalFootprint}
+                demoMode={demoMode}
+              />
             ) : activeWorkspace === "document-extraction" ? (
               <DocumentExtraction
                 file={extractionFile}
@@ -1212,6 +1269,62 @@ function CSPDetection({
             </div>
           )}
         </Section>
+      )}
+    </>
+  );
+}
+
+function DigitalFootprint({ form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, demoMode }) {
+  const assessment = result?.assessment || {};
+  const adverseNews = assessment.adverse_news || {};
+  const footprint = result?.business_footprint || {};
+  return (
+    <>
+      <Section title="Digital Footprint">
+        {demoMode && <p className="empty">Digital Footprint assessment is disabled in Demo Mode.</p>}
+        <p className="empty">Research a company independently of any CDD case. Results are public-web research support, not a compliance decision.</p>
+        <details className="skill-details" onToggle={(event) => onSkillToggle(event.currentTarget.open)}>
+          <summary>Assessment skill</summary>
+          {skillLoading ? <p className="empty">Loading skill…</p> : <pre className="skill-content">{skill || "Open this section to load the current skill."}</pre>}
+        </details>
+        <div className="csp-form digital-footprint-form">
+          <input aria-label="Company legal name" placeholder="Company legal name" value={form.company_name} disabled={demoMode || assessing} onChange={(event) => onChange("company_name", event.target.value)} />
+          <input aria-label="Jurisdiction" placeholder="Jurisdiction (optional)" value={form.jurisdiction} disabled={demoMode || assessing} onChange={(event) => onChange("jurisdiction", event.target.value)} />
+          <input aria-label="Registration number" placeholder="Registration number (optional)" value={form.registration_number} disabled={demoMode || assessing} onChange={(event) => onChange("registration_number", event.target.value)} />
+          <input aria-label="Known website or domain" placeholder="Known website or domain (optional)" value={form.known_domain} disabled={demoMode || assessing} onChange={(event) => onChange("known_domain", event.target.value)} />
+          <textarea aria-label="Registered address" placeholder="Registered address (optional)" value={form.registered_address} disabled={demoMode || assessing} onChange={(event) => onChange("registered_address", event.target.value)} />
+          <button disabled={demoMode || assessing || !form.company_name.trim()} onClick={onAssess}>{assessing ? "Assessing…" : "Assess footprint"}</button>
+        </div>
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <>
+          <Section title="Footprint Assessment">
+            <dl className="field-list">
+              <div><dt>Strength</dt><dd>{assessment.footprint_strength || "-"}</dd></div>
+              <div><dt>Confidence</dt><dd>{assessment.confidence || "-"}</dd></div>
+              <div><dt>Adverse news</dt><dd>{adverseNews.status || "-"}</dd></div>
+              <div><dt>Adverse-news confidence</dt><dd>{adverseNews.confidence || "-"}</dd></div>
+            </dl>
+            <div className="review-list">
+              {Object.entries(assessment.dimensions || {}).map(([name, item]) => <div className="review-item" key={name}><strong>{name.replaceAll("_", " ")}</strong><p>{`${item.rating || "-"}: ${item.rationale || "No rationale provided."}`}</p></div>)}
+            </div>
+          </Section>
+          <Section title="Adverse News">
+            {adverseNews.items?.length ? <div className="review-list">{adverseNews.items.map((item, index) => <div className="review-item" key={`${item.subject}-${index}`}><strong>{`${item.subject} — ${item.disposition}`}</strong><p>{item.summary}</p><small>{item.category}</small></div>)}</div> : <p className="empty">No material adverse-news items were returned. Review search coverage limitations below.</p>}
+          </Section>
+          <Section title="Business Footprint">
+            <p><strong>Nature of business:</strong> {footprint.nature_of_business?.publicly_observed || "Unavailable"}</p>
+            <p><strong>Consistency:</strong> {footprint.nature_of_business?.consistency || "Unavailable"}</p>
+            <BulletList items={assessment.limitations} empty="No limitations recorded." />
+            <BulletList items={assessment.recommended_actions} empty="No additional actions recommended." />
+          </Section>
+          <Section title="Sources">
+            <div className="csp-sources">{(result.sources || []).map((source) => <div key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url || source.id}</a><small>{` — ${source.query}`}</small></div>)}</div>
+          </Section>
+          <Section title="Digital Footprint JSON"><pre className="json-view">{JSON.stringify(result, null, 2)}</pre></Section>
+        </>
       )}
     </>
   );
