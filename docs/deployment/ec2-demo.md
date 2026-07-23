@@ -4,7 +4,7 @@ This guide provisions a single `t3.medium` EC2 instance for an internal/demo dep
 
 ## Prerequisites
 
-- An AWS account, a VPC, and a **public subnet** with an Internet Gateway route.
+- An AWS account with permissions to create CloudFormation, EC2, IAM, and Elastic IP resources in **`us-east-1`**. The template creates its own VPC, public subnet, Internet Gateway, and route table.
 - AWS CLI credentials that can create CloudFormation, EC2, IAM, and Elastic IP resources.
 - A DNS name, such as `demo.example.com`. Caddy needs the name to obtain a browser-trusted HTTPS certificate.
 - The deployment branch pushed to the configured repository. User data downloads `infrastructure/ec2/user-data.sh` from that branch.
@@ -16,15 +16,14 @@ Create the stack from the repository root:
 
 ```bash
 aws cloudformation deploy \
+  --region us-east-1 \
   --stack-name aml-cowork2-demo \
   --template-file infrastructure/cloudformation/ec2-demo.yml \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
-    VpcId=vpc-0123456789abcdef0 \
-    SubnetId=subnet-0123456789abcdef0 \
     DomainName=demo.example.com \
     RepositoryBranch=deploy/ec2-demo \
-    S3BucketName=your-existing-document-bucket \
+    S3BucketName=onbo-bkt \
     S3Prefix=aml-cowork2/
 ```
 

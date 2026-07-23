@@ -2,12 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Single-instance EC2 demo deployment for AML Case Review Workspace.
 
 Parameters:
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: VPC containing a public subnet with an internet gateway route.
-  SubnetId:
-    Type: AWS::EC2::Subnet::Id
-    Description: Public subnet for the demo instance.
   DomainName:
     Type: String
     Description: Fully qualified DNS name that will point to the Elastic IP for HTTPS (for example, demo.example.com).
@@ -25,8 +19,8 @@ Parameters:
     Description: Branch containing the deployment assets.
   S3BucketName:
     Type: String
-    Default: ''
-    Description: Optional existing document bucket name. Leave empty to omit S3 permissions.
+    Default: onbo-bkt
+    Description: Existing document bucket name.
   S3Prefix:
     Type: String
     Default: ''
@@ -40,11 +34,67 @@ Conditions:
   HasS3Access: !Not [!Equals [!Ref S3BucketName, '']]
 
 Resources:
+  DemoVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo-vpc
+
+  DemoInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo-igw
+
+  DemoInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref DemoInternetGateway
+      VpcId: !Ref DemoVpc
+
+  DemoPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DemoVpc
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo-public-routes
+
+  DemoDefaultInternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: DemoInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref DemoPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref DemoInternetGateway
+
+  DemoPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DemoVpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: aml-cowork2-demo-public-subnet
+
+  DemoPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DemoPublicRouteTable
+      SubnetId: !Ref DemoPublicSubnet
+
   DemoSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: HTTPS access for the AML Case Review Workspace demo.
-      VpcId: !Ref VpcId
+      VpcId: !Ref DemoVpc
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -108,7 +158,7 @@ Resources:
       ImageId: !Ref LatestAmiId
       InstanceType: t3.medium
       IamInstanceProfile: !Ref DemoInstanceProfile
-      SubnetId: !Ref SubnetId
+      SubnetId: !Ref DemoPublicSubnet
       SecurityGroupIds:
         - !GetAtt DemoSecurityGroup.GroupId
       Tags:
@@ -156,3 +206,9 @@ Outputs:
   SessionManagerCommand:
     Description: Start an operator shell without opening SSH.
     Value: !Sub aws ssm start-session --target ${DemoInstance}
+  VpcId:
+    Description: VPC created for the demo environment.
+    Value: !Ref DemoVpc
+  PublicSubnetId:
+    Description: Public subnet created for the demo environment.
+    Value: !Ref DemoPublicSubnet
