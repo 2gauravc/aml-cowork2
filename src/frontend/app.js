@@ -95,6 +95,11 @@ function App() {
     ? formatPipelineProgress(pipelineProgress)
     : latestAssistantMessage(messages) || "Setting up";
   const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
+  const missingDocumentRequirements = useMemo(
+    () => documentRequirements.filter((requirement) => requirement.status === "not_found"),
+    [documentRequirements],
+  );
+  const cddPausedForDocuments = pipelineStatus === "awaiting_documents";
   const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review";
   const activeToolWorkspace = TOOL_WORKSPACES.some((tool) => tool.id === activeWorkspace);
   const documentKeyList = useMemo(
@@ -711,6 +716,19 @@ function App() {
             {pipelineLoading && <p className="empty">{pipelineStatusText}</p>}
           </Section>
 
+          {cddPausedForDocuments && (
+            <section className="pipeline-paused-callout" aria-live="polite">
+              <div>
+                <strong>CDD paused — documents required</strong>
+                <p>
+                  {`${missingDocumentRequirements.length} required ID&V ${missingDocumentRequirements.length === 1 ? "document is" : "documents are"} unavailable.`}
+                  {" Generate the missing documents or upload them to continue the CDD pipeline."}
+                </p>
+              </div>
+              <button onClick={() => setActiveWorkspace("generation")}>Review required documents</button>
+            </section>
+          )}
+
           <div className="actions">
             <button disabled={!cdd || loading || pipelineRunning} onClick={generatePdf}>Generate PDF</button>
             {pdfUrl && (
@@ -1306,6 +1324,12 @@ function DocumentManagement({
         <button disabled={demoMode || loading || !missing.length} onClick={onGenerate}>Generate Missing Documents</button>
         <button disabled={demoMode || loading || !hasProcessableDocuments} onClick={onProcess}>Process Documents</button>
       </div>
+
+      {missing.length > 0 && (
+        <p className="document-required-note">
+          {`${missing.length} required document${missing.length === 1 ? " is" : "s are"} unavailable. Generate the missing ID&V documents or upload customer-provided PDFs; CDD resumes automatically once all requirements are available.`}
+        </p>
+      )}
 
       {requirements.length ? (
         <table>

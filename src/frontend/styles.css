@@ -391,6 +391,38 @@ th {
   font-style: italic;
 }
 
+.pipeline-paused-callout,
+.document-required-note {
+  border: 1px solid #d97706;
+  background: #fffbeb;
+  color: #78350f;
+}
+
+.pipeline-paused-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border-radius: 8px;
+}
+
+.pipeline-paused-callout strong {
+  display: block;
+}
+
+.pipeline-paused-callout p,
+.document-required-note {
+  margin: 5px 0 0;
+}
+
+.document-required-note {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -864,6 +896,11 @@ th {
   .idv-generation-form,
   .document-row {
     grid-template-columns: 1fr;
+  }
+
+  .pipeline-paused-callout {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .document-controls {
