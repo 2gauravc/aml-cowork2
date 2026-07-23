@@ -12,6 +12,7 @@ from langgraph.graph.message import add_messages
 
 SectionStatus = Literal["complete", "incomplete"]
 FinalRecommendation = Literal["completed", "human_review", "rejected"]
+GenerationStatus = Literal["not_started", "in_progress", "completed", "failed"]
 
 
 class CustomerMetadata(TypedDict, total=False):
@@ -91,13 +92,17 @@ class IndividualIdentityVerificationCDD(CDDSection, total=False):
 
 
 class CDD(TypedDict, total=False):
-    status: SectionStatus
     started_at: str
     completed_at: str
     ownership_and_control: OwnershipAndControlCDD
     company_business_profile: CompanyBusinessProfileCDD
     individual_identity_verification: IndividualIdentityVerificationCDD
     documents: list[dict[str, Any]]
+
+
+class CaseStatus(TypedDict):
+    cdd_generation: GenerationStatus
+    risk_flags_present: int
 
 
 class CaseDocument(TypedDict, total=False):
@@ -134,6 +139,7 @@ class CDDState(TypedDict, total=False):
     documents: Annotated[list[CaseDocument], add]
     evidence: Annotated[list[EvidenceItem], add]
     risk_flags: Annotated[list[RiskFlag], add]
+    case_status: CaseStatus
     final_recommendation: FinalRecommendation | None
     case_review_summary: dict[str, Any] | None
     messages: Annotated[list[AnyMessage], add_messages]
@@ -163,7 +169,6 @@ def new_cdd_state(
             "kyc_case": kyc_case,
         },
         "cdd": {
-            "status": "incomplete",
             "started_at": datetime.now(UTC).isoformat(),
             "ownership_and_control": {
                 "status": "incomplete",
@@ -188,6 +193,7 @@ def new_cdd_state(
         "documents": [],
         "evidence": [],
         "risk_flags": [],
+        "case_status": {"cdd_generation": "in_progress", "risk_flags_present": 0},
         "final_recommendation": None,
         "case_review_summary": None,
         "messages": [],

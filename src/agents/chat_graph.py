@@ -32,6 +32,7 @@ from src.tools.customer_static import get_customer_static_by_name
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.pdf import render_cdd_pdf
+from src.utils.case_status import sync_case_status
 from src.utils.s3_documents import presign_document_url
 
 
@@ -569,6 +570,7 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "case_id": session.get("case_id"),
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
+        "case_status": session.get("case_status"),
         "has_cdd": bool(session.get("cdd")),
         "graph_state_keys": sorted(graph_state) if isinstance(graph_state, dict) else [],
         "document_requirement_counts": requirement_counts,
@@ -706,6 +708,7 @@ def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> d
         existing = session.setdefault("risk_flags", [])
         if not any(item.get("category") == "csp_address" for item in existing):
             existing.append(flag)
+        sync_case_status(session)
     return result
 
 
@@ -741,12 +744,15 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
+    session["case_status"] = graph_state.get("case_status", session.get("case_status", {}))
+    sync_case_status(session)
     session["final_recommendation"] = graph_state.get("final_recommendation")
     return {
         "cdd": cdd,
         "documents": session["documents"],
         "evidence_count": len(session["evidence"]),
         "risk_flags": session["risk_flags"],
+        "case_status": session["case_status"],
         "final_recommendation": session["final_recommendation"],
     }
 

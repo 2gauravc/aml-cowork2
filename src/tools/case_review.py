@@ -71,6 +71,7 @@ def load_case_review_skill(path: str | Path = SKILL_PATH) -> str:
 def generate_case_review_summary(
     *,
     cdd: dict[str, Any],
+    case_status: dict[str, Any],
     risk_flags: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
     final_recommendation: str | None,
@@ -83,6 +84,7 @@ def generate_case_review_summary(
     outcome = _outcome(final_recommendation)
     evidence_packet = {
         "cdd": _compact(cdd),
+        "case_status": _compact(case_status),
         "risk_flags": [_risk_flag_packet(flag, index) for index, flag in enumerate(risk_flags, start=1)],
         "evidence": [_evidence_packet(item, index) for index, item in enumerate(evidence, start=1)],
     }

@@ -29,6 +29,7 @@ from src.tools.case_review import (
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
+from src.utils.case_status import build_case_status
 from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
 from src.utils.idv_document_pipeline import IDV_SOURCE_LABELS, generate_idv_documents
 from src.utils.s3_documents import (
@@ -677,15 +678,17 @@ def finalize_cdd(state: CDDState) -> dict[str, Any]:
     complete = all(status == "complete" for status in section_statuses)
     open_flags = [flag for flag in state.get("risk_flags", []) if flag.get("status") == "open"]
 
+    cdd["completed_at"] = datetime.now(UTC).isoformat()
     if complete and not open_flags:
         recommendation = "completed"
-        cdd["status"] = "complete"
-        cdd["completed_at"] = datetime.now(UTC).isoformat()
     else:
         recommendation = "human_review"
-        cdd["status"] = "incomplete"
 
-    return {"cdd": cdd, "final_recommendation": recommendation}
+    return {
+        "cdd": cdd,
+        "case_status": build_case_status("completed", state.get("risk_flags", [])),
+        "final_recommendation": recommendation,
+    }
 
 
 def generate_case_review(state: CDDState) -> dict[str, Any]:
@@ -694,6 +697,7 @@ def generate_case_review(state: CDDState) -> dict[str, Any]:
     try:
         summary = generate_case_review_summary(
             cdd=state.get("cdd", {}),
+            case_status=state.get("case_status", {}),
             risk_flags=state.get("risk_flags", []),
             evidence=state.get("evidence", []),
             final_recommendation=final_recommendation,

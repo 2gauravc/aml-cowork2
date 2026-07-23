@@ -3,6 +3,10 @@
   "jurisdiction": "GB",
   "case_id": "demo-northstar-001",
   "pipeline_status": "complete",
+  "case_status": {
+    "cdd_generation": "completed",
+    "risk_flags_present": 1
+  },
   "pipeline_progress": {
     "node": "generate_case_review",
     "node_number": 16,
@@ -18,7 +22,6 @@
     }
   ],
   "cdd": {
-    "status": "incomplete",
     "started_at": "2026-07-13T09:00:00+00:00",
     "company_business_profile": {
       "status": "complete",

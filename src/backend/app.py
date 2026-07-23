@@ -32,6 +32,7 @@ from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.kyc_cache import get_cache_value
 from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
+from src.utils.case_status import sync_case_status
 from src.utils.s3_documents import (
     download_document_from_s3,
     find_documents_in_s3,
@@ -314,6 +315,7 @@ async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, An
         summary = await asyncio.to_thread(
             generate_case_review_summary,
             cdd=session["cdd"],
+            case_status=session.get("case_status", {}),
             risk_flags=session.get("risk_flags", []),
             evidence=session.get("evidence", []),
             final_recommendation=session.get("final_recommendation"),
@@ -524,6 +526,7 @@ def _session(session_id: str | None) -> dict[str, Any]:
     session_id = session_id or str(uuid.uuid4())
     session = {
         "session_id": session_id,
+        "case_status": {"cdd_generation": "not_started", "risk_flags_present": 0},
         "messages": [
             {
                 "role": "assistant",
@@ -575,6 +578,7 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     session.update(deepcopy(fixture))
     session["session_id"] = session_id
     session["demo_mode"] = True
+    sync_case_status(session, generation="completed")
     return _response(session, status="complete")
 
 
@@ -593,6 +597,7 @@ def _response(
         "jurisdiction": session.get("jurisdiction"),
         "case_id": session.get("case_id"),
         "cdd": session.get("cdd"),
+        "case_status": session.get("case_status"),
         "documents": session.get("documents", []),
         "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
@@ -711,21 +716,30 @@ async def _resume_if_ready(session: dict[str, Any]) -> None:
     requirements = session.get("document_requirements", [])
     if any(row.get("status") == "not_found" for row in requirements):
         session["pipeline_status"] = "awaiting_documents"
+        sync_case_status(session, generation="in_progress")
         return
     thread_id = session.get("graph_thread_id")
     if not thread_id:
         return
     session["pipeline_status"] = "running"
+    sync_case_status(session, generation="in_progress")
     def publish_progress(progress: dict[str, Any]) -> None:
         session["pipeline_progress"] = progress
-    result = await asyncio.to_thread(
-        resume_cdd_agent_state,
-        thread_id=thread_id,
-        document_requirements=requirements,
-        progress_callback=publish_progress,
-    )
-    _apply_graph_result(session, result)
-    session["pipeline_status"] = "complete"
+    try:
+        result = await asyncio.to_thread(
+            resume_cdd_agent_state,
+            thread_id=thread_id,
+            document_requirements=requirements,
+            progress_callback=publish_progress,
+        )
+        _apply_graph_result(session, result)
+        session["pipeline_status"] = "complete"
+        sync_case_status(session, generation="completed")
+    except Exception as exc:
+        session["pipeline_status"] = "error"
+        session["pipeline_error"] = str(exc)
+        sync_case_status(session, generation="failed")
+        raise
 
 
 def _session_document_by_key(
@@ -744,16 +758,17 @@ def _session_document_by_key(
     return None
 
 
-def _summary(cdd: dict[str, Any]) -> str:
+def _summary(cdd: dict[str, Any], case_status: dict[str, Any]) -> str:
     profile = cdd.get("company_business_profile", {}).get("customer_static", {})
     ownership = cdd.get("ownership_and_control", {})
     ubos = len(ownership.get("ubos", []))
     shareholders = len(ownership.get("shareholders_over_10_percent", []))
     related = len(ownership.get("related_parties", []))
-    status = cdd.get("status", "unknown")
+    generation = str(case_status.get("cdd_generation", "not_started")).replace("_", " ")
+    risk_count = case_status.get("risk_flags_present", 0)
     name = profile.get("name") or "the customer"
     return (
-        f"CDD generated for {name}. Status: {status}. "
+        f"CDD generation for {name}: {generation}. Risk flags present: {risk_count}. "
         f"UBOs: {ubos}; shareholders >10%: {shareholders}; "
         f"related parties: {related}."
     )
@@ -808,6 +823,7 @@ async def _run_pipeline_for_session(
     session["jurisdiction"] = jurisdiction
     session["pipeline_status"] = "running"
     session["pipeline_error"] = None
+    sync_case_status(session, generation="in_progress")
     session["pipeline_progress"] = {
         "node": "collect_required_inputs",
         "node_number": 1,
@@ -880,6 +896,9 @@ def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) ->
     session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
+    if graph_state.get("case_status"):
+        session["case_status"] = graph_state["case_status"]
+    sync_case_status(session)
     session["final_recommendation"] = graph_state.get("final_recommendation")
     session["case_review_summary"] = graph_state.get("case_review_summary")
     session["document_requirements"] = graph_state.get("document_requirements", [])
@@ -913,22 +932,27 @@ async def _complete_pipeline_for_session(
         session["document_results"] = cdd.get("documents", [])
         if any(row.get("status") == "not_found" for row in session["document_requirements"]):
             session["pipeline_status"] = "awaiting_documents"
+            sync_case_status(session, generation="in_progress")
             return
         for message in graph_state.get("messages", []):
             content = getattr(message, "content", None)
             if content:
                 session["messages"].append({"role": "assistant", "content": str(content)})
 
-        session["messages"].append({"role": "assistant", "content": _summary(cdd)})
+        session["messages"].append(
+            {"role": "assistant", "content": _summary(cdd, session["case_status"])}
+        )
 
         if generate_pdf:
             pdf_path = render_cdd_pdf(cdd)
             session["pdf_path"] = str(pdf_path)
 
         session["pipeline_status"] = "complete"
+        sync_case_status(session, generation="completed")
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)
+        sync_case_status(session, generation="failed")
         current_progress = session.get("pipeline_progress") or {}
         session["pipeline_progress"] = {
             **current_progress,
@@ -1061,6 +1085,7 @@ def _session_context(session: dict[str, Any]) -> dict[str, Any]:
         "customer_name": session.get("customer_name"),
         "jurisdiction": session.get("jurisdiction"),
         "case_id": session.get("case_id"),
+        "case_status": session.get("case_status"),
         "has_cdd": bool(session.get("cdd")),
         "has_pdf": bool(session.get("pdf_path")),
         "tool_results": [

@@ -33,6 +33,10 @@ function App() {
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
+  const [caseStatus, setCaseStatus] = useState({
+    cdd_generation: "not_started",
+    risk_flags_present: 0,
+  });
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [cspCompanyName, setCspCompanyName] = useState("");
@@ -83,7 +87,8 @@ function App() {
   const cddMetadata = {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
-    status: cdd ? cddStatusLabel(cdd.status) : "-",
+    generationStatus: caseStatus.cdd_generation || "not_started",
+    riskFlagCount: Number(caseStatus.risk_flags_present) || 0,
   };
   const pipelineStatusText = pipelineProgress
     ? formatPipelineProgress(pipelineProgress)
@@ -205,6 +210,7 @@ function App() {
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
     setRiskFlagRecords(data.risk_flags || []);
+    setCaseStatus(data.case_status || { cdd_generation: "not_started", risk_flags_present: 0 });
     setCaseReviewSummary(data.case_review_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
@@ -699,8 +705,14 @@ function App() {
               <strong>{cddMetadata.date}</strong>
             </div>
             <div className="metadata-item">
-              <span>CDD Status</span>
-              <strong>{cddMetadata.status}</strong>
+              <span>CDD Generation</span>
+              <strong>{generationStatusLabel(cddMetadata.generationStatus)}</strong>
+            </div>
+            <div className="metadata-item">
+              <span>Risk Flags</span>
+              <strong className={cddMetadata.riskFlagCount > 0 ? "risk-flags-present" : ""}>
+                {`${cddMetadata.riskFlagCount} risk flags present`}
+              </strong>
             </div>
           </section>
 
@@ -1517,8 +1529,13 @@ function latestAssistantMessage(messages) {
   return null;
 }
 
-function cddStatusLabel(status) {
-  return status === "complete" ? "Complete" : "Incomplete";
+function generationStatusLabel(status) {
+  return {
+    not_started: "Not started",
+    in_progress: "In Progress",
+    completed: "Completed",
+    failed: "Failed",
+  }[status] || "Not started";
 }
 
 function formatPipelineProgress(progress) {

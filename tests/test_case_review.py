@@ -38,7 +38,8 @@ class CaseReviewTests(unittest.TestCase):
             "src.tools.case_review.OpenAI", return_value=client
         ):
             result = generate_case_review_summary(
-                cdd={"status": "incomplete"},
+                cdd={},
+                case_status={"cdd_generation": "completed", "risk_flags_present": 0},
                 risk_flags=[{"category": "csp_address", "status": "open", "description": "CSP: Evaluation: Inconclusive."}],
                 evidence=[
                     {
@@ -82,7 +83,8 @@ class CaseReviewTests(unittest.TestCase):
         }
         result = generate_case_review(
             {
-                "cdd": {"status": "incomplete"},
+                "cdd": {},
+                "case_status": {"cdd_generation": "completed", "risk_flags_present": 1},
                 "risk_flags": [{"status": "open", "category": "ownership"}],
                 "evidence": [],
                 "final_recommendation": "human_review",
@@ -91,6 +93,7 @@ class CaseReviewTests(unittest.TestCase):
 
         self.assertEqual(result["case_review_summary"]["outcome"], "ready_to_complete")
         self.assertEqual(generate_summary.call_args.kwargs["final_recommendation"], "human_review")
+        self.assertEqual(generate_summary.call_args.kwargs["case_status"]["risk_flags_present"], 1)
 
     def test_unavailable_review_keeps_human_review_outcome(self) -> None:
         result = unavailable_case_review("human_review", "OpenAI unavailable")
