@@ -1,6 +1,11 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
+const TOOL_WORKSPACES = [
+  { id: "csp", label: "CSP Detection" },
+  { id: "document-extraction", label: "Document Extraction" },
+  { id: "idv-document-generation", label: "ID&V Document Generation" },
+];
 
 function App() {
   const [sessionId, setSessionId] = useState(null);
@@ -28,6 +33,7 @@ function App() {
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [cspCompanyName, setCspCompanyName] = useState("");
   const [cspAddress, setCspAddress] = useState("");
@@ -65,6 +71,8 @@ function App() {
   const extractionInputRef = useRef(null);
   const chatLauncherRef = useRef(null);
   const chatCloseRef = useRef(null);
+  const toolsMenuRef = useRef(null);
+  const toolsMenuButtonRef = useRef(null);
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
@@ -82,6 +90,7 @@ function App() {
     : latestAssistantMessage(messages) || "Setting up";
   const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
   const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review";
+  const activeToolWorkspace = TOOL_WORKSPACES.some((tool) => tool.id === activeWorkspace);
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
     [documents],
@@ -151,6 +160,26 @@ function App() {
       chatLauncherRef.current?.focus();
     }
   }, [chatOpen, chatWorkspaceActive]);
+
+  useEffect(() => {
+    if (!toolsMenuOpen) return undefined;
+
+    const closeMenu = (event) => {
+      if (event.type === "keydown" && event.key === "Escape") {
+        setToolsMenuOpen(false);
+        toolsMenuButtonRef.current?.focus();
+      } else if (event.type === "mousedown" && !toolsMenuRef.current?.contains(event.target)) {
+        setToolsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", closeMenu);
+    document.addEventListener("mousedown", closeMenu);
+    return () => {
+      document.removeEventListener("keydown", closeMenu);
+      document.removeEventListener("mousedown", closeMenu);
+    };
+  }, [toolsMenuOpen]);
 
   useEffect(() => {
     if (!sessionId || !documents.length) return;
@@ -560,58 +589,57 @@ function App() {
 
       <div className="workspace">
         <main className="main">
-          <div className="workspace-tabs" role="tablist" aria-label="Workspace">
+          <nav className="workspace-tabs" aria-label="Workspace">
             <button
               className={`workspace-tab ${activeWorkspace === "cdd" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "cdd"}
               onClick={() => setActiveWorkspace("cdd")}
             >
               CDD
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "case-review"}
               onClick={() => setActiveWorkspace("case-review")}
             >
               Case Review
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "generation"}
               onClick={() => setActiveWorkspace("generation")}
             >
               Documents
             </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "csp" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "csp"}
-              onClick={() => setActiveWorkspace("csp")}
-            >
-              CSP Detection
-            </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "document-extraction" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "document-extraction"}
-              onClick={() => setActiveWorkspace("document-extraction")}
-            >
-              Document Extraction
-            </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "idv-document-generation" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "idv-document-generation"}
-              onClick={() => setActiveWorkspace("idv-document-generation")}
-            >
-              ID&V Document Generation
-            </button>
-          </div>
+            <div className="workspace-tools" ref={toolsMenuRef}>
+              <button
+                className={`workspace-tab workspace-tools-trigger ${activeToolWorkspace ? "active" : ""}`}
+                ref={toolsMenuButtonRef}
+                aria-expanded={toolsMenuOpen}
+                aria-controls="workspace-tools-menu"
+                aria-haspopup="menu"
+                onClick={() => setToolsMenuOpen((open) => !open)}
+              >
+                Tools <span aria-hidden="true">▾</span>
+              </button>
+              {toolsMenuOpen && (
+                <div className="workspace-tools-menu" id="workspace-tools-menu" role="menu">
+                  {TOOL_WORKSPACES.map((tool) => (
+                    <button
+                      key={tool.id}
+                      className={activeWorkspace === tool.id ? "active" : ""}
+                      role="menuitem"
+                      onClick={() => {
+                        setActiveWorkspace(tool.id);
+                        setToolsMenuOpen(false);
+                      }}
+                    >
+                      {tool.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </nav>
 
-          <div className="workspace-tab-panel" role="tabpanel">
+          <div className="workspace-tab-panel">
             {activeWorkspace === "cdd" ? (
               <>
           <Section title="Run CDD Worker">

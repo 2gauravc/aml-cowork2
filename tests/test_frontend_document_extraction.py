@@ -7,7 +7,8 @@ def test_document_extraction_workspace_calls_stateless_endpoint() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
     assert "Document Extraction" in app
-    assert 'setActiveWorkspace("document-extraction")' in app
+    assert 'id: "document-extraction"' in app
+    assert "setActiveWorkspace(tool.id)" in app
     assert 'fetch("/api/document-extraction/extract", { method: "POST", body })' in app
     assert "<DocumentExtraction" in app
     assert "image/png" in app

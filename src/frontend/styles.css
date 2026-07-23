@@ -402,6 +402,7 @@ th {
   align-items: flex-end;
   border-bottom: 1px solid var(--line);
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 16px;
 }
@@ -426,6 +427,44 @@ th {
   color: var(--ink);
   font-weight: 700;
   margin-bottom: -1px;
+}
+
+.workspace-tools {
+  position: relative;
+}
+
+.workspace-tools-trigger {
+  white-space: nowrap;
+}
+
+.workspace-tools-menu {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 20;
+}
+
+.workspace-tools-menu button {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.workspace-tools-menu button:hover,
+.workspace-tools-menu button:focus-visible,
+.workspace-tools-menu button.active {
+  background: #e8edf4;
 }
 
 .workspace-tab-panel {
