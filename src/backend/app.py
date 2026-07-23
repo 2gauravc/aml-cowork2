@@ -25,7 +25,7 @@ from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
-from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint, load_digital_footprint_skill
+from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint, load_digital_footprint_skill, normalize_digital_footprint_evidence
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.members import get_company_members_by_name
@@ -108,6 +108,11 @@ class DigitalFootprintRequest(BaseModel):
     registration_number: str | None = Field(default=None, max_length=120)
     known_domain: str | None = Field(default=None, max_length=250)
     registered_address: str | None = Field(default=None, max_length=500)
+
+
+class DigitalFootprintAttachRequest(BaseModel):
+    session_id: str
+    result: dict[str, Any]
 
 
 class StandaloneIDVDocumentRequest(BaseModel):
@@ -228,6 +233,22 @@ async def assess_digital_footprint(request: DigitalFootprintRequest) -> dict[str
         )
     except DigitalFootprintError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/digital-footprint/attach")
+async def attach_digital_footprint(request: DigitalFootprintAttachRequest) -> dict[str, Any]:
+    """Explicitly attach a client-held standalone result as CDD evidence."""
+    session = SESSIONS.get(request.session_id)
+    if not session or not session.get("cdd"):
+        raise HTTPException(status_code=404, detail="No active CDD result for this session")
+    if session.get("demo_mode"):
+        raise HTTPException(status_code=400, detail="Digital-footprint attachment is disabled in Demo Mode.")
+    try:
+        evidence = normalize_digital_footprint_evidence(request.result)
+    except DigitalFootprintError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.setdefault("evidence", []).append(evidence)
+    return _response(session, status="digital_footprint_attached")
 
 
 @app.post("/api/document-extraction/extract")

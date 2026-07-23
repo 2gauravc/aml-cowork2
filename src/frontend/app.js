@@ -53,6 +53,7 @@ function App() {
   const [digitalFootprintAssessing, setDigitalFootprintAssessing] = useState(false);
   const [digitalFootprintSkill, setDigitalFootprintSkill] = useState("");
   const [digitalFootprintSkillLoading, setDigitalFootprintSkillLoading] = useState(false);
+  const [digitalFootprintAttaching, setDigitalFootprintAttaching] = useState(false);
   const [extractionFile, setExtractionFile] = useState(null);
   const [extractionResult, setExtractionResult] = useState(null);
   const [extractionError, setExtractionError] = useState("");
@@ -581,6 +582,24 @@ function App() {
     }
   }
 
+  async function attachDigitalFootprint() {
+    if (!sessionId || !cdd || !digitalFootprintResult) return;
+    setDigitalFootprintAttaching(true);
+    setDigitalFootprintError("");
+    try {
+      const response = await fetch("/api/digital-footprint/attach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, result: digitalFootprintResult }),
+      });
+      applyResponse(await readJsonResponse(response, "Digital Footprint attachment failed"));
+    } catch (err) {
+      setDigitalFootprintError(err.message);
+    } finally {
+      setDigitalFootprintAttaching(false);
+    }
+  }
+
   function selectExtractionFile(event) {
     setExtractionFile(event.target.files?.[0] || null);
     setExtractionResult(null);
@@ -978,6 +997,9 @@ function App() {
                 onChange={updateDigitalFootprintForm}
                 onSkillToggle={(open) => { if (open) loadDigitalFootprintSkill(); }}
                 onAssess={assessDigitalFootprint}
+                canAttach={Boolean(sessionId && cdd)}
+                attaching={digitalFootprintAttaching}
+                onAttach={attachDigitalFootprint}
                 demoMode={demoMode}
               />
             ) : activeWorkspace === "document-extraction" ? (
@@ -1274,10 +1296,7 @@ function CSPDetection({
   );
 }
 
-function DigitalFootprint({ form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, demoMode }) {
-  const assessment = result?.assessment || {};
-  const adverseNews = assessment.adverse_news || {};
-  const footprint = result?.business_footprint || {};
+function DigitalFootprint({ form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, canAttach, attaching, onAttach, demoMode }) {
   return (
     <>
       <Section title="Digital Footprint">
@@ -1300,34 +1319,33 @@ function DigitalFootprint({ form, result, error, assessing, skill, skillLoading,
 
       {result && (
         <>
-          <Section title="Footprint Assessment">
-            <dl className="field-list">
-              <div><dt>Strength</dt><dd>{assessment.footprint_strength || "-"}</dd></div>
-              <div><dt>Confidence</dt><dd>{assessment.confidence || "-"}</dd></div>
-              <div><dt>Adverse news</dt><dd>{adverseNews.status || "-"}</dd></div>
-              <div><dt>Adverse-news confidence</dt><dd>{adverseNews.confidence || "-"}</dd></div>
-            </dl>
-            <div className="review-list">
-              {Object.entries(assessment.dimensions || {}).map(([name, item]) => <div className="review-item" key={name}><strong>{name.replaceAll("_", " ")}</strong><p>{`${item.rating || "-"}: ${item.rationale || "No rationale provided."}`}</p></div>)}
-            </div>
-          </Section>
-          <Section title="Adverse News">
-            {adverseNews.items?.length ? <div className="review-list">{adverseNews.items.map((item, index) => <div className="review-item" key={`${item.subject}-${index}`}><strong>{`${item.subject} — ${item.disposition}`}</strong><p>{item.summary}</p><small>{item.category}</small></div>)}</div> : <p className="empty">No material adverse-news items were returned. Review search coverage limitations below.</p>}
-          </Section>
-          <Section title="Business Footprint">
-            <p><strong>Nature of business:</strong> {footprint.nature_of_business?.publicly_observed || "Unavailable"}</p>
-            <p><strong>Consistency:</strong> {footprint.nature_of_business?.consistency || "Unavailable"}</p>
-            <BulletList items={assessment.limitations} empty="No limitations recorded." />
-            <BulletList items={assessment.recommended_actions} empty="No additional actions recommended." />
-          </Section>
+          {(result.section_manifest || []).map((section) => <Section title={section.title} key={section.id}><ManifestFootprintSection section={section} result={result} /></Section>)}
           <Section title="Sources">
             <div className="csp-sources">{(result.sources || []).map((source) => <div key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url || source.id}</a><small>{` — ${source.query}`}</small></div>)}</div>
           </Section>
           <Section title="Digital Footprint JSON"><pre className="json-view">{JSON.stringify(result, null, 2)}</pre></Section>
+          <Section title="CDD evidence">
+            {canAttach ? <button disabled={attaching || demoMode} onClick={onAttach}>{attaching ? "Attaching…" : "Attach validated result to active CDD case"}</button> : <p className="empty">This result is standalone. Run a CDD case before attaching it as case evidence.</p>}
+          </Section>
         </>
       )}
     </>
   );
+}
+
+function ManifestFootprintSection({ section, result }) {
+  const generated = (result.custom_sections || []).find((item) => item.id === section.id);
+  return <DynamicFootprintSection section={generated} sources={result.sources || []} />;
+}
+
+function DynamicFootprintSection({ section, sources }) {
+  if (!section) return <p className="empty">No supported evidence was returned.</p>;
+  const sourceById = Object.fromEntries(sources.map((source) => [source.id, source]));
+  const links = (refs) => refs?.length ? <small>Evidence: {refs.map((ref, index) => <React.Fragment key={ref}>{index > 0 && ", "}{sourceById[ref]?.url ? <a href={sourceById[ref].url} target="_blank" rel="noreferrer">{ref}</a> : ref}</React.Fragment>)}</small> : null;
+  if (section.type === "narrative") return <div className="review-item"><p>{section.content.text}</p>{links(section.source_refs)}</div>;
+  if (section.type === "findings") return <div className="review-list">{section.content.items.map((item, index) => <div className="review-item" key={index}><p>{item.finding}</p>{links(item.source_refs)}</div>)}</div>;
+  if (section.type === "table") return <div><h3>{section.title}</h3><table><thead><tr>{section.content.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{section.content.rows.map((row, index) => <tr key={index}>{row.cells.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>{links(section.source_refs)}</div>;
+  return null;
 }
 
 function DocumentExtraction({ file, result, error, extracting, inputRef, onFileChange, onExtract, demoMode }) {

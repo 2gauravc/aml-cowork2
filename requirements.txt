@@ -5,6 +5,7 @@ langchain-openai
 langgraph
 openai
 pydantic
+PyYAML
 python-dotenv
 requests
 uvicorn
