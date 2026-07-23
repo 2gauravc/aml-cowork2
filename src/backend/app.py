@@ -539,6 +539,37 @@ def _session(session_id: str | None) -> dict[str, Any]:
     return session
 
 
+def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
+    """Remove case-specific artefacts before accepting a new CDD run.
+
+    Standalone Tools-menu results intentionally remain in the session.  Everything
+    returned by the CDD workspace is reset so a new ``running`` response cannot
+    expose data or links from the preceding case.
+    """
+    for key in (
+        "cdd",
+        "graph_state",
+        "graph_thread_id",
+        "evidence",
+        "documents",
+        "document_results",
+        "document_requirements",
+        "risk_flags",
+        "case_review_summary",
+        "case_review_decision",
+        "pdf_path",
+        "pipeline_error",
+    ):
+        session.pop(key, None)
+    session["case_status"] = {
+        "cdd_generation": "not_started",
+        "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}},
+    }
+    session["messages"] = [
+        {"role": "assistant", "content": "Which company would you like to onboard?"}
+    ]
+
+
 def _demo_mode_enabled() -> bool:
     return os.getenv("DEMO_MODE", "").strip().casefold() in {"1", "true", "yes", "on"}
 
@@ -822,10 +853,19 @@ async def _run_pipeline_for_session(
     if session.get("pipeline_status") == "running":
         return _response(session, status="running")
 
+    _clear_previous_cdd_run(session)
     session["customer_name"] = customer_name
     session["jurisdiction"] = jurisdiction
+    if case_id:
+        session["case_id"] = case_id
+    else:
+        session.pop("case_id", None)
+    # The LangGraph memory checkpointer uses reducers that append evidence and
+    # documents.  A fresh thread prevents a new case from inheriting the
+    # previous case's checkpointed state; this ID is retained only to resume
+    # this run after document collection.
+    session["graph_thread_id"] = str(uuid.uuid4())
     session["pipeline_status"] = "running"
-    session["pipeline_error"] = None
     sync_case_status(session, generation="in_progress")
     session["pipeline_progress"] = {
         "node": "collect_required_inputs",
@@ -835,9 +875,6 @@ async def _run_pipeline_for_session(
         "using_cache": False,
         "status": "queued",
     }
-    if case_id:
-        session["case_id"] = case_id
-
     session["messages"].append(
         {
             "role": "assistant",
@@ -854,6 +891,7 @@ async def _run_pipeline_for_session(
         "jurisdiction": jurisdiction,
         "case_id": case_id,
         "generate_pdf": generate_pdf,
+        "graph_thread_id": session["graph_thread_id"],
     }
     if background_tasks is not None:
         background_tasks.add_task(
@@ -913,6 +951,7 @@ async def _complete_pipeline_for_session(
     jurisdiction: str | None,
     case_id: str | None = None,
     generate_pdf: bool = False,
+    graph_thread_id: str,
 ) -> None:
     try:
         def publish_progress(progress: dict[str, Any]) -> None:
@@ -926,9 +965,8 @@ async def _complete_pipeline_for_session(
             jurisdiction=jurisdiction,
             case_id=case_id,
             progress_callback=publish_progress,
-            thread_id=session["session_id"],
+            thread_id=graph_thread_id,
         )
-        session["graph_thread_id"] = session["session_id"]
         _apply_graph_result(session, graph_state)
         cdd = session["cdd"]
         session["document_results"] = cdd.get("documents", [])

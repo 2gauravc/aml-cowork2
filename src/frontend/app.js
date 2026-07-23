@@ -77,6 +77,7 @@ function App() {
   const chatCloseRef = useRef(null);
   const toolsMenuRef = useRef(null);
   const toolsMenuButtonRef = useRef(null);
+  const cddRunEpochRef = useRef(0);
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
@@ -235,6 +236,26 @@ function App() {
     if (data.error) setError(data.error);
   }
 
+  function resetCddRunDisplay() {
+    cddRunEpochRef.current += 1;
+    setCdd(null);
+    setRiskFlagRecords([]);
+    setCaseStatus({
+      cdd_generation: "in_progress",
+      risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } },
+    });
+    setCaseReviewSummary(null);
+    setCaseReviewDecision(null);
+    setReviewNote("");
+    setDocuments([]);
+    setDocumentRequirements([]);
+    setDocumentLinks({});
+    setRefreshingDocumentKey(null);
+    setPdfUrl(null);
+    setPipelineProgress(null);
+    setPipelineStatus("running");
+  }
+
   async function sendChat() {
     const outgoing = message.trim();
     if (!outgoing) return;
@@ -285,6 +306,7 @@ function App() {
         }),
       });
       const data = await readJsonResponse(response, "CDD pipeline failed");
+      if (data.status === "running") resetCddRunDisplay();
       applyResponse(data);
       if (data.status === "running") {
         await pollSession(data.session_id);
@@ -380,6 +402,8 @@ function App() {
   async function refreshDocumentLink(document) {
     const key = documentKey(document);
     if (!sessionId || !key) return;
+    const runEpoch = cddRunEpochRef.current;
+    const activeSessionId = sessionId;
     setRefreshingDocumentKey(key);
     setError(null);
     try {
@@ -392,11 +416,13 @@ function App() {
         }),
       });
       const data = await readJsonResponse(response, "Document link refresh failed");
-      setDocumentLinks((current) => ({ ...current, [key]: data }));
+      if (runEpoch === cddRunEpochRef.current && activeSessionId === sessionId) {
+        setDocumentLinks((current) => ({ ...current, [key]: data }));
+      }
     } catch (err) {
-      setError(err.message);
+      if (runEpoch === cddRunEpochRef.current) setError(err.message);
     } finally {
-      setRefreshingDocumentKey(null);
+      if (runEpoch === cddRunEpochRef.current) setRefreshingDocumentKey(null);
     }
   }
 
