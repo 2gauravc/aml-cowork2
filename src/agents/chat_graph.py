@@ -33,6 +33,7 @@ from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.pdf import render_cdd_pdf
 from src.utils.case_status import sync_case_status
+from src.tools.risk_severity_policy import apply_risk_severity_policy, interpret_risk_severity_policy
 from src.utils.s3_documents import presign_document_url
 
 
@@ -578,7 +579,6 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "document_count": len(session.get("documents") or []),
         "evidence_count": len(session.get("evidence") or []),
         "risk_flags": session.get("risk_flags") or [],
-        "final_recommendation": session.get("final_recommendation"),
     }
 
 
@@ -694,20 +694,26 @@ def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> d
     outcome = str(assessment.get("is_csp") or "inconclusive").casefold()
     if outcome in {"yes", "no", "inconclusive"}:
         flag = {
+            "finding_id": "csp_address:category",
             "category": "csp_address",
-            "severity": "low" if outcome == "no" else "medium",
-            "description": (
-                f"CSP: Evaluation: {outcome.title()}. "
-                f"{(assessment.get('explanation') or '').strip()}"
-            ).strip(),
+            "evaluation": outcome,
+            "severity": "none",
+            "description": (assessment.get("explanation") or "CSP assessment completed.").strip(),
             "source": "csp_address_assessment",
-            "status": "cleared" if outcome == "no" else "open",
-            "evidence_tool": "evaluate_csp_address",
+            "subject": {},
             "evidence": result,
         }
+        flag = apply_risk_severity_policy([flag], interpret_risk_severity_policy())[0]
         existing = session.setdefault("risk_flags", [])
         if not any(item.get("category") == "csp_address" for item in existing):
             existing.append(flag)
+        session.setdefault("evidence", []).append({
+            "source": "CSP assessment tool",
+            "tool": "evaluate_csp_address",
+            "description": "Assessed registered address for company service provider indicators.",
+            "relevance_tags": ["risk_flag", "csp_address", "registered_address"],
+            "data": result,
+        })
         sync_case_status(session)
     return result
 
@@ -746,14 +752,12 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     session["risk_flags"] = graph_state.get("risk_flags", [])
     session["case_status"] = graph_state.get("case_status", session.get("case_status", {}))
     sync_case_status(session)
-    session["final_recommendation"] = graph_state.get("final_recommendation")
     return {
         "cdd": cdd,
         "documents": session["documents"],
         "evidence_count": len(session["evidence"]),
         "risk_flags": session["risk_flags"],
         "case_status": session["case_status"],
-        "final_recommendation": session["final_recommendation"],
     }
 
 

@@ -5,7 +5,7 @@ description: Create an evidence-grounded CDD case-review brief from retained CDD
 
 # CDD Case Review
 
-Prepare a concise case brief for a human reviewer using only the supplied case packet. The deterministic case outcome supplied with the packet is not editable. This is decision support, not an automated compliance decision.
+Prepare a concise case brief for a human reviewer using only the supplied case packet. This is decision support, not an automated compliance decision.
 
 ## Evidence handling
 
@@ -17,11 +17,13 @@ Prepare a concise case brief for a human reviewer using only the supplied case p
 
 ## Review brief
 
-- Summarize the case in plain language, reflecting the deterministic outcome without changing it.
+- Summarize the case in plain language without changing the supplied deterministic risk evaluations or policy-derived severities.
 - Prioritize the most material ownership, AML, CSP-address, and document evidence.
 - Recommend practical internal analyst actions, but do not recommend approving, rejecting, or escalating the case.
 - Draft customer-facing Requests for Information (RFIs) only where the supplied evidence supports a material gap. Each RFI must state what to provide, why it is needed, the linked risk or gap, and a priority.
 - Return no RFIs when the evidence does not justify one.
+- For every supplied risk finding, provide an evidence-grounded confidence assessment. Do not change the finding's evaluation or severity.
+- State potential impact only as a conditional consequence if the finding is confirmed. Recommend an internal action, an RFI, or no additional step.
 
 ## Required output
 
@@ -32,3 +34,4 @@ Return JSON with:
 - `limitations` (array of strings)
 - `recommended_actions` (array of strings)
 - `requests_for_information` (array of `{request, reason, risk_or_gap, priority}`), where `priority` is `high`, `medium`, or `low`.
+- `finding_assessments` (array with one entry per supplied risk finding): `{finding_id, confidence, confidence_rationale, potential_impact_risk, recommended_action_or_rfi}`, where `confidence` is `high`, `medium`, or `low`, and `recommended_action_or_rfi` is `{type, text}` with type `action`, `rfi`, or `none`.

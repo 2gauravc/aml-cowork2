@@ -6,12 +6,14 @@ import re
 from typing import Any, Literal
 
 
-GenerationStatus = Literal["not_started", "in_progress", "completed", "failed"]
+GenerationStatus = Literal["not_started", "in_progress", "completed", "incomplete", "failed"]
 _EVALUATION_PATTERN = re.compile(r"Evaluation:\s*(Yes|No|Inconclusive)", re.IGNORECASE)
 
 
 def risk_flag_evaluation(flag: dict[str, Any]) -> str:
     """Return the normalized evaluation recorded for one risk flag."""
+    if flag.get("evaluation") in {"yes", "no", "inconclusive"}:
+        return flag["evaluation"]
     assessment = (flag.get("evidence") or {}).get("assessment") or {}
     value = assessment.get("is_csp") or _EVALUATION_PATTERN.search(str(flag.get("description") or ""))
     if hasattr(value, "group"):
@@ -24,11 +26,18 @@ def build_case_status(
     risk_flags: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
     """Build the API/UI status projection from detailed risk-flag evidence."""
+    by_category: dict[str, dict[str, int]] = {}
+    for flag in risk_flags or []:
+        category = str(flag.get("category") or "other")
+        counts = by_category.setdefault(category, {"yes": 0, "inconclusive": 0, "no": 0})
+        counts[risk_flag_evaluation(flag)] += 1
+    totals = {"yes": 0, "inconclusive": 0, "no": 0}
+    for counts in by_category.values():
+        for evaluation in totals:
+            totals[evaluation] += counts[evaluation]
     return {
         "cdd_generation": generation,
-        "risk_flags_present": sum(
-            risk_flag_evaluation(flag) == "yes" for flag in (risk_flags or [])
-        ),
+        "risk_summary": {"by_category": by_category, "totals": totals},
     }
 
 

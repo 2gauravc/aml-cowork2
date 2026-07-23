@@ -12,7 +12,7 @@ from src.tools.case_review import generate_case_review_summary, load_case_review
 
 
 class CaseReviewTests(unittest.TestCase):
-    def test_summary_uses_strict_schema_and_preserves_deterministic_outcome(self) -> None:
+    def test_summary_uses_strict_schema_and_returns_finding_assessments(self) -> None:
         response = Mock()
         response.output_text = json.dumps(
             {
@@ -30,6 +30,15 @@ class CaseReviewTests(unittest.TestCase):
                         "priority": "medium",
                     }
                 ],
+                "finding_assessments": [
+                    {
+                        "finding_id": "csp_address:category",
+                        "confidence": "low",
+                        "confidence_rationale": "Only building-level evidence is available.",
+                        "potential_impact_risk": "The address may conceal a service-provider relationship.",
+                        "recommended_action_or_rfi": {"type": "rfi", "text": "Provide operating-address evidence."},
+                    }
+                ],
             }
         )
         client = Mock()
@@ -39,8 +48,8 @@ class CaseReviewTests(unittest.TestCase):
         ):
             result = generate_case_review_summary(
                 cdd={},
-                case_status={"cdd_generation": "completed", "risk_flags_present": 0},
-                risk_flags=[{"category": "csp_address", "status": "open", "description": "CSP: Evaluation: Inconclusive."}],
+                case_status={"cdd_generation": "completed", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 1, "no": 0}}},
+                risk_flags=[{"finding_id": "csp_address:category", "category": "csp_address", "evaluation": "inconclusive", "severity": "medium", "description": "Address evidence is incomplete."}],
                 evidence=[
                     {
                         "tool": "csp_address_assessment",
@@ -48,11 +57,10 @@ class CaseReviewTests(unittest.TestCase):
                         "data": {"sources": [{"url": "https://example.test/csp"}]},
                     }
                 ],
-                final_recommendation="human_review",
             )
 
-        self.assertEqual(result["outcome"], "human_review_required")
         self.assertEqual(result["status"], "available")
+        self.assertEqual(result["finding_assessments"][0]["confidence"], "low")
         self.assertEqual(result["key_evidence"][0]["source_refs"], ["risk:csp_address:1"])
         self.assertEqual(result["evidence_index"][0]["urls"], ["https://example.test/csp"])
         self.assertTrue(result["skill_path"].endswith("skills/case-review/SKILL.md"))
@@ -71,35 +79,32 @@ class CaseReviewTests(unittest.TestCase):
         self.assertIn("Requests for Information", skill)
 
     @patch("src.agents.nodes.generate_case_review_summary")
-    def test_node_passes_deterministic_outcome_to_summarizer(self, generate_summary) -> None:
+    def test_node_passes_case_status_and_merges_finding_assessments(self, generate_summary) -> None:
         generate_summary.return_value = {
             "status": "available",
-            "outcome": "ready_to_complete",
             "executive_summary": "No material issues.",
             "key_evidence": [],
             "limitations": [],
             "recommended_actions": [],
             "requests_for_information": [],
+            "finding_assessments": [{"finding_id": "ownership:category", "confidence": "medium", "confidence_rationale": "Ownership evidence is complete.", "potential_impact_risk": "Ownership may be opaque.", "recommended_action_or_rfi": {"type": "none", "text": ""}}],
         }
         result = generate_case_review(
             {
                 "cdd": {},
-                "case_status": {"cdd_generation": "completed", "risk_flags_present": 1},
-                "risk_flags": [{"status": "open", "category": "ownership"}],
+                "case_status": {"cdd_generation": "completed", "risk_summary": {"by_category": {}, "totals": {"yes": 1, "inconclusive": 0, "no": 0}}},
+                "risk_flags": [{"finding_id": "ownership:category", "evaluation": "yes", "category": "ownership"}],
                 "evidence": [],
-                "final_recommendation": "human_review",
             }
         )
 
-        self.assertEqual(result["case_review_summary"]["outcome"], "ready_to_complete")
-        self.assertEqual(generate_summary.call_args.kwargs["final_recommendation"], "human_review")
-        self.assertEqual(generate_summary.call_args.kwargs["case_status"]["risk_flags_present"], 1)
+        self.assertEqual(result["risk_flags"][0]["case_review"]["confidence"], "medium")
+        self.assertEqual(generate_summary.call_args.kwargs["case_status"]["risk_summary"]["totals"]["yes"], 1)
 
-    def test_unavailable_review_keeps_human_review_outcome(self) -> None:
-        result = unavailable_case_review("human_review", "OpenAI unavailable")
+    def test_unavailable_review_records_limitation(self) -> None:
+        result = unavailable_case_review("OpenAI unavailable")
 
         self.assertEqual(result["status"], "unavailable")
-        self.assertEqual(result["outcome"], "human_review_required")
         self.assertIn("OpenAI unavailable", result["limitations"])
 
 

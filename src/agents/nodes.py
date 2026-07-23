@@ -24,8 +24,10 @@ from src.tools.idv_requirements import establish_idv_requirements as apply_idv_r
 from src.tools.case_review import (
     CaseReviewError,
     generate_case_review_summary,
+    merge_case_review_assessments,
     unavailable_case_review,
 )
+from src.tools.risk_severity_policy import interpret_risk_severity_policy
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -658,12 +660,23 @@ def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
 def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
     """Run the focused red-flags subgraph and merge its additive outputs."""
     cdd = state.get("cdd", {})
+    severity_policy = interpret_risk_severity_policy()
     result = run_red_flags_graph(
         customer_static=cdd.get("company_business_profile", {}).get("customer_static", {}),
         ownership_and_control=cdd.get("ownership_and_control", {}),
+        severity_policy=severity_policy,
     )
     return {
-        "evidence": result.get("evidence", []),
+        "evidence": [
+            *result.get("evidence", []),
+            _evidence(
+                tool="interpret_risk_severity_policy",
+                description="Interpreted and applied the risk-severity policy",
+                source="OpenAI policy interpretation",
+                data=severity_policy,
+                relevance_tags=["risk", "severity", "policy"],
+            ),
+        ],
         "risk_flags": result.get("risk_flags", []),
     }
 
@@ -676,35 +689,33 @@ def finalize_cdd(state: CDDState) -> dict[str, Any]:
         cdd.get("individual_identity_verification", {}).get("status"),
     ]
     complete = all(status == "complete" for status in section_statuses)
-    open_flags = [flag for flag in state.get("risk_flags", []) if flag.get("status") == "open"]
+    findings_needing_review = [
+        flag for flag in state.get("risk_flags", [])
+        if flag.get("evaluation") in {"yes", "inconclusive"}
+    ]
 
     cdd["completed_at"] = datetime.now(UTC).isoformat()
-    if complete and not open_flags:
-        recommendation = "completed"
-    else:
-        recommendation = "human_review"
-
     return {
         "cdd": cdd,
-        "case_status": build_case_status("completed", state.get("risk_flags", [])),
-        "final_recommendation": recommendation,
+        "case_status": build_case_status("completed" if complete else "incomplete", state.get("risk_flags", [])),
     }
 
 
 def generate_case_review(state: CDDState) -> dict[str, Any]:
     """Create a reviewer brief from completed CDD data without changing its outcome."""
-    final_recommendation = state.get("final_recommendation")
     try:
         summary = generate_case_review_summary(
             cdd=state.get("cdd", {}),
             case_status=state.get("case_status", {}),
             risk_flags=state.get("risk_flags", []),
             evidence=state.get("evidence", []),
-            final_recommendation=final_recommendation,
         )
     except CaseReviewError as exc:
-        summary = unavailable_case_review(final_recommendation, str(exc))
-    return {"case_review_summary": summary}
+        summary = unavailable_case_review(str(exc))
+    return {
+        "case_review_summary": summary,
+        "risk_flags": merge_case_review_assessments(state.get("risk_flags", []), summary),
+    }
 
 
 def _client() -> KycClient:

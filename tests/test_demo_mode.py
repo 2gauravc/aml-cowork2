@@ -28,7 +28,6 @@ class DemoModeTests(unittest.TestCase):
         self.assertEqual(response["status"], "complete")
         self.assertTrue(response["demo_mode"])
         self.assertEqual(response["customer_name"], "Northstar Trading Ltd")
-        self.assertEqual(response["final_recommendation"], "human_review")
         self.assertTrue(response["case_review_summary"]["demo_fixture"])
         self.assertEqual(len(response["document_requirements"]), 2)
         self.assertEqual(response["document_requirements"][0]["document_type"], "registry_document")

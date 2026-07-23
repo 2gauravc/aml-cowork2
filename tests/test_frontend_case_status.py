@@ -9,6 +9,7 @@ def test_cdd_metadata_uses_case_status_from_api_response() -> None:
     assert "setCaseStatus(data.case_status" in app
     assert "CDD Generation" in app
     assert "Risk Flags" in app
-    assert "risk flags present" in app
+    assert "riskSummary" in app
+    assert "Inconclusive" in app
     assert "generationStatusLabel" in app
     assert "cddStatusLabel" not in app

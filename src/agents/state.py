@@ -11,8 +11,7 @@ from langgraph.graph.message import add_messages
 
 
 SectionStatus = Literal["complete", "incomplete"]
-FinalRecommendation = Literal["completed", "human_review", "rejected"]
-GenerationStatus = Literal["not_started", "in_progress", "completed", "failed"]
+GenerationStatus = Literal["not_started", "in_progress", "completed", "incomplete", "failed"]
 
 
 class CustomerMetadata(TypedDict, total=False):
@@ -102,7 +101,7 @@ class CDD(TypedDict, total=False):
 
 class CaseStatus(TypedDict):
     cdd_generation: GenerationStatus
-    risk_flags_present: int
+    risk_summary: dict[str, Any]
 
 
 class CaseDocument(TypedDict, total=False):
@@ -124,12 +123,13 @@ class EvidenceItem(TypedDict, total=False):
 
 
 class RiskFlag(TypedDict, total=False):
+    finding_id: str
     category: str
-    severity: Literal["low", "medium", "high"]
+    evaluation: Literal["yes", "no", "inconclusive"]
+    severity: Literal["none", "low", "medium", "high"]
     description: str
     source: str
-    status: Literal["open", "cleared"]
-    evidence_tool: str
+    subject: dict[str, Any]
     evidence: dict[str, Any]
 
 
@@ -138,9 +138,8 @@ class CDDState(TypedDict, total=False):
     cdd: CDD
     documents: Annotated[list[CaseDocument], add]
     evidence: Annotated[list[EvidenceItem], add]
-    risk_flags: Annotated[list[RiskFlag], add]
+    risk_flags: list[RiskFlag]
     case_status: CaseStatus
-    final_recommendation: FinalRecommendation | None
     case_review_summary: dict[str, Any] | None
     messages: Annotated[list[AnyMessage], add_messages]
     document_requirements: list[dict[str, Any]]
@@ -193,8 +192,7 @@ def new_cdd_state(
         "documents": [],
         "evidence": [],
         "risk_flags": [],
-        "case_status": {"cdd_generation": "in_progress", "risk_flags_present": 0},
-        "final_recommendation": None,
+        "case_status": {"cdd_generation": "in_progress", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}}},
         "case_review_summary": None,
         "messages": [],
         "document_requirements": [],

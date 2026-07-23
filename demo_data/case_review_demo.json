@@ -5,7 +5,14 @@
   "pipeline_status": "complete",
   "case_status": {
     "cdd_generation": "completed",
-    "risk_flags_present": 1
+    "risk_summary": {
+      "by_category": {
+        "ownership": {"yes": 0, "inconclusive": 0, "no": 1},
+        "aml": {"yes": 0, "inconclusive": 0, "no": 1},
+        "csp_address": {"yes": 0, "inconclusive": 1, "no": 0}
+      },
+      "totals": {"yes": 0, "inconclusive": 1, "no": 2}
+    }
   },
   "pipeline_progress": {
     "node": "generate_case_review",
@@ -159,24 +166,27 @@
   ],
   "risk_flags": [
     {
+      "finding_id": "ownership:category",
       "category": "ownership",
-      "severity": "low",
-      "status": "cleared",
-      "description": "Ownership: Evaluation: No. Individual UBOs above 25% were identified: Maya Chen.",
+      "evaluation": "no",
+      "severity": "none",
+      "description": "Individual UBOs above 25% were identified: Maya Chen.",
       "source": "demo_fixture"
     },
     {
+      "finding_id": "aml:category",
       "category": "aml",
-      "severity": "low",
-      "status": "cleared",
-      "description": "AML: Evaluation: No. No controlling member has an AML-positive result.",
+      "evaluation": "no",
+      "severity": "none",
+      "description": "No controlling member has an AML-positive result.",
       "source": "demo_fixture"
     },
     {
+      "finding_id": "csp_address:category",
       "category": "csp_address",
       "severity": "medium",
-      "status": "open",
-      "description": "CSP: Evaluation: Inconclusive. Search evidence identifies corporate-services activity at the building, but does not establish a provider at the exact address.",
+      "evaluation": "inconclusive",
+      "description": "Search evidence identifies corporate-services activity at the building, but does not establish a provider at the exact address.",
       "source": "csp_address_assessment",
       "evidence_tool": "csp_address_assessment",
       "evidence": {
@@ -217,11 +227,9 @@
       "collected_at": "2026-07-13T09:00:00+00:00"
     }
   ],
-  "final_recommendation": "human_review",
   "case_review_summary": {
     "status": "available",
     "demo_fixture": true,
-    "outcome": "human_review_required",
     "executive_summary": "Northstar Trading Ltd has a documented individual UBO and no AML-positive controlling member in this demonstration case. The registered-address assessment remains inconclusive because the retained evidence is limited to the building level, so human review is required.",
     "key_evidence": [
       {
@@ -249,6 +257,18 @@
         "reason": "This would help resolve the building-level CSP-address review item.",
         "risk_or_gap": "CSP address",
         "priority": "medium"
+      }
+    ],
+    "finding_assessments": [
+      {
+        "finding_id": "csp_address:category",
+        "confidence": "medium",
+        "confidence_rationale": "The retained evidence is credible but only identifies activity at building level.",
+        "potential_impact_risk": "The registered address may be associated with a company service provider.",
+        "recommended_action_or_rfi": {
+          "type": "rfi",
+          "text": "Provide evidence of the company's operating address and explain its use of the registered address."
+        }
       }
     ],
     "evidence_index": [

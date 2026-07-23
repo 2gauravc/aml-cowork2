@@ -9,6 +9,7 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address
+from src.tools.risk_severity_policy import apply_risk_severity_policy
 
 
 class RedFlagState(TypedDict, total=False):
@@ -32,10 +33,13 @@ def build_red_flags_graph():
 
 
 def run_red_flags_graph(
-    *, customer_static: dict[str, Any], ownership_and_control: dict[str, Any]
+    *,
+    customer_static: dict[str, Any],
+    ownership_and_control: dict[str, Any],
+    severity_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run indicators against a snapshot of completed CDD fields."""
-    return build_red_flags_graph().invoke(
+    result = build_red_flags_graph().invoke(
         {
             "customer_static": customer_static,
             "ownership_and_control": ownership_and_control,
@@ -43,61 +47,56 @@ def run_red_flags_graph(
             "risk_flags": [],
         }
     )
+    if severity_policy:
+        result["risk_flags"] = apply_risk_severity_policy(result.get("risk_flags", []), severity_policy)
+    return result
 
 
 def check_ownership_gap(state: RedFlagState) -> dict[str, Any]:
-    ubos = state.get("ownership_and_control", {}).get("ubos") or []
+    ownership = state.get("ownership_and_control", {})
+    ubos = ownership.get("ubos") or []
+    complete = ownership.get("status") == "complete" and (ownership.get("org_chart") or {}).get("status") == "complete"
+    if not complete:
+        return {"risk_flags": [_finding(
+            "ownership", "inconclusive", "org_chart",
+            "Ownership data is incomplete or unavailable; effective ownership cannot be determined.",
+            evidence={"ownership_status": ownership.get("status"), "org_chart_status": (ownership.get("org_chart") or {}).get("status")},
+        )]}
     if not ubos:
-        return {
-            "risk_flags": [
-                _flag(
-                    "ownership",
-                    "medium",
-                    "Ownership: Evaluation: Yes. No individual UBO above 25% was identified.",
-                    "org_chart",
-                )
-            ]
-        }
+        return {"risk_flags": [_finding(
+            "ownership", "yes", "org_chart", "No individual UBO above 25% was identified.",
+            evidence={"ubos": []},
+        )]}
     names = ", ".join(str(ubo.get("name")) for ubo in ubos if ubo.get("name"))
-    return {
-        "risk_flags": [
-            _flag(
-                "ownership",
-                "low",
-                f"Ownership: Evaluation: No. Individual UBOs above 25% were identified: {names or 'available in ownership data'}.",
-                "org_chart",
-                status="cleared",
-            )
-        ]
-    }
+    return {"risk_flags": [_finding(
+        "ownership", "no", "org_chart",
+        f"Individual UBOs above 25% were identified: {names or 'available in ownership data'}.",
+        evidence={"ubos": ubos},
+    )]}
 
 
 def check_member_aml(state: RedFlagState) -> dict[str, Any]:
+    ownership = state.get("ownership_and_control", {})
+    member_data = ownership.get("members") or {}
+    members = member_data.get("controlling_members", [])
+    if member_data.get("status") != "complete":
+        return {"risk_flags": [_finding(
+            "aml", "inconclusive", "members", "KYC member/AML data is unavailable or incomplete.",
+            evidence={"members_status": member_data.get("status")},
+        )]}
     flags = []
-    members = state.get("ownership_and_control", {}).get("members", {}).get("controlling_members", [])
     for member in members:
-        if (member.get("kyc") or {}).get("is_aml_positive"):
-            flags.append(
-                _flag(
-                    "aml",
-                    "high",
-                    f"AML: Evaluation: Yes. AML review flag for {member.get('name')}.",
-                    "members",
-                )
-            )
+        value = (member.get("kyc") or {}).get("is_aml_positive")
+        evaluation = "yes" if value is True else "no" if value is False else "inconclusive"
+        flags.append(_finding(
+            "aml", evaluation, "members",
+            f"KYC AML result for {member.get('name') or 'controlling member'}: {evaluation.title()}.",
+            subject={"name": member.get("name"), "case_common_id": member.get("case_common_id")},
+            evidence={"kyc": member.get("kyc") or {}},
+        ))
     if flags:
         return {"risk_flags": flags}
-    return {
-        "risk_flags": [
-            _flag(
-                "aml",
-                "low",
-                "AML: Evaluation: No. No controlling member has an AML-positive result.",
-                "members",
-                status="cleared",
-            )
-        ]
-    }
+    return {"risk_flags": [_finding("aml", "no", "members", "No controlling members require AML assessment.", evidence={"controlling_members": []})]}
 
 
 def check_csp_address(state: RedFlagState) -> dict[str, Any]:
@@ -105,37 +104,44 @@ def check_csp_address(state: RedFlagState) -> dict[str, Any]:
     address = (customer.get("registered_address") or {}).get("full_address")
     company_name = customer.get("name")
     if not address:
-        return {"evidence": [_evidence("Skipped CSP address assessment because no registered address is available.", {"status": "skipped", "reason": "registered_address_missing"})]}
+        result = {"status": "skipped", "reason": "registered_address_missing"}
+        return {"evidence": [_evidence("Skipped CSP address assessment because no registered address is available.", result)], "risk_flags": [_finding("csp_address", "inconclusive", "csp_address_assessment", "No registered address was available for CSP assessment.", evidence=result)]}
     try:
         result = evaluate_csp_address(address, company_name=company_name)
     except CSPAssessmentError as exc:
-        return {"evidence": [_evidence("CSP address assessment could not be completed.", {"status": "unavailable", "registered_address": address, "reason": str(exc)})]}
+        result = {"status": "unavailable", "registered_address": address, "reason": str(exc)}
+        return {"evidence": [_evidence("CSP address assessment could not be completed.", result)], "risk_flags": [_finding("csp_address", "inconclusive", "csp_address_assessment", "CSP address assessment could not be completed.", evidence=result)]}
 
     assessment = result.get("assessment") or {}
     outcome = str(assessment.get("is_csp") or "inconclusive").casefold()
     explanation = str(assessment.get("explanation") or "").strip()
-    status = "open" if outcome in {"yes", "inconclusive"} else "cleared"
-    severity = "medium" if outcome in {"yes", "inconclusive"} else "low"
-    outcome_label = outcome.title()
     return {
         "evidence": [_evidence("Assessed registered address for company service provider indicators.", result)],
-        # Keep a completed No assessment in risk_flags with a cleared status so
-        # the UI can show that the check ran without affecting recommendation.
-        "risk_flags": [
-            _flag(
-                "csp_address",
-                severity,
-                f"CSP: Evaluation: {outcome_label}. {explanation}".strip(),
-                "csp_address_assessment",
-                evidence_tool="csp_address_assessment",
-                evidence=result,
-            ) | {"status": status}
-        ],
+        "risk_flags": [_finding("csp_address", outcome if outcome in {"yes", "no", "inconclusive"} else "inconclusive", "csp_address_assessment", explanation or "CSP assessment completed.", evidence=result)],
     }
 
 
-def _flag(category: str, severity: str, description: str, source: str, **extra: Any) -> dict[str, Any]:
-    return {"category": category, "severity": severity, "description": description, "source": source, "status": "open", **extra}
+def _finding(
+    category: str,
+    evaluation: str,
+    source: str,
+    description: str,
+    *,
+    subject: dict[str, Any] | None = None,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    subject = {key: value for key, value in (subject or {}).items() if value is not None}
+    subject_key = subject.get("case_common_id") or subject.get("name") or "category"
+    return {
+        "finding_id": f"{category}:{subject_key}",
+        "category": category,
+        "evaluation": evaluation,
+        "severity": "none",
+        "description": description,
+        "source": source,
+        "subject": subject,
+        "evidence": evidence or {},
+    }
 
 
 def _evidence(description: str, data: dict[str, Any]) -> dict[str, Any]:

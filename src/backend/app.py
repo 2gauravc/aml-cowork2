@@ -23,7 +23,7 @@ from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
-from src.tools.case_review import CaseReviewError, generate_case_review_summary, unavailable_case_review
+from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
@@ -318,11 +318,12 @@ async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, An
             case_status=session.get("case_status", {}),
             risk_flags=session.get("risk_flags", []),
             evidence=session.get("evidence", []),
-            final_recommendation=session.get("final_recommendation"),
         )
     except CaseReviewError as exc:
-        summary = unavailable_case_review(session.get("final_recommendation"), str(exc))
+        summary = unavailable_case_review(str(exc))
     session["case_review_summary"] = summary
+    session["risk_flags"] = merge_case_review_assessments(session.get("risk_flags", []), summary)
+    sync_case_status(session)
     return _response(session, status="case_review_refreshed")
 
 
@@ -526,7 +527,7 @@ def _session(session_id: str | None) -> dict[str, Any]:
     session_id = session_id or str(uuid.uuid4())
     session = {
         "session_id": session_id,
-        "case_status": {"cdd_generation": "not_started", "risk_flags_present": 0},
+        "case_status": {"cdd_generation": "not_started", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}}},
         "messages": [
             {
                 "role": "assistant",
@@ -578,6 +579,9 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     session.update(deepcopy(fixture))
     session["session_id"] = session_id
     session["demo_mode"] = True
+    session["risk_flags"] = merge_case_review_assessments(
+        session.get("risk_flags", []), session.get("case_review_summary") or {},
+    )
     sync_case_status(session, generation="completed")
     return _response(session, status="complete")
 
@@ -601,7 +605,6 @@ def _response(
         "documents": session.get("documents", []),
         "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
-        "final_recommendation": session.get("final_recommendation"),
         "case_review_summary": session.get("case_review_summary"),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
@@ -734,7 +737,7 @@ async def _resume_if_ready(session: dict[str, Any]) -> None:
         )
         _apply_graph_result(session, result)
         session["pipeline_status"] = "complete"
-        sync_case_status(session, generation="completed")
+        sync_case_status(session)
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)
@@ -765,7 +768,7 @@ def _summary(cdd: dict[str, Any], case_status: dict[str, Any]) -> str:
     shareholders = len(ownership.get("shareholders_over_10_percent", []))
     related = len(ownership.get("related_parties", []))
     generation = str(case_status.get("cdd_generation", "not_started")).replace("_", " ")
-    risk_count = case_status.get("risk_flags_present", 0)
+    risk_count = (case_status.get("risk_summary") or {}).get("totals", {}).get("yes", 0)
     name = profile.get("name") or "the customer"
     return (
         f"CDD generation for {name}: {generation}. Risk flags present: {risk_count}. "
@@ -899,7 +902,6 @@ def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) ->
     if graph_state.get("case_status"):
         session["case_status"] = graph_state["case_status"]
     sync_case_status(session)
-    session["final_recommendation"] = graph_state.get("final_recommendation")
     session["case_review_summary"] = graph_state.get("case_review_summary")
     session["document_requirements"] = graph_state.get("document_requirements", [])
 
@@ -948,7 +950,7 @@ async def _complete_pipeline_for_session(
             session["pdf_path"] = str(pdf_path)
 
         session["pipeline_status"] = "complete"
-        sync_case_status(session, generation="completed")
+        sync_case_status(session)
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)

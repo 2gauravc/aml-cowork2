@@ -605,6 +605,16 @@ th {
   color: #b91c1c;
 }
 
+.risk-summary {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metadata-item strong.risk-flags-inconclusive {
+  color: #a16207;
+}
+
 .pipeline-form {
   display: grid;
   gap: 10px;

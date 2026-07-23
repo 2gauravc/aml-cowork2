@@ -162,8 +162,9 @@ class ChatSessionContextTests(unittest.TestCase):
             "A normal chat completion.",
         )
 
+    @patch("src.agents.chat_graph.interpret_risk_severity_policy", return_value={"policy_name": "test", "source_path": "test", "rules": [{"category": "csp_address", "evaluation": "yes", "severity": "medium"}]})
     @patch("src.agents.chat_graph.evaluate_csp_address")
-    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp) -> None:
+    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp, _) -> None:
         self.session["cdd"] = {
             "company_business_profile": {
                 "customer_static": {

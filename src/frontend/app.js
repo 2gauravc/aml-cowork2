@@ -35,7 +35,7 @@ function App() {
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
   const [caseStatus, setCaseStatus] = useState({
     cdd_generation: "not_started",
-    risk_flags_present: 0,
+    risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } },
   });
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -88,7 +88,7 @@ function App() {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
     generationStatus: caseStatus.cdd_generation || "not_started",
-    riskFlagCount: Number(caseStatus.risk_flags_present) || 0,
+    riskSummary: caseStatus.risk_summary?.totals || { yes: 0, inconclusive: 0, no: 0 },
   };
   const pipelineStatusText = pipelineProgress
     ? formatPipelineProgress(pipelineProgress)
@@ -210,7 +210,7 @@ function App() {
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
     setRiskFlagRecords(data.risk_flags || []);
-    setCaseStatus(data.case_status || { cdd_generation: "not_started", risk_flags_present: 0 });
+    setCaseStatus(data.case_status || { cdd_generation: "not_started", risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } } });
     setCaseReviewSummary(data.case_review_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
@@ -713,8 +713,10 @@ function App() {
             </div>
             <div className="metadata-item">
               <span>Risk Flags</span>
-              <strong className={cddMetadata.riskFlagCount > 0 ? "risk-flags-present" : ""}>
-                {`${cddMetadata.riskFlagCount} risk flags present`}
+              <strong className="risk-summary">
+                <span className={cddMetadata.riskSummary.yes > 0 ? "risk-flags-present" : ""}>{`${cddMetadata.riskSummary.yes} Yes`}</span>
+                <span className={cddMetadata.riskSummary.inconclusive > 0 ? "risk-flags-inconclusive" : ""}>{`${cddMetadata.riskSummary.inconclusive} Inconclusive`}</span>
+                <span>{`${cddMetadata.riskSummary.no} No`}</span>
               </strong>
             </div>
           </section>
@@ -816,8 +818,8 @@ function App() {
                 {risks.map((risk, index) => (
                   <div className="risk" key={`${risk.category || "risk"}-${index}`}>
                     <div className="risk-content">
-                      <strong>{riskPresentation(risk).title}</strong>
-                      <span>{`Evaluation: ${riskPresentation(risk).evaluation}. ${riskPresentation(risk).summary}`}</span>
+                      <strong>{`${riskCategoryLabel(risk.category)}${risk.subject?.name ? ` — ${risk.subject.name}` : ""}`}</strong>
+                      <span>{`Evaluation: ${statusLabel(risk.evaluation)}. Severity: ${statusLabel(risk.severity)}. ${risk.description || ""}`}</span>
                     </div>
                     <RiskEvidenceTooltip risk={risk} />
                   </div>
@@ -991,16 +993,12 @@ function CaseReview({
     );
   }
 
-  const humanReviewRequired = summary?.outcome !== "ready_to_complete";
   const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
   return (
     <>
       <Section title="Case Review">
         <div className="case-review-header">
           <div>
-            <span className={`case-outcome ${humanReviewRequired ? "review" : "complete"}`}>
-              {humanReviewRequired ? "Human review required" : "Ready to complete"}
-            </span>
             <p className="review-disclaimer">Decision support only. A human reviewer remains responsible for the case decision.</p>
           </div>
           <button disabled={loading || demoMode} onClick={onRefresh}>
@@ -1537,6 +1535,7 @@ function generationStatusLabel(status) {
     not_started: "Not started",
     in_progress: "In Progress",
     completed: "Completed",
+    incomplete: "Incomplete",
     failed: "Failed",
   }[status] || "Not started";
 }
@@ -1626,16 +1625,36 @@ function riskPresentation(risk) {
   return { title: presentation.title, evaluation, summary: presentation[outcome] || presentation.inconclusive };
 }
 
+function riskCategoryLabel(category) {
+  return {
+    ownership: "Ownership Risk",
+    aml: "AML Risk",
+    csp_address: "CSP Risk",
+  }[category] || "Risk Finding";
+}
+
 function RiskEvidenceTooltip({ risk }) {
   const evidence = risk.evidence || {};
-  const assessment = evidence.assessment || {};
   const sources = evidence.sources || [];
-  const detail = assessment.explanation || risk.description || "No detailed explanation is available.";
+  const review = risk.case_review || null;
+  const detail = risk.description || "No detailed explanation is available.";
   return (
     <span className="source-tip risk-evidence-tip" tabIndex="0" aria-label="View risk evidence">
       i
       <span className="source-tooltip risk-evidence-tooltip" role="tooltip">
+        <strong>{`${riskCategoryLabel(risk.category)} — ${statusLabel(risk.evaluation)}`}</strong>
+        {risk.subject?.name && <span>{`Subject: ${risk.subject.name}`}</span>}
+        <span>{`Severity: ${statusLabel(risk.severity)}`}</span>
         <span>{detail}</span>
+        {review ? (
+          <>
+            <span>{`Confidence: ${statusLabel(review.confidence)}. ${review.confidence_rationale}`}</span>
+            <span>{`Potential impact: ${review.potential_impact_risk}`}</span>
+            {review.recommended_action_or_rfi?.type !== "none" && (
+              <span>{`${review.recommended_action_or_rfi?.type === "rfi" ? "RFI" : "Recommended action"}: ${review.recommended_action_or_rfi?.text}`}</span>
+            )}
+          </>
+        ) : <span>Case Review assessment pending.</span>}
         {sources.map((source, index) => (
           <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
             {source.title || source.url || "Source"}

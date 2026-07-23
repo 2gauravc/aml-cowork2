@@ -1,0 +1,11 @@
+Apply the following severity to normalized CDD risk findings.
+
+An AML finding evaluated Yes or Inconclusive has High severity. An AML finding
+evaluated No has None severity.
+
+An ownership-gap finding evaluated Yes or Inconclusive has Medium severity. An
+ownership-gap finding evaluated No has None severity.
+
+A company-service-provider address finding evaluated Yes or Inconclusive has
+Medium severity. A company-service-provider address finding evaluated No has
+None severity.

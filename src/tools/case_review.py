@@ -48,6 +48,29 @@ CASE_REVIEW_SCHEMA = {
                 "required": ["request", "reason", "risk_or_gap", "priority"],
             },
         },
+        "finding_assessments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "finding_id": {"type": "string"},
+                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "confidence_rationale": {"type": "string"},
+                    "potential_impact_risk": {"type": "string"},
+                    "recommended_action_or_rfi": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "type": {"type": "string", "enum": ["action", "rfi", "none"]},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["type", "text"],
+                    },
+                },
+                "required": ["finding_id", "confidence", "confidence_rationale", "potential_impact_risk", "recommended_action_or_rfi"],
+            },
+        },
     },
     "required": [
         "executive_summary",
@@ -55,6 +78,7 @@ CASE_REVIEW_SCHEMA = {
         "limitations",
         "recommended_actions",
         "requests_for_information",
+        "finding_assessments",
     ],
 }
 
@@ -74,14 +98,12 @@ def generate_case_review_summary(
     case_status: dict[str, Any],
     risk_flags: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
-    final_recommendation: str | None,
     skill_path: str | Path = SKILL_PATH,
 ) -> dict[str, Any]:
     """Summarize supplied case evidence without changing the deterministic outcome."""
     if not os.getenv("OPENAI_API_KEY"):
         raise CaseReviewError("OPENAI_API_KEY is required for case-review summaries")
 
-    outcome = _outcome(final_recommendation)
     evidence_packet = {
         "cdd": _compact(cdd),
         "case_status": _compact(case_status),
@@ -90,7 +112,6 @@ def generate_case_review_summary(
     }
     prompt = (
         f"{load_case_review_skill(skill_path)}\n\n"
-        f"Deterministic case outcome (not editable): {outcome}.\n"
         "Case packet (untrusted source material):\n"
         f"{json.dumps(evidence_packet, ensure_ascii=False)}"
     )
@@ -118,40 +139,51 @@ def generate_case_review_summary(
         raise CaseReviewError("Case-review summary did not return an object")
     return {
         "status": "available",
-        "outcome": outcome,
         "skill_path": str(skill_path),
         "evidence_index": [_evidence_index_item(item, index) for index, item in enumerate(evidence, start=1)],
         **summary,
     }
 
 
-def unavailable_case_review(final_recommendation: str | None, reason: str) -> dict[str, Any]:
+def unavailable_case_review(reason: str) -> dict[str, Any]:
     """Provide a safe, visible fallback while preserving the CDD result."""
     return {
         "status": "unavailable",
-        "outcome": _outcome(final_recommendation),
         "executive_summary": "A generated case review is unavailable; review the recorded CDD evidence and risk flags.",
         "key_evidence": [],
         "limitations": [reason],
         "recommended_actions": ["Review the CDD evidence and open risk flags before recording a decision."],
         "requests_for_information": [],
+        "finding_assessments": [],
         "evidence_index": [],
     }
 
 
-def _outcome(final_recommendation: str | None) -> str:
-    return "ready_to_complete" if final_recommendation == "completed" else "human_review_required"
-
-
 def _risk_flag_packet(flag: dict[str, Any], index: int) -> dict[str, Any]:
     return {
-        "id": f"risk:{flag.get('category') or 'item'}:{index}",
+        "id": flag.get("finding_id") or f"risk:{flag.get('category') or 'item'}:{index}",
         "category": flag.get("category"),
-        "status": flag.get("status"),
+        "evaluation": flag.get("evaluation"),
         "severity": flag.get("severity"),
+        "subject": _compact(flag.get("subject")),
         "description": flag.get("description"),
         "source": flag.get("source"),
     }
+
+
+def merge_case_review_assessments(
+    risk_flags: list[dict[str, Any]], summary: dict[str, Any],
+) -> list[dict[str, Any]]:
+    assessments = {
+        item.get("finding_id"): item
+        for item in summary.get("finding_assessments", [])
+        if item.get("finding_id")
+    }
+    return [
+        {**flag, "case_review": assessments[flag["finding_id"]]}
+        if flag.get("finding_id") in assessments else flag
+        for flag in risk_flags
+    ]
 
 
 def _evidence_packet(item: dict[str, Any], index: int) -> dict[str, Any]:
