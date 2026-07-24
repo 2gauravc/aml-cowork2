@@ -142,11 +142,14 @@ Available workflows:
   authoritative live document source. Request extracted information or a
   temporary download URL only when the user asks for it.
 - Use inspect_current_session when the user asks what is currently held in the
-  session, CDD state, graph state, case, pipeline, or document requirements.
+  session, CDD state, graph state, case, pipeline, document requirements, or
+  neutral findings. Findings are evidence-referenced records; currently,
+  `adverse_news` findings come from Adverse News Screening.
 - Use list_session_evidence when the user asks what evidence is available, its
   provenance, or whether a source/API result is retained as evidence.
 - Use answer_from_context for analytical questions about the current
-  CDD/evidence, rather than answering from general knowledge.
+  CDD/evidence/findings, rather than answering from general knowledge. Use it
+  for adverse-news findings, severity, potential impact, actions, and RFIs.
 - Use evaluate_csp_address when the user asks whether a registered address is a
   company service provider, virtual office, registered office, or formation agent.
 - When asked whether CSP assessment has run, use list_session_evidence or
@@ -344,9 +347,10 @@ def _execute_tool_call(name: str, args: dict[str, Any], session: dict[str, Any])
             return {
                 "answer": answer_cdd_question(
                     question=args.get("question") or "",
-                    cdd=session.get("cdd", {}),
-                    evidence=session.get("evidence", []),
-                    risk_flags=session.get("risk_flags", []),
+                cdd=session.get("cdd", {}),
+                evidence=session.get("evidence", []),
+                risk_flags=session.get("risk_flags", []),
+                findings=session.get("findings", []),
                 )
             }
         if name == "evaluate_csp_address":
@@ -420,7 +424,8 @@ def _tool_specs() -> list[StructuredTool]:
             description=(
                 "Inspect the active CDD session and return its live state: customer, case, "
                 "pipeline/graph status, CDD availability, document requirements and their "
-                "statuses, documents, risk flags, and final recommendation. Use this before "
+                "statuses, documents, legacy risk flags, and neutral findings. Findings are "
+                "evidence-referenced records; currently adverse_news is produced by Adverse News Screening. Use this before "
                 "answering questions about what the application currently holds or where the "
                 "case is in its workflow."
             ),
@@ -556,7 +561,7 @@ def _normalise_document_name(value: str) -> str:
 
 
 def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
-    """Return structured live session data for the LLM to interpret."""
+    """Return live session data, including neutral findings (currently adverse_news)."""
     requirements = session.get("document_requirements") or []
     requirement_counts: dict[str, int] = {}
     for requirement in requirements:
@@ -579,6 +584,8 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "document_count": len(session.get("documents") or []),
         "evidence_count": len(session.get("evidence") or []),
         "risk_flags": session.get("risk_flags") or [],
+        "findings_count": len(session.get("findings") or []),
+        "findings": session.get("findings") or [],
     }
 
 

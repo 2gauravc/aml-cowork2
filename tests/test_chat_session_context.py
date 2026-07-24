@@ -64,6 +64,7 @@ class ChatSessionContextTests(unittest.TestCase):
                 },
             ],
             "risk_flags": [{"severity": "low"}],
+            "findings": [_adverse_news_finding()],
             "messages": [],
         }
 
@@ -74,6 +75,31 @@ class ChatSessionContextTests(unittest.TestCase):
         self.assertEqual(result["pipeline_status"], "awaiting_documents")
         self.assertEqual(result["document_requirement_counts"], {"processed": 1, "not_found": 1})
         self.assertIn("metadata", result["graph_state_keys"])
+        self.assertEqual(result["findings_count"], 1)
+        self.assertEqual(result["findings"][0]["category"], "adverse_news")
+
+    def test_context_answers_adverse_news_rfi_from_findings(self) -> None:
+        result = _execute_tool_call(
+            "answer_from_context",
+            {"question": "What RFI is recommended for Alex Chen's adverse news finding?"},
+            self.session,
+        )
+
+        self.assertIn("Provide the regulatory notice", result["answer"])
+
+    def test_session_inspection_handles_no_findings(self) -> None:
+        self.session.pop("findings")
+
+        result = _execute_tool_call("inspect_current_session", {}, self.session)
+
+        self.assertEqual(result["findings_count"], 0)
+        self.assertEqual(result["findings"], [])
+
+    def test_findings_are_described_to_the_chatbot(self) -> None:
+        inspect_tool = next(tool for tool in _tool_specs() if tool.name == "inspect_current_session")
+
+        self.assertIn("adverse_news", inspect_tool.description)
+        self.assertIn("neutral findings", inspect_tool.description)
 
     def test_evidence_tool_returns_retained_evidence_and_scope(self) -> None:
         result = _execute_tool_call("list_session_evidence", {}, self.session)
@@ -183,3 +209,22 @@ class ChatSessionContextTests(unittest.TestCase):
         evaluate_csp.assert_called_once_with("1 Example Street", company_name="SC ENGINEERING PRIVATE LIMITED")
         self.assertEqual(result["assessment"]["is_csp"], "yes")
         self.assertEqual(self.session["risk_flags"][-1]["category"], "csp_address")
+
+
+def _adverse_news_finding() -> dict:
+    return {
+        "category": "adverse_news",
+        "summary": "Public reporting may concern the UBO; identity remains ambiguous.",
+        "subject": {"name": "Alex Chen"},
+        "confidence": {"level": "medium"},
+        "severity": {"level": "high"},
+        "recommended_action_rfi": {
+            "rfi": [
+                {
+                    "request": "Provide the regulatory notice and explain the reported matter.",
+                    "reason": "Confirm identity and status.",
+                    "priority": "high",
+                }
+            ]
+        },
+    }
