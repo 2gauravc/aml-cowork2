@@ -47,6 +47,7 @@ class DemoModeTests(unittest.TestCase):
                     request=PipelineRequest(
                         customer_name="Ignored in Demo Mode",
                         jurisdiction="GB",
+                        account_location="GB",
                     ),
                     background_tasks=None,
                 )

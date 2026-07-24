@@ -83,6 +83,7 @@ class PipelineRequest(BaseModel):
     session_id: str | None = None
     customer_name: str
     jurisdiction: str
+    account_location: Literal["SG", "HK", "GB"]
     case_id: str | None = None
     generate_pdf: bool = False
 
@@ -406,6 +407,7 @@ async def run_pipeline(
         session,
         customer_name=request.customer_name,
         jurisdiction=request.jurisdiction,
+        account_location=request.account_location,
         case_id=request.case_id,
         generate_pdf=request.generate_pdf,
         background_tasks=background_tasks,
@@ -684,6 +686,7 @@ def _response(
         "messages": session["messages"],
         "customer_name": session.get("customer_name"),
         "jurisdiction": session.get("jurisdiction"),
+        "account_location": session.get("account_location"),
         "case_id": session.get("case_id"),
         "cdd": session.get("cdd"),
         "case_status": session.get("case_status"),
@@ -890,15 +893,16 @@ async def _run_pipeline_for_session(
     *,
     customer_name: str | None,
     jurisdiction: str | None,
+    account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: str | None = None,
     generate_pdf: bool = False,
     background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
-    if not customer_name or not jurisdiction:
+    if not customer_name or not jurisdiction or not account_location:
         session["messages"].append(
             {
                 "role": "assistant",
-                "content": "Please provide a company name and jurisdiction to run the full CDD pipeline.",
+                "content": "Please provide a company name, jurisdiction, and account opening location to run the full CDD pipeline.",
             }
         )
         return _response(session, status="needs_input")
@@ -910,6 +914,7 @@ async def _run_pipeline_for_session(
     _clear_previous_cdd_run(session)
     session["customer_name"] = customer_name
     session["jurisdiction"] = jurisdiction
+    session["account_location"] = account_location
     if case_id:
         session["case_id"] = case_id
     else:
@@ -943,6 +948,7 @@ async def _run_pipeline_for_session(
     task_kwargs = {
         "customer_name": customer_name,
         "jurisdiction": jurisdiction,
+        "account_location": account_location,
         "case_id": case_id,
         "generate_pdf": generate_pdf,
         "graph_thread_id": session["graph_thread_id"],
@@ -1003,6 +1009,7 @@ async def _complete_pipeline_for_session(
     *,
     customer_name: str,
     jurisdiction: str | None,
+    account_location: Literal["SG", "HK", "GB"],
     case_id: str | None = None,
     generate_pdf: bool = False,
     graph_thread_id: str,
@@ -1017,6 +1024,7 @@ async def _complete_pipeline_for_session(
             run_cdd_agent_state,
             customer_name=customer_name,
             jurisdiction=jurisdiction,
+            account_location=account_location,
             case_id=case_id,
             progress_callback=publish_progress,
             thread_id=graph_thread_id,

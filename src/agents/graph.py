@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
@@ -240,11 +240,13 @@ def run_cdd_agent(
     *,
     customer_name: str | None = None,
     jurisdiction: str | None = None,
+    account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
 ) -> dict[str, Any]:
     result = run_cdd_agent_state(
         customer_name=customer_name,
         jurisdiction=jurisdiction,
+        account_location=account_location,
         case_id=case_id,
     )
     return result.get("cdd", {})
@@ -254,6 +256,7 @@ def run_cdd_agent_state(
     *,
     customer_name: str | None = None,
     jurisdiction: str | None = None,
+    account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     thread_id: str | None = None,
@@ -263,6 +266,7 @@ def run_cdd_agent_state(
     state = new_cdd_state(
         customer_name=customer_name,
         jurisdiction=jurisdiction,
+        account_location=account_location,
         case_id=case_id,
     )
     return app.invoke(state, config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}})

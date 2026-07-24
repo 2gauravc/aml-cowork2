@@ -40,6 +40,7 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
             session,
             customer_name="New Co",
             jurisdiction="US",
+            account_location="SG",
             case_id=None,
             background_tasks=BackgroundTasks(),
         )
@@ -60,6 +61,8 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
         "no": 0,
     }
     assert response["case_id"] is None
+    assert response["account_location"] == "SG"
+    assert session["account_location"] == "SG"
     assert response["demo_csp_result"] == {"result": "independent tool result"}
     assert "Previous case result" not in response["messages"][-1]["content"]
     assert session["graph_thread_id"] != "session-1"
@@ -73,6 +76,7 @@ def test_rejected_new_run_preserves_previous_cdd_artifacts() -> None:
             session,
             customer_name=None,
             jurisdiction="US",
+            account_location="SG",
             background_tasks=BackgroundTasks(),
         )
     )

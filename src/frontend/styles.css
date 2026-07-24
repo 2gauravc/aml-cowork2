@@ -650,7 +650,7 @@ th {
 .pipeline-form {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 2fr) 90px minmax(130px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 2fr) minmax(120px, 1fr) minmax(120px, 1fr) auto auto;
 }
 
 .idv-generation-form {

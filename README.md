@@ -58,6 +58,77 @@ Company + jurisdiction
   → human reviewer records a decision
 ```
 
+## CDD state data hierarchy
+
+The LangGraph pipeline carries one shared `CDDState` object. `risk_flags` is
+the detailed, evidence-backed record of deterministic findings; `case_status`
+is its compact UI/API summary; and `case_review_summary` adds reviewer support
+without changing the underlying evaluation or severity.
+
+```text
+CDDState
+├─ metadata                          Customer inputs and KYC case identity
+│  ├─ customer
+│  │  ├─ name
+│  │  ├─ jurisdiction
+│  │  └─ registration_number
+│  └─ kyc_case
+│     ├─ case_id
+│     ├─ status_id, status, ready
+│     └─ selected_registry_match
+│
+├─ cdd                               Assembled due-diligence record
+│  ├─ started_at / completed_at
+│  ├─ company_business_profile
+│  │  └─ customer_static: company identity, status, activity, capital,
+│  │     registration dates, jurisdiction, registered address, and source
+│  ├─ ownership_and_control
+│  │  ├─ ubos, shareholders_over_10_percent, related_parties
+│  │  ├─ members: controlling members, shareholders, beneficial owners
+│  │  └─ org_chart
+│  ├─ individual_identity_verification
+│  │  └─ policy and required_individuals
+│  └─ documents
+│
+├─ documents                         Append-only document references
+│  └─ each: name, category, URL/path, source, collected_at
+│
+├─ evidence                          Append-only audit trail of gathered material
+│  └─ each: source, tool, description, relevance_tags, data, collected_at
+│
+├─ risk_flags                        Detailed deterministic findings
+│  ├─ ownership                       Ownership completeness and UBO identification
+│  ├─ aml                             AML result for each controlling member
+│  ├─ csp_address                     Company-service-provider address indicators
+│  └─ each finding
+│     ├─ finding_id                   Stable category/subject identifier
+│     ├─ category                     ownership | aml | csp_address
+│     ├─ evaluation                   yes | no | inconclusive
+│     ├─ severity                     none | low | medium | high
+│     ├─ description, source, subject, evidence
+│     └─ case_review (optional)       Confidence, potential impact, action/RFI
+│
+├─ case_status                       Compact UI/API projection of risk_flags
+│  ├─ cdd_generation                 not_started | in_progress | completed |
+│  │                                 incomplete | failed
+│  └─ risk_summary
+│     ├─ by_category
+│     │  └─ ownership / aml / csp_address: yes, no, inconclusive counts
+│     └─ totals                       Yes, no, inconclusive across all categories
+│
+├─ case_review_summary               Reviewer decision-support brief
+│  ├─ status, executive_summary, key_evidence, limitations
+│  ├─ recommended_actions
+│  ├─ requests_for_information        Request, reason, linked risk/gap, priority
+│  ├─ finding_assessments             One confidence assessment per risk finding
+│  └─ evidence_index                  Evidence IDs and available source URLs
+│
+├─ document_requirements             ID&V/document workflow items
+│  └─ required person/entity, document type, status, available/uploaded reference
+│
+└─ messages                          Accumulated LangGraph user/assistant/tool messages
+```
+
 ## Quick start
 
 ### Prerequisites

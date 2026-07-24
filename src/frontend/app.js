@@ -1,6 +1,7 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
+const ACCOUNT_OPENING_LOCATIONS = ["SG", "HK", "GB"];
 const TOOL_WORKSPACES = [
   { id: "csp", label: "CSP Detection" },
   { id: "digital-footprint", label: "Digital Footprint" },
@@ -19,9 +20,9 @@ function App() {
     },
   ]);
   const [customerName, setCustomerName] = useState("");
-  const [jurisdiction, setJurisdiction] = useState("GB");
+  const [jurisdiction, setJurisdiction] = useState("");
+  const [accountLocation, setAccountLocation] = useState("");
   const [jurisdictions, setJurisdictions] = useState(FALLBACK_JURISDICTIONS);
-  const [caseId, setCaseId] = useState("");
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
   const [riskFlagRecords, setRiskFlagRecords] = useState([]);
@@ -124,9 +125,6 @@ function App() {
         const data = await readJsonResponse(response, "Jurisdictions request failed");
         if (!ignore && Array.isArray(data.jurisdictions) && data.jurisdictions.length) {
           setJurisdictions(data.jurisdictions);
-          if (!data.jurisdictions.includes(jurisdiction)) {
-            setJurisdiction(data.jurisdictions[0]);
-          }
         }
       } catch (err) {
         if (!ignore) setError(err.message);
@@ -242,7 +240,6 @@ function App() {
     setPdfUrl(data.pdf_url || null);
     if (data.customer_name) setCustomerName(data.customer_name);
     if (data.jurisdiction) setJurisdiction(data.jurisdiction);
-    if (data.case_id) setCaseId(String(data.case_id));
     setPipelineProgress(data.pipeline_progress || null);
     setPipelineStatus(data.pipeline_status || data.status || null);
     if (typeof data.demo_mode === "boolean") setDemoMode(data.demo_mode);
@@ -303,7 +300,7 @@ function App() {
   }
 
   async function runPipeline({ generatePdf = false } = {}) {
-    if (!demoMode && (!customerName.trim() || !jurisdiction.trim())) return;
+    if (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation)) return;
     setPipelineLoading(true);
     setError(null);
     try {
@@ -314,7 +311,7 @@ function App() {
           session_id: sessionId,
           customer_name: customerName.trim(),
           jurisdiction: jurisdiction.trim(),
-          case_id: caseId.trim() || null,
+          account_location: accountLocation,
           generate_pdf: generatePdf,
         }),
       });
@@ -758,18 +755,23 @@ function App() {
                 value={jurisdiction}
                 onChange={(event) => setJurisdiction(event.target.value)}
               >
+                <option value="" disabled>Jurisdiction</option>
                 {jurisdictions.map((code) => (
                   <option value={code} key={code}>{code}</option>
                 ))}
               </select>
-              <input
-                aria-label="Case ID"
-                placeholder="Case ID optional"
-                value={caseId}
-                onChange={(event) => setCaseId(event.target.value)}
-              />
+              <select
+                aria-label="Account opening location"
+                value={accountLocation}
+                onChange={(event) => setAccountLocation(event.target.value)}
+              >
+                <option value="" disabled>AO Location</option>
+                {ACCOUNT_OPENING_LOCATIONS.map((code) => (
+                  <option value={code} key={code}>{code}</option>
+                ))}
+              </select>
               <button
-                disabled={pipelineLoading || (!demoMode && !customerName.trim())}
+                disabled={pipelineLoading || (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation))}
                 onClick={() => runPipeline()}
               >
                 Run Full CDD Pipeline

@@ -17,6 +17,7 @@ GenerationStatus = Literal["not_started", "in_progress", "completed", "incomplet
 class CustomerMetadata(TypedDict, total=False):
     name: str
     jurisdiction: str
+    account_location: Literal["SG", "HK", "GB"]
     registration_number: str
 
 
@@ -149,6 +150,7 @@ def new_cdd_state(
     *,
     customer_name: str | None = None,
     jurisdiction: str | None = None,
+    account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
 ) -> CDDState:
     """Create the minimal initial state for a CDD graph run."""
@@ -157,6 +159,8 @@ def new_cdd_state(
         customer["name"] = customer_name
     if jurisdiction:
         customer["jurisdiction"] = jurisdiction
+    if account_location:
+        customer["account_location"] = account_location
 
     kyc_case: CaseMetadata = {}
     if case_id is not None:
