@@ -15,12 +15,29 @@ def test_cdd_metadata_uses_case_status_from_api_response() -> None:
     assert "cddStatusLabel" not in app
 
 
+def test_case_assessment_workspace_uses_the_renamed_summary_field() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert "Case Assessment" in app
+    assert "data.case_assessment_summary" in app
+    assert "data.case_review_summary" not in app
+
+
+def test_json_view_renders_the_complete_cdd_state() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert "setCddState(data.cdd_state || null);" in app
+    assert "CDDState JSON" in app
+    assert "JSON.stringify(cddState, null, 2)" in app
+    assert "JSON.stringify(cdd, null, 2)" not in app
+
+
 def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
     assert "function resetCddRunDisplay()" in app
     assert "setDocumentLinks({});" in app
-    assert "setCaseReviewSummary(null);" in app
+    assert "setCaseAssessmentSummary(null);" in app
     assert "setPdfUrl(null);" in app
     assert 'if (data.status === "running") resetCddRunDisplay();' in app
     assert "const runEpoch = cddRunEpochRef.current;" in app

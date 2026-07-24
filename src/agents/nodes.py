@@ -713,7 +713,7 @@ def generate_case_review(state: CDDState) -> dict[str, Any]:
     except CaseReviewError as exc:
         summary = unavailable_case_review(str(exc))
     return {
-        "case_review_summary": summary,
+        "case_assessment_summary": summary,
         "risk_flags": merge_case_review_assessments(state.get("risk_flags", []), summary),
     }
 

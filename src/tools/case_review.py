@@ -12,7 +12,7 @@ from openai import OpenAI, OpenAIError
 
 DEFAULT_MODEL = os.getenv("OPENAI_CASE_REVIEW_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SKILL_PATH = PROJECT_ROOT / "skills" / "case-review" / "SKILL.md"
+SKILL_PATH = PROJECT_ROOT / "skills" / "case-assessment" / "SKILL.md"
 
 CASE_REVIEW_SCHEMA = {
     "type": "object",
@@ -122,7 +122,7 @@ def generate_case_review_summary(
             text={
                 "format": {
                     "type": "json_schema",
-                    "name": "case_review_summary",
+                    "name": "case_assessment_summary",
                     "schema": CASE_REVIEW_SCHEMA,
                     "strict": True,
                 }

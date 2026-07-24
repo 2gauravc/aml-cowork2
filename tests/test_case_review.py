@@ -63,7 +63,7 @@ class CaseReviewTests(unittest.TestCase):
         self.assertEqual(result["finding_assessments"][0]["confidence"], "low")
         self.assertEqual(result["key_evidence"][0]["source_refs"], ["risk:csp_address:1"])
         self.assertEqual(result["evidence_index"][0]["urls"], ["https://example.test/csp"])
-        self.assertTrue(result["skill_path"].endswith("skills/case-review/SKILL.md"))
+        self.assertTrue(result["skill_path"].endswith("skills/case-assessment/SKILL.md"))
         request = client.responses.create.call_args.kwargs
         self.assertEqual(request["model"], "gpt-5.6")
         self.assertTrue(request["text"]["format"]["strict"])
@@ -75,6 +75,7 @@ class CaseReviewTests(unittest.TestCase):
     def test_loads_reusable_case_review_skill(self) -> None:
         skill = load_case_review_skill()
 
+        self.assertIn("name: case-assessment", skill)
         self.assertIn("# CDD Case Review", skill)
         self.assertIn("Requests for Information", skill)
 
@@ -98,6 +99,8 @@ class CaseReviewTests(unittest.TestCase):
             }
         )
 
+        self.assertEqual(result["case_assessment_summary"]["status"], "available")
+        self.assertNotIn("case_review_summary", result)
         self.assertEqual(result["risk_flags"][0]["case_review"]["confidence"], "medium")
         self.assertEqual(generate_summary.call_args.kwargs["case_status"]["risk_summary"]["totals"]["yes"], 1)
 

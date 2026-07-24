@@ -1,5 +1,5 @@
 ---
-name: case-review
+name: case-assessment
 description: Create an evidence-grounded CDD case-review brief from retained CDD data, risk flags, and evidence. Use after deterministic CDD checks have completed to help a human reviewer understand evidence, limitations, next actions, and customer information requests.
 ---
 

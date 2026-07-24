@@ -141,7 +141,7 @@ class CDDState(TypedDict, total=False):
     evidence: Annotated[list[EvidenceItem], add]
     risk_flags: list[RiskFlag]
     case_status: CaseStatus
-    case_review_summary: dict[str, Any] | None
+    case_assessment_summary: dict[str, Any] | None
     messages: Annotated[list[AnyMessage], add_messages]
     document_requirements: list[dict[str, Any]]
 
@@ -197,7 +197,7 @@ def new_cdd_state(
         "evidence": [],
         "risk_flags": [],
         "case_status": {"cdd_generation": "in_progress", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}}},
-        "case_review_summary": None,
+        "case_assessment_summary": None,
         "messages": [],
         "document_requirements": [],
     }

@@ -1,16 +1,16 @@
-# AML Case Review Workspace
+# AML Case Assessment Workspace
 
 An evidence-first workspace for corporate customer due diligence (CDD). It brings
 registry data, ownership structure, identity-verification requirements, AML
 signals, and company-service-provider (CSP) address indicators into one
 reviewable case. A structured AI review turns the completed evidence packet into
-a **Case Review** brief; it does not make the compliance decision.
+a **Case Assessment** brief; it does not make the compliance decision.
 
 ## Why this exists
 
 CDD reviewers often have to reconcile ownership records, adverse AML signals,
 registered-address evidence, and missing documents across separate systems.
-AML Case Review Workspace makes that work easier to audit: every generated review
+AML Case Assessment Workspace makes that work easier to audit: every generated review
 is grounded in the retained CDD object, risk flags, and collected evidence.
 
 ## Features
@@ -22,7 +22,7 @@ is grounded in the retained CDD object, risk flags, and collected evidence.
 - **CSP Detection:** searches the registered address with Tavily and applies the
   reusable [`csp-detector` skill](skills/csp-detector/SKILL.md) through a strict
   structured assessment.
-- **Case Review:** uses the reusable [`case-review` skill](skills/case-review/SKILL.md)
+- **Case Assessment:** uses the reusable [`case-assessment` skill](skills/case-assessment/SKILL.md)
   to synthesize evidence, limitations, internal actions, and draft customer
   Requests for Information (RFIs).
 - **Human controls:** a reviewer records **Approve**, **Request information**, or
@@ -41,19 +41,19 @@ flowchart LR
   Graph --> Flags[Ownership, AML, and CSP checks]
   Flags --> CSP[Tavily search + CSP skill]
   Graph --> Finalize[Deterministic CDD outcome]
-  Finalize --> Review[Case Review skill]
+  Finalize --> Review[Case Assessment skill]
   Review --> UI
   Review --> Decision[Human reviewer decision]
 ```
 
-### CDD and Case Review flow
+### CDD and Case Assessment flow
 
 ```text
 Company + jurisdiction
   → registry profile, ownership, members, and documents
   → ownership / AML / CSP risk flags with retained evidence
   → deterministic outcome: ready to complete or human review required
-  → Case Review skill
+  → Case Assessment skill
   → evidence summary, limitations, analyst actions, and draft RFIs
   → human reviewer records a decision
 ```
@@ -62,7 +62,7 @@ Company + jurisdiction
 
 The LangGraph pipeline carries one shared `CDDState` object. `risk_flags` is
 the detailed, evidence-backed record of deterministic findings; `case_status`
-is its compact UI/API summary; and `case_review_summary` adds reviewer support
+is its compact UI/API summary; and `case_assessment_summary` adds reviewer support
 without changing the underlying evaluation or severity.
 
 ```text
@@ -116,7 +116,7 @@ CDDState
 │     │  └─ ownership / aml / csp_address: yes, no, inconclusive counts
 │     └─ totals                       Yes, no, inconclusive across all categories
 │
-├─ case_review_summary               Reviewer decision-support brief
+├─ case_assessment_summary               Reviewer decision-support brief
 │  ├─ status, executive_summary, key_evidence, limitations
 │  ├─ recommended_actions
 │  ├─ requests_for_information        Request, reason, linked risk/gap, priority
@@ -186,7 +186,7 @@ python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8000
 
 Open [http://localhost:8000](http://localhost:8000) and select **Load Demo
 Case**. The fixture populates the normal CDD, Documents, CSP evidence, and Case
-Review screens without any external request. Its Case Review is deliberately
+Assessment screens without any external request. Its Case Assessment is deliberately
 pre-generated demo content; use Live Mode to run the AI workflows against live
 evidence.
 
@@ -228,7 +228,7 @@ jurisdiction, then select **Run Full CDD Pipeline**.
 1. Run a full CDD case from the **CDD** tab.
 2. Review the company profile, ownership structure, ID&V requirements, and risk
    flags.
-3. Open **Case Review** to see the evidence synthesis and draft RFIs.
+3. Open **Case Assessment** to see the evidence synthesis and draft RFIs.
 4. Use **Refresh summary** after evidence changes.
 5. Record the reviewer decision and optional note.
 
@@ -249,13 +249,13 @@ The application uses structured AI in core product workflows:
   requirements.
 - **CSP assessment:** evaluates compact, cited web-search evidence using the
   [`csp-detector` skill](skills/csp-detector/SKILL.md).
-- **Case Review:** loads the [`case-review` skill](skills/case-review/SKILL.md)
+- **Case Assessment:** loads the [`case-assessment` skill](skills/case-assessment/SKILL.md)
   and produces a strict JSON reviewer brief from the completed CDD object,
   retained risk flags, and tagged evidence.
 
 All structured workflows use strict JSON schemas. The default model is
 configurable through `OPENAI_MODEL` and the feature-specific environment
-variables. Case Review receives the deterministic outcome as non-editable
+variables. Case Assessment receives the deterministic outcome as non-editable
 context; it explains and prioritizes the case but cannot approve, reject,
 escalate, or clear risk flags.
 
@@ -264,7 +264,7 @@ escalate, or clear risk flags.
 - This software is decision support, not an automated compliance decision.
 - A CSP indicator or AML signal is a review item, not proof of wrongdoing.
 - Search results and registry data may be incomplete, stale, unavailable, or
-  contradictory. The Case Review tab surfaces these limitations explicitly.
+  contradictory. The Case Assessment tab surfaces these limitations explicitly.
 - RFIs are drafts for a reviewer; the app does not contact customers.
 - Reviewers must verify source material, follow their organisation's policy, and
   protect personal data when operating the system.
@@ -277,7 +277,7 @@ Run the complete test suite:
 python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-The tests cover CDD graph behavior, CSP assessment, Case Review structured
+The tests cover CDD graph behavior, CSP assessment, Case Assessment structured
 output and guardrails, document processing, and pipeline progress.
 
 ### Verify a clean Demo Mode install
@@ -292,7 +292,7 @@ python -m uvicorn src.backend.app:app --port 8000
 ```
 
 Open the local app and select **Load Demo Case**. The CDD, Documents, CSP, and
-Case Review tabs should populate without sending an external request.
+Case Assessment tabs should populate without sending an external request.
 
 ## Troubleshooting
 
@@ -311,6 +311,6 @@ src/backend/       FastAPI routes and session handling
 src/agents/        LangGraph CDD pipeline and chat workflow
 src/tools/         KYC, Tavily, OpenAI, document, and assessment integrations
 src/frontend/      React workspace served by FastAPI
-skills/            Reusable CSP and Case Review instructions
+skills/            Reusable CSP and Case Assessment instructions
 tests/             Unit and workflow tests
 ```

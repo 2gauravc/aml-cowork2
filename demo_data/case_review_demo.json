@@ -25,7 +25,7 @@
   "messages": [
     {
       "role": "assistant",
-      "content": "Demo case loaded. This fixture contains pre-generated CDD evidence and a Case Review; no external services were called."
+      "content": "Demo case loaded. This fixture contains pre-generated CDD evidence and a Case Assessment; no external services were called."
     }
   ],
   "cdd": {
@@ -227,7 +227,7 @@
       "collected_at": "2026-07-13T09:00:00+00:00"
     }
   ],
-  "case_review_summary": {
+  "case_assessment_summary": {
     "status": "available",
     "demo_fixture": true,
     "executive_summary": "Northstar Trading Ltd has a documented individual UBO and no AML-positive controlling member in this demonstration case. The registered-address assessment remains inconclusive because the retained evidence is limited to the building level, so human review is required.",

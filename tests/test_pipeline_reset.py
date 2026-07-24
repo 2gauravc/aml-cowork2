@@ -4,7 +4,7 @@ import asyncio
 
 from fastapi import BackgroundTasks
 
-from src.backend.app import _run_pipeline_for_session
+from src.backend.app import _response, _run_pipeline_for_session
 
 
 def _previous_case_session() -> dict:
@@ -22,7 +22,7 @@ def _previous_case_session() -> dict:
         "document_results": [{"name": "old.pdf"}],
         "document_requirements": [{"id": "old"}],
         "risk_flags": [{"finding_id": "old"}],
-        "case_review_summary": {"summary": "old"},
+        "case_assessment_summary": {"summary": "old"},
         "case_review_decision": {"decision": "approve"},
         "pdf_path": "/tmp/old.pdf",
         "pipeline_status": "complete",
@@ -51,7 +51,7 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     assert response["documents"] == []
     assert response["document_requirements"] == []
     assert response["risk_flags"] == []
-    assert response["case_review_summary"] is None
+    assert response["case_assessment_summary"] is None
     assert response["case_review_decision"] is None
     assert response["pdf_url"] is None
     assert response["case_status"]["cdd_generation"] == "in_progress"
@@ -84,3 +84,18 @@ def test_rejected_new_run_preserves_previous_cdd_artifacts() -> None:
     assert response["status"] == "needs_input"
     assert response["cdd"] == _previous_case_session()["cdd"]
     assert response["pdf_url"] == "/api/pdf/session-1"
+
+
+def test_response_migrates_a_legacy_case_review_summary() -> None:
+    session = {
+        "session_id": "legacy-session",
+        "messages": [],
+        "case_review_summary": {"executive_summary": "Legacy assessment"},
+    }
+
+    response = _response(session, status="complete")
+
+    assert response["case_assessment_summary"] == {"executive_summary": "Legacy assessment"}
+    assert response["cdd_state"]["case_assessment_summary"] == {"executive_summary": "Legacy assessment"}
+    assert "metadata" in response["cdd_state"]
+    assert "case_review_summary" not in session

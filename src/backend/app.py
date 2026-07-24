@@ -151,7 +151,7 @@ async def chat(
         session["messages"].append(
             {
                 "role": "assistant",
-                "content": "Demo Mode does not call external services. Load the demo case to explore the fixture-backed CDD and Case Review workflow.",
+                "content": "Demo Mode does not call external services. Load the demo case to explore the fixture-backed CDD and Case Assessment workflow.",
             }
         )
         return _response(session, status="demo_read_only")
@@ -376,7 +376,7 @@ async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, An
         )
     except CaseReviewError as exc:
         summary = unavailable_case_review(str(exc))
-    session["case_review_summary"] = summary
+    session["case_assessment_summary"] = summary
     session["risk_flags"] = merge_case_review_assessments(session.get("risk_flags", []), summary)
     sync_case_status(session)
     return _response(session, status="case_review_refreshed")
@@ -611,6 +611,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "document_results",
         "document_requirements",
         "risk_flags",
+        "case_assessment_summary",
         "case_review_summary",
         "case_review_decision",
         "pdf_path",
@@ -667,7 +668,7 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     session["session_id"] = session_id
     session["demo_mode"] = True
     session["risk_flags"] = merge_case_review_assessments(
-        session.get("risk_flags", []), session.get("case_review_summary") or {},
+        session.get("risk_flags", []), session.get("case_assessment_summary") or {},
     )
     sync_case_status(session, generation="completed")
     return _response(session, status="complete")
@@ -679,6 +680,8 @@ def _response(
     status: str,
     error: str | None = None,
 ) -> dict[str, Any]:
+    if "case_assessment_summary" not in session and "case_review_summary" in session:
+        session["case_assessment_summary"] = session.pop("case_review_summary")
     pdf_url = f"/api/pdf/{session['session_id']}" if session.get("pdf_path") else None
     return {
         "session_id": session["session_id"],
@@ -689,11 +692,12 @@ def _response(
         "account_location": session.get("account_location"),
         "case_id": session.get("case_id"),
         "cdd": session.get("cdd"),
+        "cdd_state": _cdd_state_snapshot(session),
         "case_status": session.get("case_status"),
         "documents": session.get("documents", []),
         "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
-        "case_review_summary": session.get("case_review_summary"),
+        "case_assessment_summary": session.get("case_assessment_summary"),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
@@ -702,6 +706,35 @@ def _response(
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
         "demo_mode": bool(session.get("demo_mode")) or _demo_mode_enabled(),
+    }
+
+
+def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
+    """Return the complete CDD state for the JSON workspace view."""
+    graph_state = session.get("graph_state")
+    if isinstance(graph_state, dict):
+        return graph_state
+
+    customer = {
+        key: value
+        for key, value in {
+            "name": session.get("customer_name"),
+            "jurisdiction": session.get("jurisdiction"),
+            "account_location": session.get("account_location"),
+        }.items()
+        if value is not None
+    }
+    kyc_case = {"case_id": session["case_id"]} if session.get("case_id") is not None else {}
+    return {
+        "metadata": {"customer": customer, "kyc_case": kyc_case},
+        "cdd": session.get("cdd"),
+        "documents": session.get("documents", []),
+        "evidence": session.get("evidence", []),
+        "risk_flags": session.get("risk_flags", []),
+        "case_status": session.get("case_status"),
+        "case_assessment_summary": session.get("case_assessment_summary"),
+        "messages": session.get("messages", []),
+        "document_requirements": session.get("document_requirements", []),
     }
 
 
@@ -1000,7 +1033,7 @@ def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) ->
     if graph_state.get("case_status"):
         session["case_status"] = graph_state["case_status"]
     sync_case_status(session)
-    session["case_review_summary"] = graph_state.get("case_review_summary")
+    session["case_assessment_summary"] = graph_state.get("case_assessment_summary")
     session["document_requirements"] = graph_state.get("document_requirements", [])
 
 

@@ -25,8 +25,9 @@ function App() {
   const [jurisdictions, setJurisdictions] = useState(FALLBACK_JURISDICTIONS);
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
+  const [cddState, setCddState] = useState(null);
   const [riskFlagRecords, setRiskFlagRecords] = useState([]);
-  const [caseReviewSummary, setCaseReviewSummary] = useState(null);
+  const [caseAssessmentSummary, setCaseAssessmentSummary] = useState(null);
   const [caseReviewDecision, setCaseReviewDecision] = useState(null);
   const [reviewDecisionDraft, setReviewDecisionDraft] = useState("request_information");
   const [reviewNote, setReviewNote] = useState("");
@@ -221,9 +222,10 @@ function App() {
     setSessionId(data.session_id);
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
+    setCddState(data.cdd_state || null);
     setRiskFlagRecords(data.risk_flags || []);
     setCaseStatus(data.case_status || { cdd_generation: "not_started", risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } } });
-    setCaseReviewSummary(data.case_review_summary || null);
+    setCaseAssessmentSummary(data.case_assessment_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
     setDocuments(data.documents || []);
@@ -249,12 +251,13 @@ function App() {
   function resetCddRunDisplay() {
     cddRunEpochRef.current += 1;
     setCdd(null);
+    setCddState(null);
     setRiskFlagRecords([]);
     setCaseStatus({
       cdd_generation: "in_progress",
       risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } },
     });
-    setCaseReviewSummary(null);
+    setCaseAssessmentSummary(null);
     setCaseReviewDecision(null);
     setReviewNote("");
     setDocuments([]);
@@ -379,7 +382,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      applyResponse(await readJsonResponse(response, "Case review refresh failed"));
+      applyResponse(await readJsonResponse(response, "Case Assessment refresh failed"));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -700,7 +703,7 @@ function App() {
               className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
               onClick={() => setActiveWorkspace("case-review")}
             >
-              Case Review
+              Case Assessment
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
@@ -939,9 +942,9 @@ function App() {
             )}
           </Section>
 
-          {showJson && cdd && (
-            <Section title="CDD JSON">
-              <pre className="json-view">{JSON.stringify(cdd, null, 2)}</pre>
+          {showJson && cddState && (
+            <Section title="CDDState JSON">
+              <pre className="json-view">{JSON.stringify(cddState, null, 2)}</pre>
             </Section>
           )}
               </>
@@ -961,7 +964,7 @@ function App() {
               />
             ) : activeWorkspace === "case-review" ? (
               <CaseReview
-                summary={caseReviewSummary}
+                summary={caseAssessmentSummary}
                 decision={caseReviewDecision}
                 decisionDraft={reviewDecisionDraft}
                 note={reviewNote}
@@ -1112,7 +1115,7 @@ function CaseReview({
 }) {
   if (!hasCdd) {
     return (
-      <Section title="Case Review">
+      <Section title="Case Assessment">
         <p className="empty">Run a CDD case to generate an evidence-grounded reviewer brief.</p>
       </Section>
     );
@@ -1121,8 +1124,8 @@ function CaseReview({
   const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
   return (
     <>
-      <Section title="Case Review">
-        <div className="case-review-header">
+      <Section title="Case Assessment">
+        <div className="case-assessment-header">
           <div>
             <p className="review-disclaimer">Decision support only. A human reviewer remains responsible for the case decision.</p>
           </div>
@@ -1131,10 +1134,10 @@ function CaseReview({
           </button>
         </div>
         {!summary ? (
-          <p className="empty">No case review has been generated yet.</p>
+          <p className="empty">No case assessment has been generated yet.</p>
         ) : (
           <>
-            {summary.status === "unavailable" && <p className="risk">The generated review is unavailable. The recorded CDD evidence remains available for review.</p>}
+            {summary.status === "unavailable" && <p className="risk">The generated assessment is unavailable. The recorded CDD evidence remains available for review.</p>}
             <h3>Executive summary</h3>
             <p>{summary.executive_summary}</p>
           </>
@@ -1837,7 +1840,7 @@ function RiskEvidenceTooltip({ risk }) {
               <span>{`${review.recommended_action_or_rfi?.type === "rfi" ? "RFI" : "Recommended action"}: ${review.recommended_action_or_rfi?.text}`}</span>
             )}
           </>
-        ) : <span>Case Review assessment pending.</span>}
+        ) : <span>Case Assessment pending.</span>}
         {sources.map((source, index) => (
           <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
             {source.title || source.url || "Source"}
