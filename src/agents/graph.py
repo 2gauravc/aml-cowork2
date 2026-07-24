@@ -33,6 +33,7 @@ from src.agents.nodes import (  # noqa: E402
     establish_idv_requirements,
     locate_available_documents,
     await_documents,
+    adverse_news_screening,
     process_available_documents,
     evaluate_risk_flags,
     extract_idv_documents,
@@ -70,6 +71,7 @@ PIPELINE_NODE_LABELS = {
     "establish_idv_requirements": "Establishing ID&V requirements",
     "locate_available_documents": "Locating documents",
     "extract_idv_documents": "Extracting from ID&V documents",
+    "adverse_news_screening": "Screening adverse news",
     "evaluate_risk_flags": "Evaluating red flags",
     "finalize_cdd": "Completing CDD",
     "generate_case_review": "Preparing Case Assessment",
@@ -203,6 +205,7 @@ def build_cdd_graph(
     # The interrupt node is an internal pause point, not a visible pipeline step.
     graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
+    add_node("adverse_news_screening", adverse_news_screening)
     add_node("evaluate_risk_flags", evaluate_risk_flags)
     add_node("finalize_cdd", finalize_cdd)
     add_node("generate_case_review", generate_case_review)
@@ -229,7 +232,8 @@ def build_cdd_graph(
     graph.add_edge("locate_available_documents", "process_available_documents")
     graph.add_edge("process_available_documents", "await_documents")
     graph.add_edge("await_documents", "extract_idv_documents")
-    graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
+    graph.add_edge("extract_idv_documents", "adverse_news_screening")
+    graph.add_edge("adverse_news_screening", "evaluate_risk_flags")
     graph.add_edge("evaluate_risk_flags", "finalize_cdd")
     graph.add_edge("finalize_cdd", "generate_case_review")
     graph.add_edge("generate_case_review", END)

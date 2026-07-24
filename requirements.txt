@@ -12,3 +12,4 @@ uvicorn
 xhtml2pdf
 boto3
 python-multipart
+jsonschema

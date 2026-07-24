@@ -38,6 +38,8 @@ flowchart LR
   UI[React workspace] --> API[FastAPI session API]
   API --> Graph[LangGraph CDD pipeline]
   Graph --> KYC[KYC registry and ownership data]
+  Graph --> Adverse[Adverse News Screening]
+  Adverse --> Web[Tavily search + adverse-news-screening skill]
   Graph --> Flags[Ownership and CSP checks]
   Flags --> CSP[Tavily search + CSP skill]
   Graph --> Finalize[Deterministic CDD outcome]
@@ -51,6 +53,7 @@ flowchart LR
 ```text
 Company + jurisdiction
   → registry profile, ownership, members, and documents
+  → Adverse News Screening after final ID&V extraction
   → ownership / CSP risk flags with retained evidence
   → deterministic outcome: ready to complete or human review required
   → Case Assessment skill
@@ -60,9 +63,10 @@ Company + jurisdiction
 
 ## CDD state data hierarchy
 
-The LangGraph pipeline carries one shared `CDDState` object. `risk_flags` is
-the detailed, evidence-backed record of deterministic findings; `case_status`
-is its compact UI/API summary; and `case_assessment_summary` adds reviewer support
+The LangGraph pipeline carries one shared `CDDState` object. `findings` is the
+new neutral, evidence-referenced collection used by Adverse News Screening;
+`risk_flags` remains the legacy deterministic-check record and powers the current
+`case_status` UI/API summary. `case_assessment_summary` adds reviewer support
 without changing the underlying evaluation or severity.
 
 ```text
@@ -248,6 +252,9 @@ The application uses structured AI in core product workflows:
   requirements.
 - **CSP assessment:** evaluates compact, cited web-search evidence using the
   [`csp-detector` skill](skills/csp-detector/SKILL.md).
+- **Adverse News Screening:** screens the company, directors, and UBOs after
+  ID&V extraction using the [`adverse-news-screening` skill](skills/adverse-news-screening/SKILL.md),
+  retaining web evidence and emitting validated neutral findings.
 - **Case Assessment:** loads the [`case-assessment` skill](skills/case-assessment/SKILL.md)
   and produces a strict JSON reviewer brief from the completed CDD object,
   retained risk flags, and tagged evidence.

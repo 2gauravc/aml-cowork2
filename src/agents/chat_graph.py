@@ -749,6 +749,7 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     session["graph_state"] = graph_state
     session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
+    session["findings"] = graph_state.get("findings", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
     session["case_status"] = graph_state.get("case_status", session.get("case_status", {}))
     sync_case_status(session)

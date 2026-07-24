@@ -607,6 +607,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "graph_state",
         "graph_thread_id",
         "evidence",
+        "findings",
         "documents",
         "document_results",
         "document_requirements",
@@ -697,6 +698,7 @@ def _response(
         "documents": session.get("documents", []),
         "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
+        "findings": session.get("findings", []),
         "case_assessment_summary": session.get("case_assessment_summary"),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
@@ -730,6 +732,7 @@ def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "cdd": session.get("cdd"),
         "documents": session.get("documents", []),
         "evidence": session.get("evidence", []),
+        "findings": session.get("findings", []),
         "risk_flags": session.get("risk_flags", []),
         "case_status": session.get("case_status"),
         "case_assessment_summary": session.get("case_assessment_summary"),
@@ -1029,6 +1032,7 @@ def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) ->
     session["graph_state"] = graph_state
     session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
+    session["findings"] = graph_state.get("findings", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
     if graph_state.get("case_status"):
         session["case_status"] = graph_state["case_status"]

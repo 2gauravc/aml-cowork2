@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 from langgraph.types import interrupt
@@ -28,6 +29,7 @@ from src.tools.case_review import (
     unavailable_case_review,
 )
 from src.tools.risk_severity_policy import interpret_risk_severity_policy
+from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen_adverse_news
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -614,6 +616,122 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
     return update
 
 
+def adverse_news_screening(state: CDDState) -> dict[str, Any]:
+    """Screen final CDD identities and add only new evidence/findings."""
+    try:
+        result = screen_adverse_news(state.get("cdd", {}))
+        run_id = f"run:adverse-news:{uuid4().hex}"
+        source_evidence = []
+        source_ids: dict[str, str] = {}
+        for item in result["sources"]:
+            evidence_id = f"evidence:adverse-news:{uuid4().hex}"
+            source_ids[item["id"]] = evidence_id
+            source_evidence.append(
+                {
+                    "evidence_id": evidence_id,
+                    "source": "Tavily",
+                    "tool": "adverse_news_screening",
+                    "description": item.get("title") or "Adverse-news web search result",
+                    "relevance_tags": ["adverse_news", "web_search"],
+                    "data": item,
+                    "source_url": item.get("url"),
+                    "published_at": item.get("published_date"),
+                    "collected_at": result["evaluated_at"],
+                }
+            )
+        coverage_id = f"evidence:adverse-news:coverage:{uuid4().hex}"
+        coverage = {
+            "evidence_id": coverage_id,
+            "source": "Tavily/OpenAI",
+            "tool": "adverse_news_screening",
+            "description": "Recorded adverse-news screening coverage.",
+            "relevance_tags": ["adverse_news", "screening_coverage"],
+            "data": {"entities": result["entities"], "queries": result["queries"], "source_ids": list(source_ids.values()), "skill_path": result["definition"]["path"]},
+            "collected_at": result["evaluated_at"],
+        }
+        entities = {entity["key"]: entity for entity in result["entities"]}
+        findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"]) for draft in result["drafts"]]
+        return {"evidence": [*source_evidence, coverage], "findings": findings}
+    except AdverseNewsError as exc:
+        return {
+            "evidence": [
+                _evidence(
+                    tool="adverse_news_screening",
+                    description="Adverse-news screening could not be completed.",
+                    source="Adverse News Screening",
+                    data={"status": "unavailable", "reason": str(exc)},
+                    relevance_tags=["adverse_news", "screening_coverage"],
+                )
+            ],
+            "findings": [],
+        }
+
+
+def _assemble_adverse_news_finding(
+    draft: dict[str, Any],
+    entities: dict[str, dict[str, Any]],
+    source_ids: dict[str, str],
+    run_id: str,
+    overlay_definition: dict[str, Any],
+) -> dict[str, Any]:
+    entity = entities.get(str(draft.get("entity_key")))
+    if not entity:
+        raise AdverseNewsError("Adverse-news assessment returned an unknown entity")
+    refs = draft.get("source_refs")
+    if not isinstance(refs, list) or not refs:
+        raise AdverseNewsError("Adverse-news finding must cite retained source references")
+    unknown = {str(reference) for reference in refs} - set(source_ids)
+    if unknown:
+        raise AdverseNewsError(f"Adverse-news assessment cited unknown sources: {', '.join(sorted(unknown))}")
+    overlay = draft.get("adverse_news")
+    required_overlay = overlay_definition.get("required") or []
+    if not isinstance(overlay, dict) or any(field not in overlay for field in required_overlay):
+        raise AdverseNewsError("Adverse-news assessment returned an incomplete adverse_news/v1 overlay")
+    overlay = deepcopy(overlay)
+    _validate_overlay(overlay, overlay_definition)
+    overlay["screening_coverage"] = {
+        **(overlay.get("screening_coverage") or {}),
+        "source_evidence_ids": [source_ids[str(reference)] for reference in refs],
+    }
+    finding = {
+        key: draft.get(key)
+        for key in ("title", "summary", "confidence", "severity", "potential_impact_risk", "recommended_action_rfi")
+    }
+    finding.update(
+        {
+            "finding_id": f"finding:adverse-news:{entity['key']}:{uuid4().hex}",
+            "schema_version": "finding/v1",
+            "category": "adverse_news",
+            "subject": {"entity_id": entity.get("entity_id"), "entity_type": entity["entity_type"], "name": entity["name"]},
+            "source": {"producer_type": "tool", "producer_name": "adverse_news_screening", "run_id": run_id, "created_at": datetime.now(UTC).isoformat()},
+            "relevant_evidence_ids": [source_ids[str(reference)] for reference in refs],
+            "adverse_news": overlay,
+        }
+    )
+    _validate_finding(finding)
+    return finding
+
+
+def _validate_finding(finding: dict[str, Any]) -> None:
+    try:
+        from jsonschema import Draft202012Validator
+
+        errors = list(Draft202012Validator(load_finding_schema()).iter_errors(finding))
+    except ImportError as exc:
+        raise AdverseNewsError("jsonschema is required to validate CDD findings") from exc
+    if errors:
+        raise AdverseNewsError(f"Invalid finding/v1 record: {errors[0].message}")
+
+
+def _validate_overlay(value: dict[str, Any], definition: dict[str, Any]) -> None:
+    required = definition.get("required") or []
+    if any(field not in value for field in required):
+        raise AdverseNewsError("Adverse-news assessment returned an incomplete adverse_news/v1 overlay")
+    for name, child in (definition.get("properties") or {}).items():
+        if isinstance(value.get(name), dict) and isinstance(child, dict):
+            _validate_overlay(value[name], child)
+
+
 def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
     """Materialize cached or officer-supplied requirements for graph extraction."""
     artifacts = []
@@ -739,6 +857,7 @@ def _evidence(
     source: str = "KYC API",
 ) -> dict[str, Any]:
     return {
+        "evidence_id": f"evidence:{uuid4().hex}",
         "source": source,
         "tool": tool,
         "description": description,

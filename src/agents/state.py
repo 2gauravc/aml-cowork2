@@ -115,12 +115,31 @@ class CaseDocument(TypedDict, total=False):
 
 
 class EvidenceItem(TypedDict, total=False):
+    evidence_id: str
     source: str
     tool: str
     description: str
     relevance_tags: list[str]
     data: dict[str, Any] | list[Any]
     collected_at: str
+    source_url: str
+    publisher: str
+    published_at: str
+
+
+class Finding(TypedDict, total=False):
+    finding_id: str
+    schema_version: Literal["finding/v1"]
+    category: str
+    title: str
+    summary: str
+    subject: dict[str, Any]
+    confidence: dict[str, Any]
+    severity: dict[str, Any]
+    potential_impact_risk: str
+    recommended_action_rfi: dict[str, Any]
+    source: dict[str, Any]
+    relevant_evidence_ids: list[str]
 
 
 class RiskFlag(TypedDict, total=False):
@@ -139,6 +158,7 @@ class CDDState(TypedDict, total=False):
     cdd: CDD
     documents: Annotated[list[CaseDocument], add]
     evidence: Annotated[list[EvidenceItem], add]
+    findings: Annotated[list[Finding], add]
     risk_flags: list[RiskFlag]
     case_status: CaseStatus
     case_assessment_summary: dict[str, Any] | None
@@ -195,6 +215,7 @@ def new_cdd_state(
         },
         "documents": [],
         "evidence": [],
+        "findings": [],
         "risk_flags": [],
         "case_status": {"cdd_generation": "in_progress", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}}},
         "case_assessment_summary": None,
