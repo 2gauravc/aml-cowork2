@@ -23,11 +23,9 @@ def build_red_flags_graph():
     """Build the independent red-flags assessment subgraph."""
     graph = StateGraph(RedFlagState)
     graph.add_node("check_ownership_gap", check_ownership_gap)
-    graph.add_node("check_member_aml", check_member_aml)
     graph.add_node("check_csp_address", check_csp_address)
     graph.set_entry_point("check_ownership_gap")
-    graph.add_edge("check_ownership_gap", "check_member_aml")
-    graph.add_edge("check_member_aml", "check_csp_address")
+    graph.add_edge("check_ownership_gap", "check_csp_address")
     graph.add_edge("check_csp_address", END)
     return graph.compile()
 
@@ -73,30 +71,6 @@ def check_ownership_gap(state: RedFlagState) -> dict[str, Any]:
         f"Individual UBOs above 25% were identified: {names or 'available in ownership data'}.",
         evidence={"ubos": ubos},
     )]}
-
-
-def check_member_aml(state: RedFlagState) -> dict[str, Any]:
-    ownership = state.get("ownership_and_control", {})
-    member_data = ownership.get("members") or {}
-    members = member_data.get("controlling_members", [])
-    if member_data.get("status") != "complete":
-        return {"risk_flags": [_finding(
-            "aml", "inconclusive", "members", "KYC member/AML data is unavailable or incomplete.",
-            evidence={"members_status": member_data.get("status")},
-        )]}
-    flags = []
-    for member in members:
-        value = (member.get("kyc") or {}).get("is_aml_positive")
-        evaluation = "yes" if value is True else "no" if value is False else "inconclusive"
-        flags.append(_finding(
-            "aml", evaluation, "members",
-            f"KYC AML result for {member.get('name') or 'controlling member'}: {evaluation.title()}.",
-            subject={"name": member.get("name"), "case_common_id": member.get("case_common_id")},
-            evidence={"kyc": member.get("kyc") or {}},
-        ))
-    if flags:
-        return {"risk_flags": flags}
-    return {"risk_flags": [_finding("aml", "no", "members", "No controlling members require AML assessment.", evidence={"controlling_members": []})]}
 
 
 def check_csp_address(state: RedFlagState) -> dict[str, Any]:

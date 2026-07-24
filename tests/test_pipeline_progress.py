@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from src.agents.graph import _document_progress_message, _progress_node
+from src.agents.graph import PIPELINE_NODE_LABELS
 
 
 class PipelineProgressTests(unittest.TestCase):
@@ -34,6 +35,12 @@ class PipelineProgressTests(unittest.TestCase):
         self.assertEqual(updates[0]["total_nodes"], 16)
         self.assertTrue(updates[0]["using_cache"])
         self.assertEqual(updates[0]["status"], "running")
+
+    def test_final_pipeline_step_uses_case_assessment_label(self):
+        self.assertEqual(
+            PIPELINE_NODE_LABELS["generate_case_review"],
+            "Preparing Case Assessment",
+        )
 
     def test_failed_node_reports_error_before_reraising(self):
         updates = []

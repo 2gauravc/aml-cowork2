@@ -23,6 +23,13 @@ def test_case_assessment_workspace_uses_the_renamed_summary_field() -> None:
     assert "data.case_review_summary" not in app
 
 
+def test_risk_ui_has_no_aml_presentation() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert "AML Risk" not in app
+    assert 'aml:' not in app
+
+
 def test_json_view_renders_the_complete_cdd_state() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 

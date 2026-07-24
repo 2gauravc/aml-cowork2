@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from src.agents.nodes import evaluate_risk_flags
-from src.agents.red_flags_graph import run_red_flags_graph
+from src.agents.red_flags_graph import build_red_flags_graph, run_red_flags_graph
 
 
 POLICY = {
@@ -14,16 +14,21 @@ POLICY = {
     "source_path": "test",
     "rules": [
         {"category": category, "evaluation": evaluation, "severity": severity}
-        for category, severity in (("aml", "high"), ("ownership", "medium"), ("csp_address", "medium"))
+        for category, severity in (("ownership", "medium"), ("csp_address", "medium"))
         for evaluation in ("yes", "inconclusive")
     ] + [
         {"category": category, "evaluation": "no", "severity": "none"}
-        for category in ("aml", "ownership", "csp_address")
+        for category in ("ownership", "csp_address")
     ],
 }
 
 
 class RedFlagsGraphTests(unittest.TestCase):
+    def test_subgraph_has_no_aml_check_node(self) -> None:
+        nodes = set(build_red_flags_graph().get_graph().nodes)
+
+        self.assertNotIn("check_member_aml", nodes)
+
     @patch("src.agents.red_flags_graph.evaluate_csp_address")
     def test_subgraph_combines_existing_flags_and_csp_evidence(self, evaluate_csp) -> None:
         evaluate_csp.return_value = {
@@ -43,12 +48,12 @@ class RedFlagsGraphTests(unittest.TestCase):
                 "status": "complete",
                 "ubos": [],
                 "org_chart": {"status": "complete"},
-                "members": {"status": "complete", "controlling_members": [{"name": "Alex", "kyc": {"is_aml_positive": True}}]},
+                "members": {"status": "complete", "controlling_members": [{"name": "Alex"}]},
             },
             severity_policy=POLICY,
         )
 
-        self.assertEqual({flag["category"] for flag in result["risk_flags"]}, {"ownership", "aml", "csp_address"})
+        self.assertEqual({flag["category"] for flag in result["risk_flags"]}, {"ownership", "csp_address"})
         csp_flag = next(flag for flag in result["risk_flags"] if flag["category"] == "csp_address")
         self.assertEqual(csp_flag["evidence"]["assessment"]["is_csp"], "yes")
         self.assertEqual(result["evidence"][0]["tool"], "csp_address_assessment")
@@ -84,11 +89,11 @@ class RedFlagsGraphTests(unittest.TestCase):
             severity_policy=POLICY,
         )
 
-        self.assertEqual({flag["category"] for flag in result["risk_flags"]}, {"ownership", "aml", "csp_address"})
+        self.assertEqual({flag["category"] for flag in result["risk_flags"]}, {"ownership", "csp_address"})
         self.assertTrue(all(flag["evaluation"] == "no" for flag in result["risk_flags"]))
 
     @patch("src.agents.red_flags_graph.evaluate_csp_address")
-    def test_aml_keeps_individual_mixed_findings(self, evaluate_csp) -> None:
+    def test_subgraph_ignores_legacy_member_aml_fields(self, evaluate_csp) -> None:
         evaluate_csp.return_value = {"assessment": {"is_csp": "no"}, "sources": []}
         result = run_red_flags_graph(
             customer_static={"registered_address": {"full_address": "1 Example Street"}},
@@ -98,15 +103,11 @@ class RedFlagsGraphTests(unittest.TestCase):
                 "ubos": [{"name": "Owner"}],
                 "members": {"status": "complete", "controlling_members": [
                     {"name": "Positive", "case_common_id": "1", "kyc": {"is_aml_positive": True}},
-                    {"name": "Unknown", "case_common_id": "2", "kyc": {}},
-                    {"name": "Negative", "case_common_id": "3", "kyc": {"is_aml_positive": False}},
                 ]},
             },
             severity_policy=POLICY,
         )
-        aml = [flag for flag in result["risk_flags"] if flag["category"] == "aml"]
-        self.assertEqual([flag["evaluation"] for flag in aml], ["yes", "inconclusive", "no"])
-        self.assertEqual([flag["severity"] for flag in aml], ["high", "high", "none"])
+        self.assertNotIn("aml", {flag["category"] for flag in result["risk_flags"]})
 
 
 if __name__ == "__main__":

@@ -1,15 +1,15 @@
 # AML Case Assessment Workspace
 
 An evidence-first workspace for corporate customer due diligence (CDD). It brings
-registry data, ownership structure, identity-verification requirements, AML
-signals, and company-service-provider (CSP) address indicators into one
+registry data, ownership structure, identity-verification requirements, and
+company-service-provider (CSP) address indicators into one
 reviewable case. A structured AI review turns the completed evidence packet into
 a **Case Assessment** brief; it does not make the compliance decision.
 
 ## Why this exists
 
-CDD reviewers often have to reconcile ownership records, adverse AML signals,
-registered-address evidence, and missing documents across separate systems.
+CDD reviewers often have to reconcile ownership records, registered-address
+evidence, and missing documents across separate systems.
 AML Case Assessment Workspace makes that work easier to audit: every generated review
 is grounded in the retained CDD object, risk flags, and collected evidence.
 
@@ -17,8 +17,8 @@ is grounded in the retained CDD object, risk flags, and collected evidence.
 
 - **Full CDD pipeline:** creates or reuses a KYC case and collects the company
   profile, members, ownership chart, and ID&V requirements.
-- **Evidence-first risk flags:** checks for ownership gaps, AML-positive
-  controlling members, and CSP-address indicators.
+- **Evidence-first risk flags:** checks for ownership gaps and CSP-address
+  indicators.
 - **CSP Detection:** searches the registered address with Tavily and applies the
   reusable [`csp-detector` skill](skills/csp-detector/SKILL.md) through a strict
   structured assessment.
@@ -38,7 +38,7 @@ flowchart LR
   UI[React workspace] --> API[FastAPI session API]
   API --> Graph[LangGraph CDD pipeline]
   Graph --> KYC[KYC registry and ownership data]
-  Graph --> Flags[Ownership, AML, and CSP checks]
+  Graph --> Flags[Ownership and CSP checks]
   Flags --> CSP[Tavily search + CSP skill]
   Graph --> Finalize[Deterministic CDD outcome]
   Finalize --> Review[Case Assessment skill]
@@ -51,7 +51,7 @@ flowchart LR
 ```text
 Company + jurisdiction
   → registry profile, ownership, members, and documents
-  → ownership / AML / CSP risk flags with retained evidence
+  → ownership / CSP risk flags with retained evidence
   → deterministic outcome: ready to complete or human review required
   → Case Assessment skill
   → evidence summary, limitations, analyst actions, and draft RFIs
@@ -98,11 +98,10 @@ CDDState
 │
 ├─ risk_flags                        Detailed deterministic findings
 │  ├─ ownership                       Ownership completeness and UBO identification
-│  ├─ aml                             AML result for each controlling member
 │  ├─ csp_address                     Company-service-provider address indicators
 │  └─ each finding
 │     ├─ finding_id                   Stable category/subject identifier
-│     ├─ category                     ownership | aml | csp_address
+│     ├─ category                     ownership | csp_address
 │     ├─ evaluation                   yes | no | inconclusive
 │     ├─ severity                     none | low | medium | high
 │     ├─ description, source, subject, evidence
@@ -113,7 +112,7 @@ CDDState
 │  │                                 incomplete | failed
 │  └─ risk_summary
 │     ├─ by_category
-│     │  └─ ownership / aml / csp_address: yes, no, inconclusive counts
+│     │  └─ ownership / csp_address: yes, no, inconclusive counts
 │     └─ totals                       Yes, no, inconclusive across all categories
 │
 ├─ case_assessment_summary               Reviewer decision-support brief
@@ -262,7 +261,7 @@ escalate, or clear risk flags.
 ## Responsible AI and limitations
 
 - This software is decision support, not an automated compliance decision.
-- A CSP indicator or AML signal is a review item, not proof of wrongdoing.
+- A CSP indicator is a review item, not proof of wrongdoing.
 - Search results and registry data may be incomplete, stale, unavailable, or
   contradictory. The Case Assessment tab surfaces these limitations explicitly.
 - RFIs are drafts for a reviewer; the app does not contact customers.

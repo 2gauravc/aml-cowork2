@@ -18,7 +18,7 @@ Prepare a concise case brief for a human reviewer using only the supplied case p
 ## Review brief
 
 - Summarize the case in plain language without changing the supplied deterministic risk evaluations or policy-derived severities.
-- Prioritize the most material ownership, AML, CSP-address, and document evidence.
+- Prioritize the most material ownership, CSP-address, and document evidence.
 - Recommend practical internal analyst actions, but do not recommend approving, rejecting, or escalating the case.
 - Draft customer-facing Requests for Information (RFIs) only where the supplied evidence supports a material gap. Each RFI must state what to provide, why it is needed, the linked risk or gap, and a priority.
 - Return no RFIs when the evidence does not justify one.

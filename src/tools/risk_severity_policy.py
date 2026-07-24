@@ -22,7 +22,7 @@ RISK_SEVERITY_POLICY_SCHEMA = {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "category": {"type": "string", "enum": ["ownership", "aml", "csp_address"]},
+                    "category": {"type": "string", "enum": ["ownership", "csp_address"]},
                     "evaluation": {"type": "string", "enum": ["yes", "no", "inconclusive"]},
                     "severity": {"type": "string", "enum": ["none", "low", "medium", "high"]},
                 },

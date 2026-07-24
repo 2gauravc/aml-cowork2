@@ -8,7 +8,7 @@ def test_case_status_summarizes_all_risk_evaluations() -> None:
         "completed",
         [
             {"description": "Ownership: Evaluation: Yes."},
-            {"description": "AML: Evaluation: No."},
+            {"description": "Ownership: Evaluation: No."},
             {"description": "CSP: Evaluation: Inconclusive."},
             {"evidence": {"assessment": {"is_csp": "yes"}}},
         ],

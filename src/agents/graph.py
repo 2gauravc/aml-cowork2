@@ -72,7 +72,7 @@ PIPELINE_NODE_LABELS = {
     "extract_idv_documents": "Extracting from ID&V documents",
     "evaluate_risk_flags": "Evaluating red flags",
     "finalize_cdd": "Completing CDD",
-    "generate_case_review": "Preparing case review",
+    "generate_case_review": "Preparing Case Assessment",
 }
 
 

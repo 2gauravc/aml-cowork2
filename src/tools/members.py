@@ -4,7 +4,7 @@ Fetch and clean company members from the KYC Public API.
 
 Use this tool for the concise compliance view: direct controlling members,
 shareholders / beneficial owners, ultimate beneficial owners, KYC status,
-AML flags, addresses, and source registry details. For a deeper recursive
+addresses, and source registry details. For a deeper recursive
 ownership chain that expands corporate shareholders, use src/tools/orgchart.py.
 
 The main callable for future LLM tool binding is:
@@ -70,8 +70,8 @@ def get_company_members_by_name(
     case to be ready, then returns the company's controlling members,
     shareholders / beneficial owners, and ultimate beneficial owners.
 
-    Use this when the user needs a concise KYC / AML review list. It focuses on
-    members and compliance details, not the full recursive ownership tree. Use
+    Use this when the user needs a concise KYC member list. It focuses on
+    members and ownership details, not the full recursive ownership tree. Use
     get_company_org_chart_by_name when the user asks who owns the owners, wants
     an ownership chain, or needs a more detailed corporate structure.
 
@@ -200,8 +200,6 @@ def _clean_member_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "member_properties": member_properties,
         "kyc": {
             "is_kyced": entry.get("isKYCed"),
-            "is_aml_positive": entry.get("isCaseAMLPositive"),
-            "aml_summary": _aml_summary(entry.get("caseAmlSummary")),
         },
         "sources": _sources(entry.get("dataSource")),
     }
@@ -243,26 +241,6 @@ def _clean_properties(properties: dict[str, Any] | None) -> dict[str, Any] | Non
             continue
         cleaned[key] = value
     return cleaned or None
-
-
-def _aml_summary(summary: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not isinstance(summary, dict):
-        return None
-
-    world_check = summary.get("worldCheckSummary") or {}
-    lexis_nexis = summary.get("lexisNexisCheckSummary")
-    flagged_world_checks = {
-        key: value
-        for key, value in world_check.items()
-        if value not in (None, "", "NA", "NoMatches")
-    }
-
-    return _drop_empty(
-        {
-            "world_check": flagged_world_checks,
-            "lexis_nexis": lexis_nexis,
-        }
-    )
 
 
 def _sources(data_sources: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:

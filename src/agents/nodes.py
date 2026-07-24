@@ -176,7 +176,6 @@ def fetch_members(state: CDDState) -> dict[str, Any]:
                     "directors",
                     "controlling_members",
                     "shareholders",
-                    "aml",
                     "addresses",
                     "nationality",
                 ],

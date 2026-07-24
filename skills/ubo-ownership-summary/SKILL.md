@@ -11,7 +11,7 @@ Produce a standard business output from KYC ownership JSON.
 
 Use `src/tools/orgchart.py` as the primary source because it returns the recursive ownership tree: the top-level entity, direct shareholders, corporate shareholders, nested shareholders, directors/officers, and persons with significant control.
 
-Use `src/tools/members.py` only as optional supporting context when the user specifically needs member addresses, registry properties, source details, or AML summary fields. Do not use `members.py` alone for this skill because it may not expand the shareholders behind a corporate owner.
+Use `src/tools/members.py` only as optional supporting context when the user specifically needs member addresses, registry properties, or source details. Do not use `members.py` alone for this skill because it may not expand the shareholders behind a corporate owner.
 
 If the user gives company name and jurisdiction but no JSON, run:
 
@@ -107,4 +107,3 @@ Rules:
 - State the top-level entity name before the tables.
 - Add a short note when the org chart appears to repeat the same person or company in multiple roles.
 - Add a short note when a classification is inferred from name shape rather than explicit JSON fields.
-- Do not present AML flags as proof of wrongdoing. Phrase them as items requiring review.

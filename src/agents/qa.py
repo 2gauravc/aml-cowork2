@@ -39,9 +39,7 @@ def answer_cdd_question(
                     content=(
                         "You are a CDD analyst assistant. Answer only from the CDD "
                         "JSON, risk flags, and evidence snippets provided. If the "
-                        "answer is not present, say what is missing. Do not treat "
-                        "AML flags as proof of wrongdoing; describe them as review "
-                        "items."
+                        "answer is not present, say what is missing."
                     )
                 ),
                 HumanMessage(
@@ -150,7 +148,7 @@ def _deterministic_answer(
         return "Current review items: " + "; ".join(rows)
 
     name = _possible_person_name(question)
-    if name and ("nationality" in q or "address" in q or "aml" in q):
+    if name and ("nationality" in q or "address" in q):
         member = _find_member(name, evidence)
         if member:
             parts = [f"{member.get('name')} is listed as {member.get('role')}."]
@@ -158,8 +156,6 @@ def _deterministic_answer(
                 parts.append(f"Nationality: {member.get('nationality')}.")
             if "address" in q and member.get("address"):
                 parts.append(f"Address: {member['address'].get('full_address')}.")
-            if "aml" in q and member.get("kyc"):
-                parts.append(f"AML details: {json.dumps(member.get('kyc'))}.")
             return " ".join(parts)
 
     return None

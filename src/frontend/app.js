@@ -1788,12 +1788,6 @@ function riskPresentation(risk) {
       no: "Individual UBOs above 25% were identified.",
       inconclusive: "Ownership review is required.",
     },
-    aml: {
-      title: "AML Risk",
-      yes: "An AML-positive controlling member requires review.",
-      no: "No AML-positive controlling member was identified.",
-      inconclusive: "AML review is required.",
-    },
     csp_address: {
       title: "CSP Risk",
       yes: "The address appears to be used by a company service provider.",
@@ -1814,7 +1808,6 @@ function riskPresentation(risk) {
 function riskCategoryLabel(category) {
   return {
     ownership: "Ownership Risk",
-    aml: "AML Risk",
     csp_address: "CSP Risk",
   }[category] || "Risk Finding";
 }
