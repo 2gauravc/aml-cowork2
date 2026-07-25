@@ -16,7 +16,8 @@ from openai import OpenAI, OpenAIError
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "adverse-news-screening" / "SKILL.md"
 FINDING_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "findings" / "finding-v1.yaml"
-TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
+ADVERSE_NEWS_TERMS = "enforcement OR investigation OR fraud OR bribery OR corruption OR \"money laundering\" OR sanctions OR watchlist OR 1MDB"
 DEFAULT_MODEL = os.getenv("OPENAI_ADVERSE_NEWS_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 
 
@@ -76,29 +77,38 @@ def entities_for_screening(cdd: dict[str, Any]) -> list[dict[str, Any]]:
 def build_search_queries(entities: list[dict[str, Any]]) -> list[dict[str, str]]:
     queries = []
     for entity in entities:
-        qualifiers = " ".join(str(value) for value in entity.get("disambiguators", {}).values() if value)
-        query = f'"{entity["name"]}" {qualifiers} (enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist)'.strip()
+        name = _quoted_search_term(entity["name"])
+        query = f'"{name}" AND ({ADVERSE_NEWS_TERMS})'
+        associated_company = entity.get("disambiguators", {}).get("associated_company")
+        if associated_company and str(associated_company).casefold() != str(entity["name"]).casefold():
+            query = f'{query} AND "{_quoted_search_term(associated_company)}"'
         queries.append({"entity_key": entity["key"], "query": query})
     return queries
 
 
 def search_adverse_news(queries: list[dict[str, str]]) -> list[dict[str, Any]]:
-    api_key = os.getenv("TAVILY_API_KEY")
+    api_key = os.getenv("BRAVE_API_KEY")
     if not api_key:
-        raise AdverseNewsError("TAVILY_API_KEY is required for adverse-news screening")
+        raise AdverseNewsError("BRAVE_API_KEY is required for adverse-news screening")
     results: list[dict[str, Any]] = []
     for item in queries:
         try:
-            response = requests.post(TAVILY_SEARCH_URL, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json={"query": item["query"], "search_depth": "basic", "max_results": 5, "include_answer": False, "include_raw_content": False}, timeout=20)
+            response = requests.get(BRAVE_SEARCH_URL, headers={"Accept": "application/json", "X-Subscription-Token": api_key}, params={"q": item["query"], "count": 10, "extra_snippets": "true"}, timeout=20)
             response.raise_for_status()
             payload = response.json()
         except requests.RequestException as exc:
             raise AdverseNewsError(f"Adverse-news search failed: {exc}") from exc
         except ValueError as exc:
             raise AdverseNewsError("Adverse-news search returned invalid JSON") from exc
-        for result in payload.get("results", []):
-            results.append({"id": f"source:{len(results) + 1}", "entity_key": item["entity_key"], "query": item["query"], "title": result.get("title"), "url": result.get("url"), "content": result.get("content"), "published_date": result.get("published_date")})
+        for result in payload.get("web", {}).get("results", []):
+            snippets = result.get("extra_snippets") or []
+            content = "\n".join(part for part in [result.get("description"), *snippets] if part)
+            results.append({"id": f"source:{len(results) + 1}", "entity_key": item["entity_key"], "query": item["query"], "title": result.get("title"), "url": result.get("url"), "content": content or None, "published_date": result.get("page_age") or result.get("age")})
     return _deduplicate_sources(results)
+
+
+def _quoted_search_term(value: Any) -> str:
+    return str(value).replace('"', " ").strip()
 
 
 def assess_adverse_news(entities: list[dict[str, Any]], sources: list[dict[str, Any]], definition: dict[str, Any]) -> list[dict[str, Any]]:

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from unittest.mock import patch
 
 from src.agents.nodes import adverse_news_screening
 from src.backend.app import IndependentAdverseNewsRequest, assess_independent_adverse_news
-from src.tools.adverse_news import _assessment_schema, entities_for_screening, load_adverse_news_definition, load_finding_schema
+from src.tools.adverse_news import _assessment_schema, build_search_queries, entities_for_screening, load_adverse_news_definition, load_finding_schema, search_adverse_news
 
 
 class AdverseNewsTests(unittest.TestCase):
@@ -53,6 +54,27 @@ class AdverseNewsTests(unittest.TestCase):
 
         self.assertEqual([entity["entity_type"] for entity in entities], ["company", "company_director", "ultimate_beneficial_owner"])
         self.assertEqual([entity["name"] for entity in entities], ["Example Ltd", "Director Doe", "Owner Doe"])
+
+    def test_brave_query_uses_exact_name_and_boolean_adverse_terms(self) -> None:
+        query = build_search_queries([{"key": "ubo:0", "name": "Leonardo DiCaprio", "disambiguators": {}}])[0]["query"]
+
+        self.assertEqual(query, '"Leonardo DiCaprio" AND (enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist OR 1MDB)')
+
+    @patch("src.tools.adverse_news.requests.get")
+    def test_brave_results_are_normalized_with_required_header(self, request_get) -> None:
+        response = request_get.return_value
+        response.json.return_value = {"web": {"results": [{"title": "Regulatory notice", "url": "https://example.test/notice", "description": "Summary", "extra_snippets": ["Detail"], "page_age": "2025-01-23"}]}}
+        with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
+            results = search_adverse_news([{"entity_key": "ubo:0", "query": "query"}])
+
+        self.assertEqual(results[0]["content"], "Summary\nDetail")
+        self.assertEqual(results[0]["published_date"], "2025-01-23")
+        self.assertEqual(request_get.call_args.kwargs["headers"]["X-Subscription-Token"], "test-key")
+
+    def test_brave_key_is_required(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(Exception, "BRAVE_API_KEY"):
+                search_adverse_news([])
 
     @patch("src.agents.nodes.screen_adverse_news")
     def test_node_adds_evidence_and_a_valid_finding_without_risk_flags(self, screening) -> None:
