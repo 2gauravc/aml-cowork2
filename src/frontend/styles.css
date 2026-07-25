@@ -854,6 +854,13 @@ th {
   margin-top: 3px;
 }
 
+.digital-presence-breakdown { display: grid; gap: 8px; margin-top: 14px; }
+.digital-presence-row { align-items: center; display: grid; gap: 6px; grid-template-columns: minmax(180px, .8fr) auto minmax(220px, 2fr) auto; }
+.digital-presence-status { border-radius: 999px; font-size: 12px; font-weight: 700; padding: 3px 8px; }
+.digital-presence-status.present { background: #dcfce7; color: #166534; }
+.digital-presence-status.absent { background: #fee2e2; color: #991b1b; }
+.digital-presence-status.unknown { background: #e5e7eb; color: #374151; }
+
 .adverse-news-finding-tag {
   border-radius: 999px;
   font-size: 12px;

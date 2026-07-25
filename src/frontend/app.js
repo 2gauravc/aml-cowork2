@@ -1393,9 +1393,12 @@ function DigitalFootprint({ form, result, error, assessing, skill, skillLoading,
 
       {result && (
         <>
-          {(result.section_manifest || []).map((section) => <Section title={section.title} key={section.id}><ManifestFootprintSection section={section} result={result} /></Section>)}
+          <DigitalFootprintAssessment result={result} />
+          <Section title="Findings">
+            {(result.findings || []).length ? (result.findings || []).map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`digital-footprint-${index}`} />) : <p className="empty">No material digital-footprint findings were identified.</p>}
+          </Section>
           <Section title="Sources">
-            <div className="csp-sources">{(result.sources || []).map((source) => <div key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url || source.id}</a><small>{` — ${source.query}`}</small></div>)}</div>
+            <div className="csp-sources">{(result.evidence || []).map((source) => <div key={source.evidence_id}><a href={source.source_url || source.data?.url} target="_blank" rel="noreferrer">{source.description || source.source_url || "Source"}</a><small>{` — ${source.data?.query || ""}`}</small></div>)}</div>
           </Section>
           <Section title="Digital Footprint JSON"><pre className="json-view">{JSON.stringify(result, null, 2)}</pre></Section>
           <Section title="CDD evidence">
@@ -1405,6 +1408,19 @@ function DigitalFootprint({ form, result, error, assessing, skill, skillLoading,
       )}
     </>
   );
+}
+
+function DigitalPresenceBreakdown({ indicators }) {
+  const labels = { professional_website: "Professional website", active_linkedin: "Active LinkedIn", independent_references: "Independent references", recent_business_activity: "Recent business activity", basic_website: "Website with basic information", credible_online_presence: "Credible online presence", evidence_of_operations: "Evidence of operations", website_currency: "Website currency/completeness" };
+  if (!indicators) return null;
+  return <div className="digital-presence-breakdown">{Object.entries(labels).map(([key, label]) => { const item = indicators[key] || {}; return <div className="digital-presence-row" key={key}><strong>{label}</strong><span className={`digital-presence-status ${item.status || "unknown"}`}>{statusLabel(item.status)}</span><span>{item.rationale || "Not assessed."}</span>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">Visit official website</a> : null}</div>; })}</div>;
+}
+
+function DigitalFootprintAssessment({ result }) {
+  const assessment = (result.digital_footprint_assessments || [])[0];
+  if (!assessment) return <Section title="Assessment"><p className="risk">Digital Footprint assessment unavailable.</p></Section>;
+  const profile = assessment.digital_business_profile || {};
+  return <><Section title="Presence and Visibility"><div className="adverse-news-summary"><strong>{assessment.company_inputs?.company_name || "Company"}</strong><span>{`Overall score: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span><span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span><span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span><span>{`${(assessment.queries || []).length} queries; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div><DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} /></Section><Section title="Business Profile"><div className="adverse-news-summary"><span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence || []} /></span><span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span><span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span><span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span><span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span></div></Section></>;
 }
 
 function ManifestFootprintSection({ section, result }) {

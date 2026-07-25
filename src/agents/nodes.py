@@ -30,6 +30,7 @@ from src.tools.case_review import (
 )
 from src.tools.risk_severity_policy import interpret_risk_severity_policy
 from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen_adverse_news
+from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -675,6 +676,31 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
                 "entity_outcomes": [],
             }],
         }
+
+
+def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
+    """Run the standalone digital-footprint tool and normalize its shared outputs."""
+    try:
+        inputs = (state.get("digital_footprint_inputs") or {})
+        result = evaluate_digital_footprint(**inputs)
+        run_id = f"run:digital-footprint:{uuid4().hex}"
+        evidence, ids = [], {}
+        for source in result["sources"]:
+            evidence_id = f"evidence:digital-footprint:{uuid4().hex}"; ids[source["id"]] = evidence_id
+            evidence.append({"evidence_id": evidence_id, "source": "Tavily", "tool": "digital_footprint_assessment", "description": source.get("title") or "Digital-footprint web search result", "relevance_tags": ["digital_footprint", "web_search"], "data": source, "source_url": source.get("url"), "published_at": source.get("published_date"), "collected_at": result["evaluated_at"]})
+        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "schema_version": "digital_footprint_assessment/v1", "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
+        findings=[]
+        for draft in result["findings"]:
+            refs=draft.get("source_refs") or []; unknown=set(refs)-set(ids)
+            if unknown: raise DigitalFootprintError(f"Digital-footprint assessment cited unknown sources: {', '.join(sorted(unknown))}")
+            overlay=draft.get("digital_footprint") or {}; overlay["screening_coverage"]={**overlay.get("screening_coverage",{}),"queries":result["queries"],"source_evidence_ids":[ids[x] for x in refs],"limitations":assessment["limitations"]}
+            finding={key:draft.get(key) for key in ("title","summary","confidence","severity","potential_impact_risk","recommended_action_rfi")}
+            finding.update({"finding_id":f"finding:digital-footprint:{uuid4().hex}","schema_version":"finding/v1","category":"digital_footprint","subject":{"entity_id":result["company_inputs"].get("registration_number"),"entity_type":"company","name":result["company_inputs"]["company_name"]},"source":{"producer_type":"tool","producer_name":"digital_footprint_assessment","run_id":run_id,"created_at":result["evaluated_at"]},"relevant_evidence_ids":[ids[x] for x in refs],"digital_footprint":overlay})
+            _validate_finding(finding)
+            findings.append(finding)
+        return {"evidence":evidence,"digital_footprint_assessments":[assessment],"findings":findings}
+    except DigitalFootprintError as exc:
+        return {"evidence": [_evidence(tool="digital_footprint_assessment",description="Digital-footprint assessment could not be completed.",source="Digital Footprint",data={"reason":str(exc)},relevance_tags=["digital_footprint"])], "digital_footprint_assessments":[{"assessment_id":f"assessment:digital-footprint:{uuid4().hex}","schema_version":"digital_footprint_assessment/v1","tool":"digital_footprint_assessment","run_id":None,"created_at":datetime.now(UTC).isoformat(),"outcome":"unavailable","limitations":[str(exc)],"company_inputs":{},"queries":[],"source_evidence_ids":[]}], "findings":[]}
 
 
 def _assemble_adverse_news_assessment(

@@ -21,12 +21,12 @@ from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
-from src.agents.nodes import adverse_news_screening
+from src.agents.nodes import adverse_news_screening, digital_footprint_assessment
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
-from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint, load_digital_footprint_skill, normalize_digital_footprint_evidence
+from src.tools.digital_footprint import load_digital_footprint_skill
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.members import get_company_members_by_name
@@ -229,15 +229,8 @@ async def assess_digital_footprint(request: DigitalFootprintRequest) -> dict[str
     if _demo_mode_enabled():
         raise HTTPException(status_code=400, detail="Digital-footprint assessment is disabled in Demo Mode.")
     try:
-        return await asyncio.to_thread(
-            evaluate_digital_footprint,
-            request.company_name,
-            jurisdiction=request.jurisdiction,
-            registration_number=request.registration_number,
-            known_domain=request.known_domain,
-            registered_address=request.registered_address,
-        )
-    except DigitalFootprintError as exc:
+        return await asyncio.to_thread(digital_footprint_assessment, {"digital_footprint_inputs": request.model_dump()})
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -267,11 +260,10 @@ async def attach_digital_footprint(request: DigitalFootprintAttachRequest) -> di
         raise HTTPException(status_code=404, detail="No active CDD result for this session")
     if session.get("demo_mode"):
         raise HTTPException(status_code=400, detail="Digital-footprint attachment is disabled in Demo Mode.")
-    try:
-        evidence = normalize_digital_footprint_evidence(request.result)
-    except DigitalFootprintError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    session.setdefault("evidence", []).append(evidence)
+    result = request.result or {}
+    session.setdefault("evidence", []).extend(result.get("evidence") or [])
+    session.setdefault("digital_footprint_assessments", []).extend(result.get("digital_footprint_assessments") or [])
+    session.setdefault("findings", []).extend(result.get("findings") or [])
     return _response(session, status="digital_footprint_attached")
 
 
