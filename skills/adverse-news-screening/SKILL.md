@@ -3,6 +3,13 @@ name: adverse-news-screening
 description: Assess material, attributable adverse-news search results using public-web evidence. Use when a CDD workflow needs evidence-grounded findings, confidence and severity assessment, or analyst actions and RFIs.
 input:
   search_terms: 'enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist'
+assessment:
+  schema: adverse_news_assessment/v1
+  required:
+    - outcome
+    - summary
+    - limitations
+    - entity_outcomes
 output:
   schema: adverse_news/v1
   required:
@@ -79,4 +86,4 @@ Use `critical` only for credible sanctions/watchlist exposure or similarly immed
 
 Recommend actions proportionate to the evidence and uncertainty. Prefer verification steps before escalation where identity or status is ambiguous. Use RFIs to request documents or explanations that the customer can reasonably provide, and state why each request resolves the identified uncertainty.
 
-Do not recommend a final onboarding decision. Do not create a finding for a clear/no-hit screen; retain its coverage as evidence. Create an actionable `data_gap` finding only when the inability to screen itself creates a material verification gap.
+Do not recommend a final onboarding decision. Always provide a neutral screening assessment, including an entity-level outcome for each selected entity. Do not create a finding for a clear/no-hit screen; state only that the retained results did not identify material attributable adverse news. Create an actionable `data_gap` finding only when the inability to screen itself creates a material verification gap.

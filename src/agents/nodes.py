@@ -639,33 +639,69 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
                     "collected_at": result["evaluated_at"],
                 }
             )
-        coverage_id = f"evidence:adverse-news:coverage:{uuid4().hex}"
-        coverage = {
-            "evidence_id": coverage_id,
-            "source": "Brave Search/OpenAI",
-            "tool": "adverse_news_screening",
-            "description": "Recorded adverse-news screening coverage.",
-            "relevance_tags": ["adverse_news", "screening_coverage"],
-            "data": {"entities": result["entities"], "queries": result["queries"], "source_ids": list(source_ids.values()), "skill_path": result["definition"]["path"]},
-            "collected_at": result["evaluated_at"],
-        }
         entities = {entity["key"]: entity for entity in result["entities"]}
         queries_by_entity = {item["entity_key"]: item["query"] for item in result["queries"]}
         findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"], queries_by_entity) for draft in result["drafts"]]
-        return {"evidence": [*source_evidence, coverage], "findings": findings}
+        assessment = _assemble_adverse_news_assessment(
+            result["assessment"], result["entities"], result["queries"], list(source_ids.values()),
+            run_id, result["evaluated_at"], bool(findings),
+        )
+        return {"evidence": source_evidence, "findings": findings, "adverse_news_assessments": [assessment]}
     except AdverseNewsError as exc:
+        evaluated_at = datetime.now(UTC).isoformat()
         return {
             "evidence": [
                 _evidence(
                     tool="adverse_news_screening",
                     description="Adverse-news screening could not be completed.",
                     source="Adverse News Screening",
-                    data={"status": "unavailable", "reason": str(exc)},
-                    relevance_tags=["adverse_news", "screening_coverage"],
+                    data={"reason": str(exc)},
+                    relevance_tags=["adverse_news"],
                 )
             ],
             "findings": [],
+            "adverse_news_assessments": [{
+                "assessment_id": f"assessment:adverse-news:{uuid4().hex}",
+                "schema_version": "adverse_news_assessment/v1",
+                "tool": "adverse_news_screening",
+                "run_id": None,
+                "created_at": evaluated_at,
+                "outcome": "unavailable",
+                "summary": "Adverse-news screening could not be completed.",
+                "limitations": [str(exc)],
+                "screened_entities": [],
+                "queries": [],
+                "source_evidence_ids": [],
+                "entity_outcomes": [],
+            }],
         }
+
+
+def _assemble_adverse_news_assessment(
+    draft: dict[str, Any], entities: list[dict[str, Any]], queries: list[dict[str, str]],
+    source_evidence_ids: list[str], run_id: str, evaluated_at: str, has_findings: bool,
+) -> dict[str, Any]:
+    outcomes = draft.get("entity_outcomes")
+    entity_keys = {entity["key"] for entity in entities}
+    if not isinstance(outcomes, list) or len(outcomes) != len(entities) or {item.get("entity_key") for item in outcomes if isinstance(item, dict)} != entity_keys:
+        raise AdverseNewsError("Adverse-news assessment must provide one entity outcome for every screened entity")
+    outcome = draft.get("outcome")
+    if outcome not in {"completed_no_material_findings", "completed_inconclusive"} or not isinstance(draft.get("summary"), str) or not isinstance(draft.get("limitations"), list):
+        raise AdverseNewsError("Adverse-news assessment returned an incomplete assessment")
+    return {
+        "assessment_id": f"assessment:adverse-news:{uuid4().hex}",
+        "schema_version": "adverse_news_assessment/v1",
+        "tool": "adverse_news_screening",
+        "run_id": run_id,
+        "created_at": evaluated_at,
+        "outcome": "completed_with_findings" if has_findings else outcome,
+        "summary": draft["summary"],
+        "limitations": draft["limitations"],
+        "screened_entities": entities,
+        "queries": queries,
+        "source_evidence_ids": source_evidence_ids,
+        "entity_outcomes": outcomes,
+    }
 
 
 def _assemble_adverse_news_finding(

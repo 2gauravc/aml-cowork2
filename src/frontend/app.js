@@ -1917,10 +1917,9 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
   const evidence = Array.isArray(cddState?.evidence) ? cddState.evidence : [];
   const findings = (Array.isArray(cddState?.findings) ? cddState.findings : [])
     .filter((finding) => finding.category === "adverse_news");
-  const coverage = evidence.find((item) => item.tool === "adverse_news_screening"
-    && (item.relevance_tags || []).includes("screening_coverage"));
+  const assessment = adverseNewsAssessment(cddState);
 
-  if (!coverage) {
+  if (!assessment) {
     return (
       <Section title="Adverse News Screening">
         <p className="empty">Not run.</p>
@@ -1928,23 +1927,24 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
     );
   }
 
-  if (coverage.data?.status === "unavailable") {
+  if (assessment.outcome === "unavailable") {
     return (
       <Section title="Adverse News Screening">
-        <p className="risk">{`Screening unavailable. ${coverage.data.reason || "No reason was recorded."}`}</p>
+        <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p>
       </Section>
     );
   }
 
-  const entities = Array.isArray(coverage.data?.entities) ? coverage.data.entities : [];
-  const sourceCount = Array.isArray(coverage.data?.source_ids) ? coverage.data.source_ids.length : 0;
-  const queryCount = Array.isArray(coverage.data?.queries) ? coverage.data.queries.length : 0;
+  const entities = Array.isArray(assessment.screened_entities) ? assessment.screened_entities : [];
+  const sourceCount = Array.isArray(assessment.source_evidence_ids) ? assessment.source_evidence_ids.length : 0;
+  const queryCount = Array.isArray(assessment.queries) ? assessment.queries.length : 0;
   const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
 
   return (
     <Section title="Adverse News Screening">
       <div className="adverse-news-summary">
-        <strong>Screening completed</strong>
+        <strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong>
+        <span>{assessment.summary || "No material attributable adverse-news findings were identified in the retained results."}</span>
         <span>{`Screened ${entities.length} ${entities.length === 1 ? "entity" : "entities"}:`}</span>
         {entities.length ? (
           <ul className="adverse-news-entity-list">
@@ -1953,7 +1953,8 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
         ) : <span>None recorded.</span>}
         <span>{`${entities.length} ${entities.length === 1 ? "entity was" : "entities were"} searched using ${queryCount} ${queryCount === 1 ? "query" : "queries"} — one query for each screened entity.`}</span>
         <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained.`}</span>
-        <span>{`Screened ${formatDateTime(coverage.collected_at)}.`}</span>
+        {assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}
+        <span>{`Screened ${formatDateTime(assessment.created_at)}.`}</span>
         <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Adverse News tool</button>
       </div>
       {findings.length ? (
@@ -1967,7 +1968,7 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
             />
           ))}
         </div>
-      ) : <p className="empty">No adverse-news findings were generated from this screening.</p>}
+      ) : <p className="empty">No material attributable adverse-news findings were identified in the retained results.</p>}
     </Section>
   );
 }
@@ -1976,17 +1977,34 @@ function adverseNewsRecords(cddState) {
   return {
     findings: (cddState?.findings || []).filter((finding) => finding.category === "adverse_news"),
     evidence: (cddState?.evidence || []).filter((item) => item.tool === "adverse_news_screening"),
+    adverse_news_assessments: cddState?.adverse_news_assessments || [],
+  };
+}
+
+function adverseNewsAssessment(result) {
+  const assessments = result?.adverse_news_assessments || [];
+  if (assessments.length) return assessments[assessments.length - 1];
+  const legacyCoverage = (result?.evidence || []).find((item) => item.tool === "adverse_news_screening" && (item.relevance_tags || []).includes("screening_coverage"));
+  if (!legacyCoverage) return null;
+  const legacy = legacyCoverage.data || {};
+  return {
+    outcome: legacy.status === "unavailable" ? "unavailable" : "completed_no_material_findings",
+    summary: legacy.status === "unavailable" ? "Adverse-news screening could not be completed." : "Legacy screening coverage record.",
+    limitations: legacy.reason ? [legacy.reason] : [],
+    screened_entities: legacy.entities || [], queries: legacy.queries || [], source_evidence_ids: legacy.source_ids || [],
+    entity_outcomes: [], created_at: legacyCoverage.collected_at,
   };
 }
 
 function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, onLoadFromCdd, onModeChange, onNamesChange, onAssess }) {
   const [entityIndex, setEntityIndex] = useState(0);
-  const coverage = (result?.evidence || []).find((item) => (item.relevance_tags || []).includes("screening_coverage"));
-  const entities = coverage?.data?.entities || [];
+  const assessment = adverseNewsAssessment(result);
+  const entities = assessment?.screened_entities || [];
   const entity = entities[entityIndex] || null;
   const entityName = entity?.name || "";
   const findings = (result?.findings || []).filter((finding) => String(finding.subject?.name || "").toUpperCase() === entityName.toUpperCase());
   const evidence = (result?.evidence || []).filter((item) => item.data?.entity_key === entity?.key);
+  const entityOutcome = (assessment?.entity_outcomes || []).find((outcome) => outcome.entity_key === entity?.key);
 
   useEffect(() => setEntityIndex(0), [result, mode]);
 
@@ -2010,7 +2028,7 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
       {result && (
         <>
           <Section title="Screening Summary">
-            {coverage?.data?.status === "unavailable" ? <p className="risk">{`Screening unavailable. ${coverage.data.reason || "No reason was recorded."}`}</p> : <p>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(coverage?.data?.source_ids || []).length} retained sources.`}</p>}
+            {assessment?.outcome === "unavailable" ? <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p> : assessment ? <div className="adverse-news-summary"><strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong><span>{assessment.summary || "No material attributable adverse-news findings were identified in the retained results."}</span><span>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No screening assessment is available.</p>}
           </Section>
           {entity && (
             <Section title="Entity Screening">
@@ -2019,8 +2037,11 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
                 <strong>{`${entityIndex + 1} of ${entities.length} — ${entityName}`}</strong>
                 <button className="secondary" disabled={entityIndex === entities.length - 1} onClick={() => setEntityIndex((index) => index + 1)}>Next →</button>
               </div>
+              <h3>Assessment</h3>
+              <p>{entityOutcome?.summary || "No entity-level assessment was recorded."}</p>
+              {entityOutcome?.limitations?.length ? <p className="empty">{`Limitations: ${entityOutcome.limitations.join(" ")}`}</p> : null}
               <h3>Findings</h3>
-              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">No adverse-news findings were generated for this entity.</p>}
+              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">No material attributable adverse-news findings were identified in the retained results for this entity.</p>}
               <h3>Evidence</h3>
               {evidence.length ? <div className="csp-sources">{evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence for this entity.</p>}
             </Section>

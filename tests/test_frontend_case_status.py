@@ -59,7 +59,7 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
     assert 'className="adverse-news-entity-list"' in app
     assert "one query for each screened entity" in app
     assert "unique ${sourceCount === 1 ? \"source result was\" : \"source results were\"} retained." in app
-    assert "No adverse-news findings were generated from this screening." in app
+    assert "No material attributable adverse-news findings were identified in the retained results." in app
     assert "Screening unavailable." in app
     assert 'type="button"' in app
     assert "aria-expanded={sourcesOpen}" in app
