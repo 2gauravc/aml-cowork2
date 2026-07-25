@@ -23,6 +23,7 @@ def _previous_case_session() -> dict:
         "document_requirements": [{"id": "old"}],
         "risk_flags": [{"finding_id": "old"}],
         "findings": [{"finding_id": "old-finding"}],
+        "assessments": [{"assessment_id": "old-assessment"}],
         "case_assessment_summary": {"summary": "old"},
         "case_review_decision": {"decision": "approve"},
         "pdf_path": "/tmp/old.pdf",
@@ -53,6 +54,7 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     assert response["document_requirements"] == []
     assert response["risk_flags"] == []
     assert response["findings"] == []
+    assert response["assessments"] == []
     assert response["case_assessment_summary"] is None
     assert response["case_review_decision"] is None
     assert response["pdf_url"] is None

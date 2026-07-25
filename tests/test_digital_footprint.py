@@ -48,8 +48,9 @@ class DigitalFootprintTests(unittest.TestCase):
         evaluate.return_value={"sources":[{"id":"source:1","url":"https://example.test","title":"Example"}],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":["Example"],"evaluated_at":"2026-07-25T00:00:00+00:00"}
         result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
         self.assertEqual(result["evidence"][0]["tool"],"digital_footprint_assessment")
-        self.assertEqual(result["digital_footprint_assessments"][0]["company_inputs"]["company_name"],"Example Ltd")
-        self.assertEqual(result["digital_footprint_assessments"][0]["definition"]["schema_version"], "digital_footprint_assessment/v2")
+        self.assertEqual(result["assessments"][0]["company_inputs"]["company_name"],"Example Ltd")
+        self.assertEqual(result["assessments"][0]["assessment_type"], "digital_footprint")
+        self.assertEqual(result["assessments"][0]["definition"]["schema_version"], "digital_footprint_assessment/v2")
 
     @patch("src.agents.nodes.evaluate_digital_footprint")
     def test_langgraph_node_derives_company_inputs_from_cdd(self, evaluate):
@@ -63,8 +64,9 @@ class DigitalFootprintTests(unittest.TestCase):
     def test_langgraph_node_records_unavailable_assessment_for_unexpected_error(self, evaluate):
         result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
         self.assertEqual(result["findings"], [])
-        self.assertEqual(result["digital_footprint_assessments"][0]["outcome"], "unavailable")
-        self.assertIn("provider validation failed", result["digital_footprint_assessments"][0]["limitations"][0])
+        self.assertEqual(result["assessments"][0]["outcome"], "unavailable")
+        self.assertEqual(result["assessments"][0]["assessment_type"], "digital_footprint")
+        self.assertIn("provider validation failed", result["assessments"][0]["limitations"][0])
 
 def _result():
     profile={"summary":"A credible profile.","business_activity":"Services","geographic_presence":[],"key_people":[],"commercial_relationships":[]}

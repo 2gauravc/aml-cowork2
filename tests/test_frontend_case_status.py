@@ -55,7 +55,7 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
 
     assert '<AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />' in app
     assert 'finding.category === "adverse_news"' in app
-    assert '"screening_coverage"' in app
+    assert 'assessmentsByType(cddState, "adverse_news")' in app
     assert 'className="adverse-news-entity-list"' in app
     assert "one query for each screened entity" in app
     assert "unique ${sourceCount === 1 ? \"source result was\" : \"source results were\"} retained." in app

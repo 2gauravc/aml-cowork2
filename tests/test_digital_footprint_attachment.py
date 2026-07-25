@@ -15,10 +15,10 @@ def test_attachment_explicitly_appends_normalized_evidence() -> None:
         "messages": [],
         "case_status": {},
     }
-    result = {"evidence": [{"tool": "digital_footprint_assessment"}], "digital_footprint_assessments": [{"schema_version": "digital_footprint_assessment/v1"}], "findings": [{"category": "digital_footprint"}]}
+    result = {"evidence": [{"tool": "digital_footprint_assessment"}], "assessments": [{"assessment_type": "digital_footprint", "schema_version": "digital_footprint_assessment/v1"}], "findings": [{"category": "digital_footprint"}]}
     response = asyncio.run(attach_digital_footprint(DigitalFootprintAttachRequest(session_id="session-1", result=result)))
 
     assert SESSIONS["session-1"]["evidence"] == result["evidence"]
-    assert SESSIONS["session-1"]["digital_footprint_assessments"] == result["digital_footprint_assessments"]
+    assert SESSIONS["session-1"]["assessments"] == result["assessments"]
     assert SESSIONS["session-1"]["findings"] == result["findings"]
     assert response["status"] == "digital_footprint_attached"

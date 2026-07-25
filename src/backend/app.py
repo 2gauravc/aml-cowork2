@@ -262,7 +262,7 @@ async def attach_digital_footprint(request: DigitalFootprintAttachRequest) -> di
         raise HTTPException(status_code=400, detail="Digital-footprint attachment is disabled in Demo Mode.")
     result = request.result or {}
     session.setdefault("evidence", []).extend(result.get("evidence") or [])
-    session.setdefault("digital_footprint_assessments", []).extend(result.get("digital_footprint_assessments") or [])
+    session.setdefault("assessments", []).extend(result.get("assessments") or [])
     session.setdefault("findings", []).extend(result.get("findings") or [])
     return _response(session, status="digital_footprint_attached")
 
@@ -623,6 +623,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "graph_thread_id",
         "evidence",
         "findings",
+        "assessments",
         "documents",
         "document_results",
         "document_requirements",
@@ -714,6 +715,7 @@ def _response(
         "document_requirements": session.get("document_requirements", []),
         "risk_flags": session.get("risk_flags", []),
         "findings": session.get("findings", []),
+        "assessments": session.get("assessments", []),
         "case_assessment_summary": session.get("case_assessment_summary"),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
@@ -1048,6 +1050,7 @@ def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) ->
     session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
     session["findings"] = graph_state.get("findings", [])
+    session["assessments"] = graph_state.get("assessments", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
     if graph_state.get("case_status"):
         session["case_status"] = graph_state["case_status"]

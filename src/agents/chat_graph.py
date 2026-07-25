@@ -586,6 +586,7 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "risk_flags": session.get("risk_flags") or [],
         "findings_count": len(session.get("findings") or []),
         "findings": session.get("findings") or [],
+        "assessments": session.get("assessments") or [],
     }
 
 
@@ -757,6 +758,7 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     session["documents"] = graph_state.get("documents", [])
     session["evidence"] = graph_state.get("evidence", [])
     session["findings"] = graph_state.get("findings", [])
+    session["assessments"] = graph_state.get("assessments", [])
     session["risk_flags"] = graph_state.get("risk_flags", [])
     session["case_status"] = graph_state.get("case_status", session.get("case_status", {}))
     sync_case_status(session)

@@ -647,7 +647,7 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             result["assessment"], result["entities"], result["queries"], list(source_ids.values()),
             run_id, result["evaluated_at"], bool(findings),
         )
-        return {"evidence": source_evidence, "findings": findings, "adverse_news_assessments": [assessment]}
+        return {"evidence": source_evidence, "findings": findings, "assessments": [assessment]}
     except AdverseNewsError as exc:
         evaluated_at = datetime.now(UTC).isoformat()
         return {
@@ -661,8 +661,9 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
                 )
             ],
             "findings": [],
-            "adverse_news_assessments": [{
+            "assessments": [{
                 "assessment_id": f"assessment:adverse-news:{uuid4().hex}",
+                "assessment_type": "adverse_news",
                 "schema_version": "adverse_news_assessment/v1",
                 "tool": "adverse_news_screening",
                 "run_id": None,
@@ -688,7 +689,7 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
         for source in result["sources"]:
             evidence_id = f"evidence:digital-footprint:{uuid4().hex}"; ids[source["id"]] = evidence_id
             evidence.append({"evidence_id": evidence_id, "source": "Tavily", "tool": "digital_footprint_assessment", "description": source.get("title") or "Digital-footprint web search result", "relevance_tags": ["digital_footprint", "web_search"], "data": source, "source_url": source.get("url"), "published_at": source.get("published_date"), "collected_at": result["evaluated_at"]})
-        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "schema_version": result["definition"]["assessment_definition"]["schema_version"], "definition": result["definition"]["assessment_definition"], "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
+        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "assessment_type": "digital_footprint", "schema_version": result["definition"]["assessment_definition"]["schema_version"], "definition": result["definition"]["assessment_definition"], "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
         findings=[]
         for draft in result["findings"]:
             refs=draft.get("source_refs") or []; unknown=set(refs)-set(ids)
@@ -698,9 +699,9 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
             finding.update({"finding_id":f"finding:digital-footprint:{uuid4().hex}","schema_version":"finding/v1","category":"digital_footprint","subject":{"entity_id":result["company_inputs"].get("registration_number"),"entity_type":"company","name":result["company_inputs"]["company_name"]},"source":{"producer_type":"tool","producer_name":"digital_footprint_assessment","run_id":run_id,"created_at":result["evaluated_at"]},"relevant_evidence_ids":[ids[x] for x in refs],"digital_footprint":overlay})
             _validate_finding(finding)
             findings.append(finding)
-        return {"evidence":evidence,"digital_footprint_assessments":[assessment],"findings":findings}
+        return {"evidence":evidence,"assessments":[assessment],"findings":findings}
     except Exception as exc:
-        return {"evidence": [_evidence(tool="digital_footprint_assessment",description="Digital-footprint assessment could not be completed.",source="Digital Footprint",data={"reason":str(exc)},relevance_tags=["digital_footprint"])], "digital_footprint_assessments":[{"assessment_id":f"assessment:digital-footprint:{uuid4().hex}","schema_version":"digital_footprint_assessment/v1","tool":"digital_footprint_assessment","run_id":None,"created_at":datetime.now(UTC).isoformat(),"outcome":"unavailable","limitations":[str(exc)],"company_inputs":{},"queries":[],"source_evidence_ids":[]}], "findings":[]}
+        return {"evidence": [_evidence(tool="digital_footprint_assessment",description="Digital-footprint assessment could not be completed.",source="Digital Footprint",data={"reason":str(exc)},relevance_tags=["digital_footprint"])], "assessments":[{"assessment_id":f"assessment:digital-footprint:{uuid4().hex}","assessment_type":"digital_footprint","schema_version":"digital_footprint_assessment/v1","tool":"digital_footprint_assessment","run_id":None,"created_at":datetime.now(UTC).isoformat(),"outcome":"unavailable","limitations":[str(exc)],"company_inputs":{},"queries":[],"source_evidence_ids":[]}], "findings":[]}
 
 
 def _digital_footprint_inputs(state: CDDState) -> dict[str, Any]:
@@ -742,6 +743,7 @@ def _assemble_adverse_news_assessment(
         raise AdverseNewsError("Adverse-news assessment returned an incomplete assessment")
     return {
         "assessment_id": f"assessment:adverse-news:{uuid4().hex}",
+        "assessment_type": "adverse_news",
         "schema_version": "adverse_news_assessment/v1",
         "tool": "adverse_news_screening",
         "run_id": run_id,

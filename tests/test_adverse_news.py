@@ -114,7 +114,8 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["queries"], ["Alex Chen enforcement"])
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["source_evidence_ids"], finding["relevant_evidence_ids"])
         self.assertEqual(result["evidence"][0]["source"], "Brave Search")
-        assessment = result["adverse_news_assessments"][0]
+        assessment = result["assessments"][0]
+        self.assertEqual(assessment["assessment_type"], "adverse_news")
         self.assertEqual(assessment["outcome"], "completed_with_findings")
         self.assertEqual(assessment["source_evidence_ids"], finding["relevant_evidence_ids"])
         evidence_ids = {item["evidence_id"] for item in result["evidence"]}
@@ -135,7 +136,7 @@ class AdverseNewsTests(unittest.TestCase):
         result = adverse_news_screening({"cdd": {}})
 
         self.assertEqual(result["findings"], [])
-        assessment = result["adverse_news_assessments"][0]
+        assessment = result["assessments"][0]
         self.assertEqual(assessment["outcome"], "completed_no_material_findings")
         self.assertEqual(assessment["screened_entities"][0]["name"], "Example Ltd")
 
@@ -144,8 +145,9 @@ class AdverseNewsTests(unittest.TestCase):
         result = adverse_news_screening({"cdd": {}})
 
         self.assertEqual(result["findings"], [])
-        self.assertEqual(result["adverse_news_assessments"][0]["outcome"], "unavailable")
-        self.assertIn("BRAVE_API_KEY", result["adverse_news_assessments"][0]["limitations"][0])
+        self.assertEqual(result["assessments"][0]["outcome"], "unavailable")
+        self.assertEqual(result["assessments"][0]["assessment_type"], "adverse_news")
+        self.assertIn("BRAVE_API_KEY", result["assessments"][0]["limitations"][0])
 
     @patch("src.agents.nodes.screen_adverse_news", side_effect=Exception("unexpected"))
     def test_node_does_not_hide_unexpected_errors(self, screening) -> None:

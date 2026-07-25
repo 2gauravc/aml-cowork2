@@ -10,7 +10,7 @@ def test_digital_footprint_tool_supports_cdd_and_independent_modes() -> None:
     assert "session_id" not in app[app.index("async function assessDigitalFootprint"):app.index("async function attachDigitalFootprint")]
     assert 'Section title="Assessment"' in app
     assert 'Section title="Findings"' in app
-    assert "digital_footprint_assessments" in app
+    assert 'assessmentsByType(cddState, "digital_footprint")' in app
     assert "<AdverseNewsFinding" in app
     assert 'fetch("/api/digital-footprint/attach"' in app
     assert 'function loadDigitalFootprintFromCdd()' in app

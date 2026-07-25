@@ -1456,9 +1456,19 @@ function DigitalPresenceBreakdown({ indicators, definition }) {
   return <div className="digital-presence-breakdown">{dimensions.map(({ key, label }) => { const item = indicators[key] || {}; return <div className="digital-presence-row" key={key}><strong>{label}</strong><span className={`digital-presence-status ${item.status || "unknown"}`}>{statusLabel(item.status)}</span><span>{item.rationale || "Not assessed."}</span>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">View Source</a> : null}</div>; })}</div>;
 }
 
+function assessmentsByType(result, assessmentType) {
+  return (result?.assessments || []).filter((assessment) => assessment.assessment_type === assessmentType);
+}
+
+function latestAssessment(result, assessmentType) {
+  return assessmentsByType(result, assessmentType).reduce((latest, assessment) => {
+    if (!latest || String(assessment.created_at || "") >= String(latest.created_at || "")) return assessment;
+    return latest;
+  }, null);
+}
+
 function DigitalFootprintAssessment({ result }) {
-  const assessments = result.digital_footprint_assessments || [];
-  const assessment = assessments[assessments.length - 1];
+  const assessment = latestAssessment(result, "digital_footprint");
   if (!assessment) return <Section title="Assessment"><p className="risk">Digital Footprint assessment unavailable.</p></Section>;
   const profile = assessment.digital_business_profile || {};
   return <><Section title="Presence and Visibility"><div className="adverse-news-summary"><strong>{assessment.company_inputs?.company_name || "Company"}</strong><span>{`Overall score: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span><span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span><span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span><span>{`${(assessment.queries || []).length} queries; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div><DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} definition={assessment.definition} /></Section><Section title="Business Profile"><div className="adverse-news-summary"><span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence || []} /></span><span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span><span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span><span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span><span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span></div></Section></>;
@@ -1467,15 +1477,14 @@ function DigitalFootprintAssessment({ result }) {
 function digitalFootprintRecords(cddState) {
   return {
     evidence: (cddState?.evidence || []).filter((item) => item.tool === "digital_footprint_assessment"),
-    digital_footprint_assessments: cddState?.digital_footprint_assessments || [],
+    assessments: assessmentsByType(cddState, "digital_footprint"),
     findings: (cddState?.findings || []).filter((finding) => finding.category === "digital_footprint"),
   };
 }
 
 function DigitalFootprintScreening({ cddState, onOpenTool }) {
   const result = digitalFootprintRecords(cddState);
-  const assessments = result.digital_footprint_assessments;
-  const assessment = assessments[assessments.length - 1];
+  const assessment = latestAssessment(result, "digital_footprint");
 
   if (!assessment) {
     return <Section title="Digital Footprint"><p className="empty">Not run.</p></Section>;
@@ -2069,23 +2078,13 @@ function adverseNewsRecords(cddState) {
   return {
     findings: (cddState?.findings || []).filter((finding) => finding.category === "adverse_news"),
     evidence: (cddState?.evidence || []).filter((item) => item.tool === "adverse_news_screening"),
-    adverse_news_assessments: cddState?.adverse_news_assessments || [],
+    assessments: assessmentsByType(cddState, "adverse_news"),
   };
 }
 
 function adverseNewsAssessment(result) {
-  const assessments = result?.adverse_news_assessments || [];
-  if (assessments.length) return assessments[assessments.length - 1];
-  const legacyCoverage = (result?.evidence || []).find((item) => item.tool === "adverse_news_screening" && (item.relevance_tags || []).includes("screening_coverage"));
-  if (!legacyCoverage) return null;
-  const legacy = legacyCoverage.data || {};
-  return {
-    outcome: legacy.status === "unavailable" ? "unavailable" : "completed_no_material_findings",
-    summary: legacy.status === "unavailable" ? "Adverse-news screening could not be completed." : "Legacy screening coverage record.",
-    limitations: legacy.reason ? [legacy.reason] : [],
-    screened_entities: legacy.entities || [], queries: legacy.queries || [], source_evidence_ids: legacy.source_ids || [],
-    entity_outcomes: [], created_at: legacyCoverage.collected_at,
-  };
+  const assessment = latestAssessment(result, "adverse_news");
+  return assessment;
 }
 
 function LinkedAdverseNewsText({ text, evidence }) {
