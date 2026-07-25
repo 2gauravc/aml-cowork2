@@ -61,6 +61,10 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
     assert "unique ${sourceCount === 1 ? \"source result was\" : \"source results were\"} retained." in app
     assert "No material attributable adverse-news findings were identified in the retained results." in app
     assert "Screening unavailable." in app
+    assert "function LinkedAdverseNewsText" in app
+    assert "split(/(source:\\d+)/gi)" in app
+    assert 'className="adverse-news-finding-tag confidence-tag"' in app
+    assert 'className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}' in app
     assert 'type="button"' in app
     assert "aria-expanded={sourcesOpen}" in app
     assert 'aria-controls={popoverId}' in app

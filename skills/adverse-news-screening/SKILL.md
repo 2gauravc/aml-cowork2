@@ -74,13 +74,13 @@ For every material or analyst-actionable hit, populate the analyst-authored fiel
 
 ## Confidence
 
-Set `high` only where the entity identity is confirmed by reliable, attributable evidence or unique identifiers. Set `medium` where names and meaningful contextual identifiers align but identity is not deterministically confirmed. Set `low` where the evidence is limited, indirect, dated, or weakly attributable. Explain the rating and all material limitations.
+Assess confidence in the accuracy and attribution of the reported matter, separately from its severity. Set `high` where reliable, attributable evidence clearly identifies the entity and multiple independent sources materially corroborate the reported facts. A date of birth or other stable identifier is not required for a clearly identifiable public figure where the sources unambiguously identify that person. Set `medium` where names and meaningful contextual identifiers align but the identity or reported facts are not fully corroborated. Set `low` where the evidence is limited, indirect, dated, or weakly attributable. Do not lower confidence merely because the reporting does not allege wrongdoing; that affects severity, not the reliability of the reported facts. Explain the rating and all material limitations.
 
 ## Severity
 
 Assess the potential impact if the reported matter is true and the identity match is correct; do not treat severity as proof. Consider the nature of the matter, legal or procedural status, recency, jurisdictional reach, role of the subject, and plausible financial-crime, sanctions, legal, or reputational exposure.
 
-Use `critical` only for credible sanctions/watchlist exposure or similarly immediate, severe legal or financial-crime concern. Use `high` for material enforcement, serious alleged financial crime, corruption, fraud, or comparable exposure. Use `medium` for credible but narrower, older, unresolved, or less material reporting. Use `low` for limited-impact matters that still require review. Do not create a finding solely because search coverage is weak.
+Use `critical` only for credible sanctions/watchlist exposure or similarly immediate, severe legal or financial-crime concern. Use `high` for material enforcement, serious alleged financial crime, corruption, fraud, or comparable exposure. Use `medium` for credible but narrower, older, unresolved, or less material reporting. Use `low` for a reported association, witness role, interview, or return of assets where the sources do not allege that the screened person committed wrongdoing, but an analyst may still need to understand the connection. Do not create a finding solely because search coverage is weak.
 
 ## Actions and RFIs
 

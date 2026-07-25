@@ -1944,7 +1944,7 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
     <Section title="Adverse News Screening">
       <div className="adverse-news-summary">
         <strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong>
-        <span>{assessment.summary || "No material attributable adverse-news findings were identified in the retained results."}</span>
+        <span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={evidence} /></span>
         <span>{`Screened ${entities.length} ${entities.length === 1 ? "entity" : "entities"}:`}</span>
         {entities.length ? (
           <ul className="adverse-news-entity-list">
@@ -1996,6 +1996,17 @@ function adverseNewsAssessment(result) {
   };
 }
 
+function LinkedAdverseNewsText({ text, evidence }) {
+  const sourceByReference = Object.fromEntries((evidence || [])
+    .filter((item) => item.data?.id)
+    .map((item) => [item.data.id, item]));
+  return String(text || "").split(/(source:\d+)/gi).map((part, index) => {
+    const source = sourceByReference[part.toLowerCase()];
+    const url = source?.source_url || source?.data?.url;
+    return url ? <a key={`${part}-${index}`} href={url} target="_blank" rel="noreferrer">{part}</a> : <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+  });
+}
+
 function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, onLoadFromCdd, onModeChange, onNamesChange, onAssess }) {
   const [entityIndex, setEntityIndex] = useState(0);
   const assessment = adverseNewsAssessment(result);
@@ -2028,7 +2039,7 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
       {result && (
         <>
           <Section title="Screening Summary">
-            {assessment?.outcome === "unavailable" ? <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p> : assessment ? <div className="adverse-news-summary"><strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong><span>{assessment.summary || "No material attributable adverse-news findings were identified in the retained results."}</span><span>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No screening assessment is available.</p>}
+            {assessment?.outcome === "unavailable" ? <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p> : assessment ? <div className="adverse-news-summary"><strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong><span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={result.evidence || []} /></span><span>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No screening assessment is available.</p>}
           </Section>
           {entity && (
             <Section title="Entity Screening">
@@ -2038,7 +2049,7 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
                 <button className="secondary" disabled={entityIndex === entities.length - 1} onClick={() => setEntityIndex((index) => index + 1)}>Next →</button>
               </div>
               <h3>Assessment</h3>
-              <p>{entityOutcome?.summary || "No entity-level assessment was recorded."}</p>
+              <p><LinkedAdverseNewsText text={entityOutcome?.summary || "No entity-level assessment was recorded."} evidence={result.evidence || []} /></p>
               {entityOutcome?.limitations?.length ? <p className="empty">{`Limitations: ${entityOutcome.limitations.join(" ")}`}</p> : null}
               <h3>Findings</h3>
               {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">No material attributable adverse-news findings were identified in the retained results for this entity.</p>}
@@ -2070,7 +2081,11 @@ function AdverseNewsFinding({ evidenceById, finding, popoverId }) {
       <div className="adverse-news-finding-content">
         <strong>{`${subject}${finding.title ? ` — ${finding.title}` : ""}`}</strong>
         <span>{finding.summary || "No summary was recorded."}</span>
-        <span>{`Confidence: ${statusLabel(finding.confidence?.level)}. Severity: ${statusLabel(finding.severity?.level)}. Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</span>
+        <div className="adverse-news-finding-tags">
+          <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(finding.confidence?.level)}`}</span>
+          <span className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}>{`Severity: ${statusLabel(finding.severity?.level)}`}</span>
+          <small>{`Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</small>
+        </div>
       </div>
       <div className="adverse-news-source-control">
         <button

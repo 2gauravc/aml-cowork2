@@ -19,6 +19,7 @@ class AdverseNewsTests(unittest.TestCase):
 
         self.assertEqual(definition["overlay"]["schema"], "adverse_news/v1")
         self.assertEqual(definition["input"]["search_terms"], 'enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist')
+        self.assertIn("multiple independent sources materially corroborate", definition["instructions"])
         self.assertEqual(schema["$id"], "finding/v1")
         self.assertIn("relevant_evidence_ids", schema["required"])
 

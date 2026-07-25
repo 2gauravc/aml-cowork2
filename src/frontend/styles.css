@@ -846,6 +846,43 @@ th {
   gap: 3px;
 }
 
+.adverse-news-finding-tags {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.adverse-news-finding-tag {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.confidence-tag {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.severity-tag {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.severity-high,
+.severity-critical {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.severity-low,
+.severity-none {
+  background: #dcfce7;
+  color: #166534;
+}
+
 .adverse-news-source-control {
   flex: 0 0 auto;
   position: relative;
