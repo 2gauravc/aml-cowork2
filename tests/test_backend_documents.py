@@ -24,7 +24,7 @@ class BackendDocumentTests(unittest.TestCase):
         SESSIONS["s1"] = {
             "session_id": "s1",
             "messages": [],
-            "documents": [
+            "graph_state": {"documents": [
                 {
                     "name": "passport.pdf",
                     "storage": {
@@ -32,7 +32,7 @@ class BackendDocumentTests(unittest.TestCase):
                         "key": "generated_documents/case-1/passport/passport.pdf",
                     },
                 }
-            ],
+            ]},
         }
 
         with patch(
@@ -60,7 +60,7 @@ class BackendDocumentTests(unittest.TestCase):
         SESSIONS["s1"] = {
             "session_id": "s1",
             "messages": [],
-            "documents": [
+            "graph_state": {"documents": [
                 {
                     "name": "passport.pdf",
                     "storage": {
@@ -68,7 +68,7 @@ class BackendDocumentTests(unittest.TestCase):
                         "key": "generated_documents/case-1/passport/passport.pdf",
                     },
                 }
-            ],
+            ]},
         }
 
         with self.assertRaises(HTTPException) as raised:
@@ -87,13 +87,13 @@ class BackendDocumentTests(unittest.TestCase):
         session = {
             "customer_name": "Demo Co",
             "jurisdiction": "GB",
-            "cdd": {
+            "graph_state": {"cdd": {
                 "individual_identity_verification": {
                     "required_individuals": [
                         {"name": "Jane Demo", "selected_document_type": "passport"}
                     ]
                 }
-            },
+            }},
         }
         with patch(
             "src.backend.app.find_documents_in_s3",

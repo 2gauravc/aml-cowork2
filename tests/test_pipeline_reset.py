@@ -14,22 +14,13 @@ def _previous_case_session() -> dict:
         "jurisdiction": "GB",
         "case_id": "previous-case",
         "messages": [{"role": "assistant", "content": "Previous case result"}],
-        "cdd": {"company_business_profile": {"customer_static": {"name": "Previous Co"}}},
-        "graph_state": {"old": True},
+        "graph_state": {"cdd": {"company_business_profile": {"customer_static": {"name": "Previous Co"}}}, "evidence": [{"source": "old"}], "documents": [{"name": "old.pdf"}], "document_requirements": [{"id": "old"}], "risk_flags": [{"finding_id": "old"}], "findings": [{"finding_id": "old-finding"}], "assessments": [{"assessment_id": "old-assessment"}], "case_assessment_summary": {"summary": "old"}, "case_status": {"cdd_generation": "completed"}},
         "graph_thread_id": "session-1",
-        "evidence": [{"source": "old"}],
-        "documents": [{"name": "old.pdf"}],
         "document_results": [{"name": "old.pdf"}],
-        "document_requirements": [{"id": "old"}],
-        "risk_flags": [{"finding_id": "old"}],
-        "findings": [{"finding_id": "old-finding"}],
-        "assessments": [{"assessment_id": "old-assessment"}],
-        "case_assessment_summary": {"summary": "old"},
         "case_review_decision": {"decision": "approve"},
         "pdf_path": "/tmp/old.pdf",
         "pipeline_status": "complete",
         "pipeline_error": "old error",
-        "case_status": {"cdd_generation": "completed"},
         "demo_csp_result": {"result": "independent tool result"},
     }
 
@@ -49,7 +40,7 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     )
 
     assert response["status"] == "running"
-    assert response["cdd"] is None
+    assert response["cdd"]["company_business_profile"]["status"] == "incomplete"
     assert response["documents"] == []
     assert response["document_requirements"] == []
     assert response["risk_flags"] == []
@@ -81,20 +72,17 @@ def test_rejected_new_run_preserves_previous_cdd_artifacts() -> None:
     )
 
     assert response["status"] == "needs_input"
-    assert response["cdd"] == _previous_case_session()["cdd"]
+    assert response["cdd"] == _previous_case_session()["graph_state"]["cdd"]
     assert response["pdf_url"] == "/api/pdf/session-1"
 
 
-def test_response_migrates_a_legacy_case_review_summary() -> None:
+def test_response_without_a_cdd_state_is_empty() -> None:
     session = {
         "session_id": "legacy-session",
         "messages": [],
-        "case_review_summary": {"executive_summary": "Legacy assessment"},
     }
 
     response = _response(session, status="complete")
 
-    assert response["case_assessment_summary"] == {"executive_summary": "Legacy assessment"}
-    assert response["cdd_state"]["case_assessment_summary"] == {"executive_summary": "Legacy assessment"}
-    assert "metadata" in response["cdd_state"]
-    assert "case_review_summary" not in session
+    assert response["case_assessment_summary"] is None
+    assert response["cdd_state"] == {}

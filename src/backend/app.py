@@ -22,6 +22,7 @@ from starlette.background import BackgroundTask
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import PIPELINE_NODE_LABELS, resume_cdd_agent_state, run_cdd_agent_state
 from src.agents.nodes import adverse_news_screening, digital_footprint_assessment
+from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
@@ -256,14 +257,15 @@ async def assess_independent_adverse_news(request: IndependentAdverseNewsRequest
 async def attach_digital_footprint(request: DigitalFootprintAttachRequest) -> dict[str, Any]:
     """Explicitly attach a client-held standalone result as CDD evidence."""
     session = SESSIONS.get(request.session_id)
-    if not session or not session.get("cdd"):
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
         raise HTTPException(status_code=404, detail="No active CDD result for this session")
     if session.get("demo_mode"):
         raise HTTPException(status_code=400, detail="Digital-footprint attachment is disabled in Demo Mode.")
     result = request.result or {}
-    session.setdefault("evidence", []).extend(result.get("evidence") or [])
-    session.setdefault("assessments", []).extend(result.get("assessments") or [])
-    session.setdefault("findings", []).extend(result.get("findings") or [])
+    _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
+    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     return _response(session, status="digital_footprint_attached")
 
 
@@ -377,30 +379,31 @@ async def download_standalone_idv_document(artifact_id: str) -> FileResponse:
 @app.post("/api/case-review/refresh")
 async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, Any]:
     session = SESSIONS.get(request.session_id)
-    if not session or not session.get("cdd"):
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
     try:
         summary = await asyncio.to_thread(
             generate_case_review_summary,
-            cdd=session["cdd"],
-            case_status=session.get("case_status", {}),
-            risk_flags=session.get("risk_flags", []),
-            evidence=session.get("evidence", []),
+            cdd=state["cdd"],
+            case_status=state.get("case_status", {}),
+            risk_flags=state.get("risk_flags", []),
+            evidence=state.get("evidence", []),
         )
     except CaseReviewError as exc:
         summary = unavailable_case_review(str(exc))
-    session["case_assessment_summary"] = summary
-    session["risk_flags"] = merge_case_review_assessments(session.get("risk_flags", []), summary)
-    sync_case_status(session)
+    state["case_assessment_summary"] = summary
+    state["risk_flags"] = merge_case_review_assessments(state.get("risk_flags", []), summary)
+    sync_case_status(state)
     return _response(session, status="case_review_refreshed")
 
 
 @app.post("/api/case-review/decision")
 async def record_case_review_decision(request: CaseReviewDecisionRequest) -> dict[str, Any]:
     session = SESSIONS.get(request.session_id)
-    if not session or not session.get("cdd"):
+    if not _active_cdd_state(session):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
     session["case_review_decision"] = {
         "decision": request.decision,
@@ -432,10 +435,11 @@ async def run_pipeline(
 @app.post("/api/pdf")
 async def generate_pdf(request: PdfRequest) -> dict[str, Any]:
     session = SESSIONS.get(request.session_id)
-    if not session or not session.get("cdd"):
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
 
-    pdf_path = render_cdd_pdf(session["cdd"])
+    pdf_path = render_cdd_pdf(state["cdd"])
     session["pdf_path"] = str(pdf_path)
     return {"pdf_url": f"/api/pdf/{request.session_id}"}
 
@@ -502,7 +506,8 @@ async def upload_case_document(
 ) -> dict[str, Any]:
     """Stage an officer-provided PDF and intelligently match it to a requirement."""
     session = SESSIONS.get(session_id)
-    if not session or not session.get("document_requirements"):
+    state = _active_cdd_state(session)
+    if not state or not state.get("document_requirements"):
         raise HTTPException(status_code=404, detail="Document requirements not found")
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
@@ -524,7 +529,7 @@ async def upload_case_document(
         path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=f"Unable to identify document: {exc}") from exc
 
-    requirement = _match_requirement(session["document_requirements"], classification, preview)
+    requirement = _match_requirement(state["document_requirements"], classification, preview)
     if not requirement:
         path.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail="No open document requirement matched this upload")
@@ -545,12 +550,13 @@ async def upload_case_document(
 async def generate_missing_documents(request: DocumentActionRequest) -> dict[str, Any]:
     """Generate selected unavailable documents locally; processing is still explicit."""
     session = SESSIONS.get(request.session_id)
-    if not session or not session.get("document_requirements"):
+    state = _active_cdd_state(session)
+    if not state or not state.get("document_requirements"):
         raise HTTPException(status_code=404, detail="Document requirements not found")
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
     selected = set(request.requirement_ids or [])
-    for requirement in session["document_requirements"]:
+    for requirement in state["document_requirements"]:
         if selected and requirement["id"] not in selected:
             continue
         if requirement.get("status") != "not_found":
@@ -618,24 +624,15 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
     expose data or links from the preceding case.
     """
     for key in (
-        "cdd",
         "graph_state",
         "graph_thread_id",
-        "evidence",
-        "findings",
-        "assessments",
-        "documents",
         "document_results",
-        "document_requirements",
-        "risk_flags",
-        "case_assessment_summary",
         "case_review_summary",
         "case_review_decision",
         "pdf_path",
         "pipeline_error",
     ):
         session.pop(key, None)
-    session["case_status"] = {"cdd_generation": "not_started"}
     session["messages"] = [
         {"role": "assistant", "content": "Which company would you like to onboard?"}
     ]
@@ -679,12 +676,22 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     session_id = session["session_id"]
     session.clear()
     session.update(deepcopy(fixture))
+    session["graph_state"] = {
+        key: session.pop(key)
+        for key in (
+            "cdd", "documents", "evidence", "findings", "assessments", "risk_flags",
+            "case_status", "case_assessment_summary", "document_requirements",
+        )
+        if key in session
+    }
     session["session_id"] = session_id
     session["demo_mode"] = True
-    session["risk_flags"] = merge_case_review_assessments(
-        session.get("risk_flags", []), session.get("case_assessment_summary") or {},
-    )
-    sync_case_status(session, generation="completed")
+    state = session.get("graph_state")
+    if isinstance(state, dict):
+        state["risk_flags"] = merge_case_review_assessments(
+            state.get("risk_flags", []), state.get("case_assessment_summary") or {},
+        )
+        sync_case_status(state, generation="completed")
     return _response(session, status="complete")
 
 
@@ -694,8 +701,7 @@ def _response(
     status: str,
     error: str | None = None,
 ) -> dict[str, Any]:
-    if "case_assessment_summary" not in session and "case_review_summary" in session:
-        session["case_assessment_summary"] = session.pop("case_review_summary")
+    state = _active_cdd_state(session) or {}
     pdf_url = f"/api/pdf/{session['session_id']}" if session.get("pdf_path") else None
     return {
         "session_id": session["session_id"],
@@ -705,15 +711,15 @@ def _response(
         "jurisdiction": session.get("jurisdiction"),
         "account_location": session.get("account_location"),
         "case_id": session.get("case_id"),
-        "cdd": session.get("cdd"),
-        "cdd_state": _cdd_state_snapshot(session),
-        "case_status": session.get("case_status"),
-        "documents": session.get("documents", []),
-        "document_requirements": session.get("document_requirements", []),
-        "risk_flags": session.get("risk_flags", []),
-        "findings": session.get("findings", []),
-        "assessments": session.get("assessments", []),
-        "case_assessment_summary": session.get("case_assessment_summary"),
+        "cdd": state.get("cdd"),
+        "cdd_state": state,
+        "case_status": state.get("case_status"),
+        "documents": state.get("documents", []),
+        "document_requirements": state.get("document_requirements", []),
+        "risk_flags": state.get("risk_flags", []),
+        "findings": state.get("findings", []),
+        "assessments": state.get("assessments", []),
+        "case_assessment_summary": state.get("case_assessment_summary"),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
@@ -727,36 +733,22 @@ def _response(
 
 def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
     """Return the complete CDD state for the JSON workspace view."""
-    graph_state = session.get("graph_state")
-    if isinstance(graph_state, dict):
-        return graph_state
+    return _active_cdd_state(session) or {}
 
-    customer = {
-        key: value
-        for key, value in {
-            "name": session.get("customer_name"),
-            "jurisdiction": session.get("jurisdiction"),
-            "account_location": session.get("account_location"),
-        }.items()
-        if value is not None
-    }
-    kyc_case = {"case_id": session["case_id"]} if session.get("case_id") is not None else {}
-    return {
-        "metadata": {"customer": customer, "kyc_case": kyc_case},
-        "cdd": session.get("cdd"),
-        "documents": session.get("documents", []),
-        "evidence": session.get("evidence", []),
-        "findings": session.get("findings", []),
-        "risk_flags": session.get("risk_flags", []),
-        "case_status": session.get("case_status"),
-        "case_assessment_summary": session.get("case_assessment_summary"),
-        "messages": session.get("messages", []),
-        "document_requirements": session.get("document_requirements", []),
-    }
+
+def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
+    state = (session or {}).get("graph_state")
+    return state if isinstance(state, dict) else None
+
+
+def _append_cdd_records(state: dict[str, Any], key: str, records: list[dict[str, Any]], id_key: str) -> None:
+    existing = state.setdefault(key, [])
+    known_ids = {item.get(id_key) for item in existing if item.get(id_key)}
+    existing.extend(item for item in records if not item.get(id_key) or item.get(id_key) not in known_ids)
 
 
 def _build_document_requirements(session: dict[str, Any]) -> list[dict[str, Any]]:
-    cdd = session.get("cdd") or {}
+    cdd = (_active_cdd_state(session) or {}).get("cdd") or {}
     individuals = cdd.get("individual_identity_verification", {}).get("required_individuals", [])
     available = find_documents_in_s3(
         company_name=session.get("customer_name"),
@@ -854,7 +846,7 @@ def _safe_file_name(name: str) -> str:
 
 
 async def _resume_if_ready(session: dict[str, Any]) -> None:
-    requirements = session.get("document_requirements", [])
+    requirements = (_active_cdd_state(session) or {}).get("document_requirements", [])
     if any(row.get("status") == "not_found" for row in requirements):
         session["pipeline_status"] = "awaiting_documents"
         sync_case_status(session, generation="in_progress")
@@ -887,11 +879,12 @@ def _session_document_by_key(
     session: dict[str, Any],
     document_key: str,
 ) -> dict[str, Any] | None:
-    for document in session.get("documents", []):
+    state = _active_cdd_state(session) or {}
+    for document in state.get("documents", []):
         storage = document.get("storage") or {}
         if storage.get("key") == document_key:
             return document
-    for requirement in session.get("document_requirements", []):
+    for requirement in state.get("document_requirements", []):
         document = requirement.get("cache_document") or {}
         storage = document.get("storage") or {}
         if storage.get("key") == document_key:
@@ -921,7 +914,8 @@ def _clean_jurisdiction(value: str | None) -> str | None:
 
 
 async def _generate_pdf_for_session(session: dict[str, Any]) -> dict[str, Any]:
-    if not session.get("cdd"):
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
         session["messages"].append(
             {
                 "role": "assistant",
@@ -929,7 +923,7 @@ async def _generate_pdf_for_session(session: dict[str, Any]) -> dict[str, Any]:
             }
         )
         return _response(session, status="needs_input")
-    pdf_path = render_cdd_pdf(session["cdd"])
+    pdf_path = render_cdd_pdf(state["cdd"])
     session["pdf_path"] = str(pdf_path)
     session["messages"].append(
         {"role": "assistant", "content": "PDF generated and ready to download."}
@@ -973,8 +967,14 @@ async def _run_pipeline_for_session(
     # previous case's checkpointed state; this ID is retained only to resume
     # this run after document collection.
     session["graph_thread_id"] = str(uuid.uuid4())
+    session["graph_state"] = new_cdd_state(
+        customer_name=customer_name,
+        jurisdiction=jurisdiction,
+        account_location=account_location,
+        case_id=case_id,
+    )
     session["pipeline_status"] = "running"
-    sync_case_status(session, generation="in_progress")
+    sync_case_status(session["graph_state"], generation="in_progress")
     session["pipeline_progress"] = {
         "node": "collect_required_inputs",
         "node_number": 1,
@@ -1041,18 +1041,8 @@ def _registry_fetch_message(
 
 
 def _apply_graph_result(session: dict[str, Any], graph_state: dict[str, Any]) -> None:
-    session["cdd"] = graph_state.get("cdd", {})
     session["graph_state"] = graph_state
-    session["documents"] = graph_state.get("documents", [])
-    session["evidence"] = graph_state.get("evidence", [])
-    session["findings"] = graph_state.get("findings", [])
-    session["assessments"] = graph_state.get("assessments", [])
-    session["risk_flags"] = graph_state.get("risk_flags", [])
-    if graph_state.get("case_status"):
-        session["case_status"] = graph_state["case_status"]
-    sync_case_status(session)
-    session["case_assessment_summary"] = graph_state.get("case_assessment_summary")
-    session["document_requirements"] = graph_state.get("document_requirements", [])
+    sync_case_status(graph_state)
 
 
 async def _complete_pipeline_for_session(
@@ -1081,9 +1071,8 @@ async def _complete_pipeline_for_session(
             thread_id=graph_thread_id,
         )
         _apply_graph_result(session, graph_state)
-        cdd = session["cdd"]
-        session["document_results"] = cdd.get("documents", [])
-        if any(row.get("status") == "not_found" for row in session["document_requirements"]):
+        cdd = graph_state.get("cdd", {})
+        if any(row.get("status") == "not_found" for row in graph_state.get("document_requirements", [])):
             session["pipeline_status"] = "awaiting_documents"
             sync_case_status(session, generation="in_progress")
             return
@@ -1093,7 +1082,7 @@ async def _complete_pipeline_for_session(
                 session["messages"].append({"role": "assistant", "content": str(content)})
 
         session["messages"].append(
-            {"role": "assistant", "content": _summary(cdd, session["case_status"])}
+            {"role": "assistant", "content": _summary(cdd, graph_state.get("case_status", {}))}
         )
 
         if generate_pdf:
@@ -1101,11 +1090,13 @@ async def _complete_pipeline_for_session(
             session["pdf_path"] = str(pdf_path)
 
         session["pipeline_status"] = "complete"
-        sync_case_status(session)
+        sync_case_status(graph_state)
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)
-        sync_case_status(session, generation="failed")
+        state = _active_cdd_state(session)
+        if state:
+            sync_case_status(state, generation="failed")
         current_progress = session.get("pipeline_progress") or {}
         session["pipeline_progress"] = {
             **current_progress,
@@ -1152,7 +1143,9 @@ async def _run_tool_for_session(
         "data": result,
     }
     session.setdefault("tool_results", []).append(tool_result)
-    session.setdefault("evidence", []).append(
+    state = _active_cdd_state(session)
+    if state is not None:
+        state.setdefault("evidence", []).append(
         {
             "source": "tool",
             "tool": tool_name,
@@ -1160,7 +1153,7 @@ async def _run_tool_for_session(
             "relevance_tags": [tool_name],
             "data": result,
         }
-    )
+        )
     session["messages"].append(
         {"role": "assistant", "content": _tool_summary(tool_name, result)}
     )
@@ -1238,8 +1231,8 @@ def _session_context(session: dict[str, Any]) -> dict[str, Any]:
         "customer_name": session.get("customer_name"),
         "jurisdiction": session.get("jurisdiction"),
         "case_id": session.get("case_id"),
-        "case_status": session.get("case_status"),
-        "has_cdd": bool(session.get("cdd")),
+        "case_status": (_active_cdd_state(session) or {}).get("case_status"),
+        "has_cdd": bool((_active_cdd_state(session) or {}).get("cdd")),
         "has_pdf": bool(session.get("pdf_path")),
         "tool_results": [
             {"tool": item.get("tool")} for item in session.get("tool_results", [])[-5:]

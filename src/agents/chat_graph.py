@@ -347,10 +347,10 @@ def _execute_tool_call(name: str, args: dict[str, Any], session: dict[str, Any])
             return {
                 "answer": answer_cdd_question(
                     question=args.get("question") or "",
-                cdd=session.get("cdd", {}),
-                evidence=session.get("evidence", []),
-                risk_flags=session.get("risk_flags", []),
-                findings=session.get("findings", []),
+                cdd=(session.get("graph_state") or {}).get("cdd", {}),
+                evidence=(session.get("graph_state") or {}).get("evidence", []),
+                risk_flags=(session.get("graph_state") or {}).get("risk_flags", []),
+                findings=(session.get("graph_state") or {}).get("findings", []),
                 )
             }
         if name == "evaluate_csp_address":
@@ -472,7 +472,7 @@ def _document_information(
 ) -> dict[str, Any]:
     """Build a live, request-shaped document view for the chat agent."""
     records = []
-    requirements = session.get("document_requirements") or []
+    requirements = (session.get("graph_state") or {}).get("document_requirements") or []
     for requirement in requirements:
         if person_name and _normalise_document_name(person_name) != _normalise_document_name(
             requirement.get("entity_name") or ""
@@ -522,7 +522,7 @@ def _processed_document_for_requirement(
     session: dict[str, Any], requirement: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Locate the processed extract matching one live document requirement."""
-    documents = (session.get("cdd") or {}).get("documents") or []
+    documents = ((session.get("graph_state") or {}).get("cdd") or {}).get("documents") or []
     for document in documents:
         artifact = document.get("artifact") or {}
         extracted = document.get("extract") or {}
@@ -562,13 +562,14 @@ def _normalise_document_name(value: str) -> str:
 
 def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
     """Return live session data, including neutral findings (currently adverse_news)."""
-    requirements = session.get("document_requirements") or []
+    state = session.get("graph_state") or {}
+    requirements = state.get("document_requirements") or []
     requirement_counts: dict[str, int] = {}
     for requirement in requirements:
         status = str(requirement.get("status") or "unknown")
         requirement_counts[status] = requirement_counts.get(status, 0) + 1
 
-    graph_state = session.get("graph_state") or {}
+    graph_state = state
     return {
         "session_id": session.get("session_id"),
         "customer_name": session.get("customer_name"),
@@ -576,23 +577,23 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "case_id": session.get("case_id"),
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
-        "case_status": session.get("case_status"),
-        "has_cdd": bool(session.get("cdd")),
+        "case_status": graph_state.get("case_status"),
+        "has_cdd": bool(graph_state.get("cdd")),
         "graph_state_keys": sorted(graph_state) if isinstance(graph_state, dict) else [],
         "document_requirement_counts": requirement_counts,
         "document_requirements": requirements,
-        "document_count": len(session.get("documents") or []),
-        "evidence_count": len(session.get("evidence") or []),
-        "risk_flags": session.get("risk_flags") or [],
-        "findings_count": len(session.get("findings") or []),
-        "findings": session.get("findings") or [],
-        "assessments": session.get("assessments") or [],
+        "document_count": len(graph_state.get("documents") or []),
+        "evidence_count": len(graph_state.get("evidence") or []),
+        "risk_flags": graph_state.get("risk_flags") or [],
+        "findings_count": len(graph_state.get("findings") or []),
+        "findings": graph_state.get("findings") or [],
+        "assessments": graph_state.get("assessments") or [],
     }
 
 
 def _session_evidence_snapshot(session: dict[str, Any]) -> dict[str, Any]:
     """Return the retained evidence itself, rather than a guessed description."""
-    evidence = session.get("evidence") or []
+    evidence = (session.get("graph_state") or {}).get("evidence") or []
     return {
         "count": len(evidence),
         # This response is itself handled as a tool result. Return a snapshot so
@@ -684,7 +685,8 @@ def _run_named_company_tool(tool_func, *, args: dict[str, Any], session: dict[st
 
 
 def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
-    cdd = session.get("cdd") or {}
+    state = session.get("graph_state") or {}
+    cdd = state.get("cdd") or {}
     customer_static = cdd.get("company_business_profile", {}).get("customer_static", {})
     address = args.get("registered_address") or (
         customer_static.get("registered_address") or {}
@@ -712,17 +714,17 @@ def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> d
             "evidence": result,
         }
         flag = apply_risk_severity_policy([flag], interpret_risk_severity_policy())[0]
-        existing = session.setdefault("risk_flags", [])
+        existing = state.setdefault("risk_flags", [])
         if not any(item.get("category") == "csp_address" for item in existing):
             existing.append(flag)
-        session.setdefault("evidence", []).append({
+        state.setdefault("evidence", []).append({
             "source": "CSP assessment tool",
             "tool": "evaluate_csp_address",
             "description": "Assessed registered address for company service provider indicators.",
             "relevance_tags": ["risk_flag", "csp_address", "registered_address"],
             "data": result,
         })
-        sync_case_status(session)
+        sync_case_status(state)
     return result
 
 
@@ -753,28 +755,22 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     session["jurisdiction"] = str(jurisdiction).strip().upper()
     if case_id:
         session["case_id"] = case_id
-    session["cdd"] = cdd
     session["graph_state"] = graph_state
-    session["documents"] = graph_state.get("documents", [])
-    session["evidence"] = graph_state.get("evidence", [])
-    session["findings"] = graph_state.get("findings", [])
-    session["assessments"] = graph_state.get("assessments", [])
-    session["risk_flags"] = graph_state.get("risk_flags", [])
-    session["case_status"] = graph_state.get("case_status", session.get("case_status", {}))
-    sync_case_status(session)
+    sync_case_status(graph_state)
     return {
         "cdd": cdd,
-        "documents": session["documents"],
-        "evidence_count": len(session["evidence"]),
-        "risk_flags": session["risk_flags"],
-        "case_status": session["case_status"],
+        "documents": graph_state.get("documents", []),
+        "evidence_count": len(graph_state.get("evidence", [])),
+        "risk_flags": graph_state.get("risk_flags", []),
+        "case_status": graph_state.get("case_status", {}),
     }
 
 
 def _generate_pdf_tool(*, session: dict[str, Any]) -> dict[str, Any]:
-    if not session.get("cdd"):
+    state = session.get("graph_state") or {}
+    if not state.get("cdd"):
         return {"error": {"message": "Run the full CDD pipeline before generating a PDF."}}
-    pdf_path = render_cdd_pdf(session["cdd"])
+    pdf_path = render_cdd_pdf(state["cdd"])
     session["pdf_path"] = str(pdf_path)
     return {"pdf_path": str(pdf_path), "message": "PDF generated and ready to download."}
 
@@ -789,7 +785,10 @@ def _record_tool_result(session: dict[str, Any], tool_name: str, result: dict[st
     session.setdefault("tool_results", []).append({"tool": tool_name, "data": result})
     if tool_name == "list_jurisdictions":
         return
-    session.setdefault("evidence", []).append(
+    state = session.get("graph_state")
+    if not isinstance(state, dict):
+        return
+    state.setdefault("evidence", []).append(
         {
             "source": "tool",
             "tool": tool_name,

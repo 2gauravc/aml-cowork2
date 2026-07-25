@@ -39,7 +39,7 @@ class ChatSessionContextTests(unittest.TestCase):
                     }
                 ],
             },
-            "graph_state": {"metadata": {"case_id": "sg-001"}},
+            "graph_state": {"metadata": {"case_id": "sg-001"}, "cdd": {"customer": {"name": "SC ENGINEERING PRIVATE LIMITED"}, "documents": [{"artifact": {"person_name": "Claire Wallace", "document_type": "passport", "storage": {"bucket": "documents", "key": "GB/claire-passport.pdf"}}, "classification": {"document_type": "passport", "confidence": 0.99}, "extract": {"full_name": "Claire Wallace", "document_number": "P123456"}}], "company_business_profile": {"customer_static": {}}}, "documents": [{"name": "registry.pdf"}], "document_requirements": [{"id": "passport-1", "entity_name": "Claire Wallace", "document_type": "passport", "status": "processed", "source": "customer_upload"}, {"id": "passport-2", "status": "not_found"}], "evidence": [{"source": "tool", "tool": "get_customer_static_by_name", "description": "Customer static profile"}, {"source": "graph", "tool": "extract_idv_documents", "description": "ID&V extraction"}], "risk_flags": [{"severity": "low"}], "findings": [_adverse_news_finding()]},
             "documents": [{"name": "registry.pdf"}],
             "document_requirements": [
                 {
@@ -88,7 +88,7 @@ class ChatSessionContextTests(unittest.TestCase):
         self.assertIn("Provide the regulatory notice", result["answer"])
 
     def test_session_inspection_handles_no_findings(self) -> None:
-        self.session.pop("findings")
+        self.session["graph_state"].pop("findings")
 
         result = _execute_tool_call("inspect_current_session", {}, self.session)
 
@@ -191,7 +191,7 @@ class ChatSessionContextTests(unittest.TestCase):
     @patch("src.agents.chat_graph.interpret_risk_severity_policy", return_value={"policy_name": "test", "source_path": "test", "rules": [{"category": "csp_address", "evaluation": "yes", "severity": "medium"}]})
     @patch("src.agents.chat_graph.evaluate_csp_address")
     def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp, _) -> None:
-        self.session["cdd"] = {
+        self.session["graph_state"]["cdd"] = {
             "company_business_profile": {
                 "customer_static": {
                     "name": "SC ENGINEERING PRIVATE LIMITED",
@@ -208,7 +208,7 @@ class ChatSessionContextTests(unittest.TestCase):
 
         evaluate_csp.assert_called_once_with("1 Example Street", company_name="SC ENGINEERING PRIVATE LIMITED")
         self.assertEqual(result["assessment"]["is_csp"], "yes")
-        self.assertEqual(self.session["risk_flags"][-1]["category"], "csp_address")
+        self.assertEqual(self.session["graph_state"]["risk_flags"][-1]["category"], "csp_address")
 
 
 def _adverse_news_finding() -> dict:
