@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from unittest.mock import patch
 
 from src.agents.nodes import adverse_news_screening
-from src.tools.adverse_news import entities_for_screening, load_adverse_news_definition, load_finding_schema
+from src.backend.app import IndependentAdverseNewsRequest, assess_independent_adverse_news
+from src.tools.adverse_news import _assessment_schema, entities_for_screening, load_adverse_news_definition, load_finding_schema
 
 
 class AdverseNewsTests(unittest.TestCase):
@@ -17,6 +19,19 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual(definition["overlay"]["schema"], "adverse_news/v1")
         self.assertEqual(schema["$id"], "finding/v1")
         self.assertIn("relevant_evidence_ids", schema["required"])
+
+    def test_assessment_schema_includes_nested_adverse_news_requirements(self) -> None:
+        definition = load_adverse_news_definition()
+        schema = _assessment_schema(load_finding_schema(), definition["overlay"])
+        overlay = schema["properties"]["findings"]["items"]["properties"]["adverse_news"]
+
+        self.assertEqual(overlay["required"], definition["overlay"]["required"])
+        self.assertFalse(overlay["additionalProperties"])
+        self.assertEqual(set(overlay["properties"]["screened_entity"]["properties"]), {"entity_type", "name_used", "disambiguators_used"})
+        self.assertEqual(overlay["properties"]["screened_entity"]["properties"]["entity_type"], {"type": "string"})
+        self.assertEqual(overlay["properties"]["screening_coverage"]["properties"]["limitations"]["type"], "array")
+        self.assertEqual(overlay["properties"]["identity_match"]["required"], ["status", "confidence", "rationale"])
+        self.assertEqual(overlay["properties"]["screening_coverage"]["required"], ["queries", "source_evidence_ids", "limitations"])
 
     def test_entity_selection_uses_company_directors_and_ubos(self) -> None:
         entities = entities_for_screening(
@@ -57,6 +72,8 @@ class AdverseNewsTests(unittest.TestCase):
         finding = result["findings"][0]
         self.assertEqual(finding["category"], "adverse_news")
         self.assertEqual(finding["subject"]["name"], "Alex Chen")
+        self.assertEqual(finding["adverse_news"]["screened_entity"]["name_used"], "Alex Chen")
+        self.assertEqual(finding["adverse_news"]["screening_coverage"]["queries"], ["Alex Chen enforcement"])
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["source_evidence_ids"], finding["relevant_evidence_ids"])
         evidence_ids = {item["evidence_id"] for item in result["evidence"]}
         self.assertTrue(set(finding["relevant_evidence_ids"]) <= evidence_ids)
@@ -65,6 +82,17 @@ class AdverseNewsTests(unittest.TestCase):
     def test_node_does_not_hide_unexpected_errors(self, screening) -> None:
         with self.assertRaisesRegex(Exception, "unexpected"):
             adverse_news_screening({"cdd": {}})
+
+    def test_independent_check_uses_screening_without_mutating_cdd_state(self) -> None:
+        async def run_inline(function, *args):
+            return function(*args)
+
+        with patch("src.backend.app.adverse_news_screening", return_value={"evidence": [], "findings": []}) as screening, patch("src.backend.app.asyncio.to_thread", side_effect=run_inline):
+            result = asyncio.run(assess_independent_adverse_news(IndependentAdverseNewsRequest(entity_names=["Alpha Ltd", "Beta Ltd"])))
+
+        self.assertEqual(result, {"evidence": [], "findings": []})
+        state = screening.call_args.args[0]
+        self.assertEqual(state["cdd"]["ownership_and_control"]["ubos"], [{"name": "Alpha Ltd"}, {"name": "Beta Ltd"}])
 
 
 def _draft() -> dict:

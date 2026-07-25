@@ -3,6 +3,7 @@ const { useEffect, useMemo, useRef, useState } = React;
 const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
 const ACCOUNT_OPENING_LOCATIONS = ["SG", "HK", "GB"];
 const TOOL_WORKSPACES = [
+  { id: "adverse-news", label: "Adverse News" },
   { id: "csp", label: "CSP Detection" },
   { id: "digital-footprint", label: "Digital Footprint" },
   { id: "document-extraction", label: "Document Extraction" },
@@ -56,6 +57,11 @@ function App() {
   const [digitalFootprintSkill, setDigitalFootprintSkill] = useState("");
   const [digitalFootprintSkillLoading, setDigitalFootprintSkillLoading] = useState(false);
   const [digitalFootprintAttaching, setDigitalFootprintAttaching] = useState(false);
+  const [adverseNewsMode, setAdverseNewsMode] = useState("independent");
+  const [adverseNewsResult, setAdverseNewsResult] = useState(null);
+  const [adverseNewsNames, setAdverseNewsNames] = useState("");
+  const [adverseNewsError, setAdverseNewsError] = useState("");
+  const [adverseNewsRunning, setAdverseNewsRunning] = useState(false);
   const [extractionFile, setExtractionFile] = useState(null);
   const [extractionResult, setExtractionResult] = useState(null);
   const [extractionError, setExtractionError] = useState("");
@@ -112,7 +118,7 @@ function App() {
     [documentRequirements],
   );
   const cddPausedForDocuments = pipelineStatus === "awaiting_documents";
-  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review";
+  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review" || (activeWorkspace === "adverse-news" && adverseNewsMode === "cdd");
   const activeToolWorkspace = TOOL_WORKSPACES.some((tool) => tool.id === activeWorkspace);
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
@@ -614,6 +620,33 @@ function App() {
     }
   }
 
+  function loadAdverseNewsFromCdd() {
+    setAdverseNewsMode("cdd");
+    setAdverseNewsResult(adverseNewsRecords(cddState));
+    setAdverseNewsError("");
+    setActiveWorkspace("adverse-news");
+  }
+
+  async function assessIndependentAdverseNews() {
+    const entity_names = adverseNewsNames.split(/[\n,]/).map((name) => name.trim()).filter(Boolean);
+    if (!entity_names.length) return;
+    setAdverseNewsRunning(true);
+    setAdverseNewsError("");
+    setAdverseNewsResult(null);
+    try {
+      const response = await fetch("/api/adverse-news/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_names }),
+      });
+      setAdverseNewsResult(await readJsonResponse(response, "Adverse-news screening failed"));
+    } catch (err) {
+      setAdverseNewsError(err.message);
+    } finally {
+      setAdverseNewsRunning(false);
+    }
+  }
+
   function selectExtractionFile(event) {
     setExtractionFile(event.target.files?.[0] || null);
     setExtractionResult(null);
@@ -745,6 +778,7 @@ function App() {
                       role="menuitem"
                       onClick={() => {
                         setActiveWorkspace(tool.id);
+                        if (tool.id === "adverse-news") setAdverseNewsMode("independent");
                         setToolsMenuOpen(false);
                       }}
                     >
@@ -938,7 +972,7 @@ function App() {
             />
           </Section>
 
-          <AdverseNewsScreening cddState={cddState} />
+          <AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />
 
           <Section title="Risk Flags">
             {risks.length ? (
@@ -1028,6 +1062,19 @@ function App() {
                 attaching={digitalFootprintAttaching}
                 onAttach={attachDigitalFootprint}
                 demoMode={demoMode}
+              />
+            ) : activeWorkspace === "adverse-news" ? (
+              <AdverseNewsTool
+                mode={adverseNewsMode}
+                result={adverseNewsResult}
+                names={adverseNewsNames}
+                error={adverseNewsError}
+                running={adverseNewsRunning}
+                canLoadFromCdd={Boolean(cddState)}
+                onLoadFromCdd={loadAdverseNewsFromCdd}
+                onModeChange={setAdverseNewsMode}
+                onNamesChange={setAdverseNewsNames}
+                onAssess={assessIndependentAdverseNews}
               />
             ) : activeWorkspace === "document-extraction" ? (
               <DocumentExtraction
@@ -1866,7 +1913,7 @@ function RiskEvidenceTooltip({ risk }) {
   );
 }
 
-function AdverseNewsScreening({ cddState }) {
+function AdverseNewsScreening({ cddState, onOpenTool }) {
   const evidence = Array.isArray(cddState?.evidence) ? cddState.evidence : [];
   const findings = (Array.isArray(cddState?.findings) ? cddState.findings : [])
     .filter((finding) => finding.category === "adverse_news");
@@ -1907,6 +1954,7 @@ function AdverseNewsScreening({ cddState }) {
         <span>{`${entities.length} ${entities.length === 1 ? "entity was" : "entities were"} searched using ${queryCount} ${queryCount === 1 ? "query" : "queries"} — one query for each screened entity.`}</span>
         <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained.`}</span>
         <span>{`Screened ${formatDateTime(coverage.collected_at)}.`}</span>
+        <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Adverse News tool</button>
       </div>
       {findings.length ? (
         <div className="adverse-news-findings">
@@ -1921,6 +1969,65 @@ function AdverseNewsScreening({ cddState }) {
         </div>
       ) : <p className="empty">No adverse-news findings were generated from this screening.</p>}
     </Section>
+  );
+}
+
+function adverseNewsRecords(cddState) {
+  return {
+    findings: (cddState?.findings || []).filter((finding) => finding.category === "adverse_news"),
+    evidence: (cddState?.evidence || []).filter((item) => item.tool === "adverse_news_screening"),
+  };
+}
+
+function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, onLoadFromCdd, onModeChange, onNamesChange, onAssess }) {
+  const [entityIndex, setEntityIndex] = useState(0);
+  const coverage = (result?.evidence || []).find((item) => (item.relevance_tags || []).includes("screening_coverage"));
+  const entities = coverage?.data?.entities || [];
+  const entity = entities[entityIndex] || null;
+  const entityName = entity?.name || "";
+  const findings = (result?.findings || []).filter((finding) => String(finding.subject?.name || "").toUpperCase() === entityName.toUpperCase());
+  const evidence = (result?.evidence || []).filter((item) => item.data?.entity_key === entity?.key);
+
+  useEffect(() => setEntityIndex(0), [result, mode]);
+
+  return (
+    <>
+      <Section title="Adverse News">
+        <div className="actions">
+          <button className={mode === "cdd" ? "" : "secondary"} disabled={!canLoadFromCdd} onClick={() => { onModeChange("cdd"); onLoadFromCdd(); }}>Load from CDD</button>
+          <button className={mode === "independent" ? "" : "secondary"} onClick={() => onModeChange("independent")}>Run independent Adverse News Check</button>
+        </div>
+        {mode === "cdd" ? <p className="empty">Loaded from the active CDD state. The chatbot remains available for this case.</p> : (
+          <div className="csp-form adverse-news-form">
+            <textarea aria-label="Entity names" placeholder="One entity name per line" value={names} onChange={(event) => onNamesChange(event.target.value)} disabled={running} />
+            <button disabled={running || !names.trim()} onClick={onAssess}>{running ? "Screening…" : "Run check"}</button>
+          </div>
+        )}
+        {mode === "independent" && <p className="empty">Independent results are not attached to the active CDD case. The chatbot is disabled.</p>}
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <>
+          <Section title="Screening Summary">
+            {coverage?.data?.status === "unavailable" ? <p className="risk">{`Screening unavailable. ${coverage.data.reason || "No reason was recorded."}`}</p> : <p>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(coverage?.data?.source_ids || []).length} retained sources.`}</p>}
+          </Section>
+          {entity && (
+            <Section title="Entity Screening">
+              <div className="adverse-news-navigation">
+                <button className="secondary" disabled={entityIndex === 0} onClick={() => setEntityIndex((index) => index - 1)}>← Previous</button>
+                <strong>{`${entityIndex + 1} of ${entities.length} — ${entityName}`}</strong>
+                <button className="secondary" disabled={entityIndex === entities.length - 1} onClick={() => setEntityIndex((index) => index + 1)}>Next →</button>
+              </div>
+              <h3>Findings</h3>
+              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">No adverse-news findings were generated for this entity.</p>}
+              <h3>Evidence</h3>
+              {evidence.length ? <div className="csp-sources">{evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence for this entity.</p>}
+            </Section>
+          )}
+        </>
+      )}
+    </>
   );
 }
 

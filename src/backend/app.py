@@ -21,6 +21,7 @@ from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
+from src.agents.nodes import adverse_news_screening
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
 from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
@@ -114,6 +115,10 @@ class DigitalFootprintRequest(BaseModel):
 class DigitalFootprintAttachRequest(BaseModel):
     session_id: str
     result: dict[str, Any]
+
+
+class IndependentAdverseNewsRequest(BaseModel):
+    entity_names: list[str] = Field(min_length=1, max_length=25)
 
 
 class StandaloneIDVDocumentRequest(BaseModel):
@@ -234,6 +239,24 @@ async def assess_digital_footprint(request: DigitalFootprintRequest) -> dict[str
         )
     except DigitalFootprintError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/adverse-news/assess")
+async def assess_independent_adverse_news(request: IndependentAdverseNewsRequest) -> dict[str, Any]:
+    """Run adverse-news screening without reading or changing an active CDD session."""
+    names = list(dict.fromkeys(name.strip() for name in request.entity_names if name.strip()))
+    if not names:
+        raise HTTPException(status_code=400, detail="Provide at least one entity name")
+    state = {
+        "cdd": {
+            "company_business_profile": {"customer_static": {}},
+            "ownership_and_control": {"members": {"controlling_members": []}, "ubos": [{"name": name} for name in names]},
+        }
+    }
+    try:
+        return await asyncio.to_thread(adverse_news_screening, state)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Independent adverse-news screening failed: {exc}") from exc
 
 
 @app.post("/api/digital-footprint/attach")

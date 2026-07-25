@@ -650,7 +650,8 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             "collected_at": result["evaluated_at"],
         }
         entities = {entity["key"]: entity for entity in result["entities"]}
-        findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"]) for draft in result["drafts"]]
+        queries_by_entity = {item["entity_key"]: item["query"] for item in result["queries"]}
+        findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"], queries_by_entity) for draft in result["drafts"]]
         return {"evidence": [*source_evidence, coverage], "findings": findings}
     except AdverseNewsError as exc:
         return {
@@ -673,6 +674,7 @@ def _assemble_adverse_news_finding(
     source_ids: dict[str, str],
     run_id: str,
     overlay_definition: dict[str, Any],
+    queries_by_entity: dict[str, str],
 ) -> dict[str, Any]:
     entity = entities.get(str(draft.get("entity_key")))
     if not entity:
@@ -688,11 +690,18 @@ def _assemble_adverse_news_finding(
     if not isinstance(overlay, dict) or any(field not in overlay for field in required_overlay):
         raise AdverseNewsError("Adverse-news assessment returned an incomplete adverse_news/v1 overlay")
     overlay = deepcopy(overlay)
-    _validate_overlay(overlay, overlay_definition)
+    overlay["screened_entity"] = {
+        "entity_type": entity["entity_type"],
+        "name_used": entity["name"],
+        "disambiguators_used": entity.get("disambiguators", {}),
+    }
     overlay["screening_coverage"] = {
         **(overlay.get("screening_coverage") or {}),
+        "queries": [queries_by_entity.get(str(draft.get("entity_key")), "")],
         "source_evidence_ids": [source_ids[str(reference)] for reference in refs],
+        "limitations": (overlay.get("screening_coverage") or {}).get("limitations", []),
     }
+    _validate_overlay(overlay, overlay_definition)
     finding = {
         key: draft.get(key)
         for key in ("title", "summary", "confidence", "severity", "potential_impact_risk", "recommended_action_rfi")

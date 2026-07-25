@@ -53,7 +53,7 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
     styles = (Path(__file__).parents[1] / "src" / "frontend" / "styles.css").read_text(encoding="utf-8")
 
-    assert '<AdverseNewsScreening cddState={cddState} />' in app
+    assert '<AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />' in app
     assert 'finding.category === "adverse_news"' in app
     assert '"screening_coverage"' in app
     assert 'className="adverse-news-entity-list"' in app
@@ -66,6 +66,20 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
     assert 'aria-controls={popoverId}' in app
     assert 'event.key === "Escape"' in app
     assert "right: calc(100% + 8px);" in styles
+
+
+def test_standalone_adverse_news_tool_filters_cdd_records_and_supports_both_modes() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert '{ id: "adverse-news", label: "Adverse News" }' in app
+    assert 'finding.category === "adverse_news"' in app
+    assert 'item.tool === "adverse_news_screening"' in app
+    assert 'fetch("/api/adverse-news/assess"' in app
+    assert "Load from CDD" in app
+    assert "Run independent Adverse News Check" in app
+    assert "← Previous" in app
+    assert "Next →" in app
+    assert "Review in Adverse News tool" in app
 
 
 def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> None:

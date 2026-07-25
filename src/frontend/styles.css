@@ -817,6 +817,19 @@ th {
   padding-left: 20px;
 }
 
+.adverse-news-tool-link {
+  align-self: start;
+  margin-top: 4px;
+}
+
+.adverse-news-navigation {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
 .adverse-news-finding {
   align-items: flex-start;
   background: #f8fafc;
