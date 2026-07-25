@@ -23,13 +23,21 @@ class AdverseNewsTests(unittest.TestCase):
             {
                 "company_business_profile": {"customer_static": {"name": "Example Ltd", "jurisdiction": "GB"}},
                 "ownership_and_control": {
-                    "members": {"controlling_members": [{"name": "Director Doe", "case_common_id": "director-1"}]},
+                    "members": {
+                        "controlling_members": [
+                            {"name": "Director Doe", "role": "Director", "case_common_id": "director-1"},
+                            {"name": "DIRECTOR DOE", "role": "Director", "case_common_id": "director-2"},
+                            {"name": "Secretary Doe", "role": "Secretary", "case_common_id": "secretary-1"},
+                            {"name": "Audit PAC", "role": "Auditor", "case_common_id": "auditor-1"},
+                        ]
+                    },
                     "ubos": [{"name": "Owner Doe", "case_common_id": "ubo-1"}],
                 },
             }
         )
 
         self.assertEqual([entity["entity_type"] for entity in entities], ["company", "company_director", "ultimate_beneficial_owner"])
+        self.assertEqual([entity["name"] for entity in entities], ["Example Ltd", "Director Doe", "Owner Doe"])
 
     @patch("src.agents.nodes.screen_adverse_news")
     def test_node_adds_evidence_and_a_valid_finding_without_risk_flags(self, screening) -> None:

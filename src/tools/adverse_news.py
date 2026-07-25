@@ -59,7 +59,12 @@ def entities_for_screening(cdd: dict[str, Any]) -> list[dict[str, Any]]:
     entities: list[dict[str, Any]] = []
     if static.get("name"):
         entities.append({"key": "company:0", "entity_type": "company", "name": static["name"], "entity_id": static.get("registration_number"), "disambiguators": _compact({"jurisdiction": static.get("jurisdiction"), "registration_number": static.get("registration_number")})})
-    for entity_type, people in (("company_director", members.get("controlling_members") or []), ("ultimate_beneficial_owner", ownership.get("ubos") or [])):
+    directors = [
+        person
+        for person in members.get("controlling_members") or []
+        if "director" in str(person.get("role") or "").casefold()
+    ]
+    for entity_type, people in (("company_director", directors), ("ultimate_beneficial_owner", ownership.get("ubos") or [])):
         for index, person in enumerate(people):
             name = person.get("name") or person.get("full_name")
             if name:
@@ -139,10 +144,10 @@ def _compact(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _deduplicate_entities(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[tuple[str, str]] = set()
+    seen: set[str] = set()
     result = []
     for entity in entities:
-        key = (entity["entity_type"], str(entity["name"]).casefold())
+        key = str(entity["name"]).upper()
         if key not in seen:
             seen.add(key)
             result.append(entity)

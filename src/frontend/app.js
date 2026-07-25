@@ -1905,7 +1905,7 @@ function AdverseNewsScreening({ cddState }) {
           </ul>
         ) : <span>None recorded.</span>}
         <span>{`${entities.length} ${entities.length === 1 ? "entity was" : "entities were"} searched using ${queryCount} ${queryCount === 1 ? "query" : "queries"} — one query for each screened entity.`}</span>
-        <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained after duplicate URLs returned across searches were removed. Retained sources are search results, not necessarily adverse-news findings.`}</span>
+        <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained.`}</span>
         <span>{`Screened ${formatDateTime(coverage.collected_at)}.`}</span>
       </div>
       {findings.length ? (
