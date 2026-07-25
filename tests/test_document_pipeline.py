@@ -288,7 +288,7 @@ class DocumentPipelineTests(unittest.TestCase):
             ):
                 update = generate_registry_document_node({"cdd": {}})
 
-            self.assertNotIn("documents", update)
+            self.assertEqual(update["documents"][0]["status"], "located")
             evidence_artifact = update["evidence"][0]["data"]
             self.assertEqual(evidence_artifact["storage"]["status"], "skipped")
             self.assertEqual(

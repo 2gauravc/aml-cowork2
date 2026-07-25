@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from src.backend.app import (
     DocumentPresignRequest,
     SESSIONS,
-    _build_document_requirements,
+    _open_document_requirements,
     _match_requirement,
     presign_document,
 )
@@ -83,30 +83,18 @@ class BackendDocumentTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 404)
 
-    def test_document_requirements_mark_matching_s3_documents_as_available(self):
-        session = {
-            "customer_name": "Demo Co",
-            "jurisdiction": "GB",
-            "graph_state": {"cdd": {
-                "individual_identity_verification": {
-                    "required_individuals": [
-                        {"name": "Jane Demo", "selected_document_type": "passport"}
-                    ]
-                }
-            }},
-        }
-        with patch(
-            "src.backend.app.find_documents_in_s3",
-            return_value=[{"name": "passport-jane-demo.pdf"}],
-        ):
-            requirements = _build_document_requirements(session)
-
-        self.assertEqual(requirements[0]["status"], "cache_found")
+    def test_open_document_requirements_uses_canonical_document_records(self):
+        requirements = _open_document_requirements({"documents": [{
+            "document_id": "document:idv:p1:1",
+            "purpose": "identity_verification",
+            "status": "located",
+        }]})
+        self.assertEqual(requirements[0]["document_id"], "document:idv:p1:1")
 
     def test_matching_prefers_same_type_and_extracted_name(self):
         requirements = [
-            {"entity_name": "Jane Demo", "document_type": "passport", "status": "not_found"},
-            {"entity_name": "Sam Other", "document_type": "passport", "status": "not_found"},
+            {"subject": {"name": "Jane Demo"}, "document_type": "passport", "status": "required"},
+            {"subject": {"name": "Sam Other"}, "document_type": "passport", "status": "required"},
         ]
         matched = _match_requirement(
             requirements,

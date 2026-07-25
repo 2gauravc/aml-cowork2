@@ -283,13 +283,13 @@ def run_cdd_agent_state(
 def resume_cdd_agent_state(
     *,
     thread_id: str,
-    document_requirements: list[dict[str, Any]],
+    documents: list[dict[str, Any]],
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Update a paused graph thread and resume it after officer intervention."""
     app = build_cdd_graph(progress_callback=progress_callback)
     config = {"configurable": {"thread_id": thread_id}}
-    app.update_state(config, {"document_requirements": document_requirements})
+    app.update_state(config, {"documents": documents})
     return app.invoke(Command(resume={}), config=config)
 
 

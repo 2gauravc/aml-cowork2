@@ -29,9 +29,9 @@ class DemoModeTests(unittest.TestCase):
         self.assertTrue(response["demo_mode"])
         self.assertEqual(response["customer_name"], "Northstar Trading Ltd")
         self.assertTrue(response["case_assessment_summary"]["demo_fixture"])
-        self.assertEqual(len(response["document_requirements"]), 2)
-        self.assertEqual(response["document_requirements"][0]["document_type"], "registry_document")
-        self.assertTrue(response["document_requirements"][0]["demo_url"].endswith("northstar-registry-business-profile.html"))
+        self.assertEqual(len(response["documents"]), 2)
+        self.assertEqual(response["documents"][0]["document_type"], "registry_document")
+        self.assertTrue(response["documents"][0]["demo_url"].endswith("northstar-registry-business-profile.html"))
         maya = response["cdd"]["individual_identity_verification"]["required_individuals"][0]
         self.assertEqual(maya["document"]["document_number"], "P-DEMO-48291")
         self.assertEqual(maya["document"]["nationality"], "Singaporean")

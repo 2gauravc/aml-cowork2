@@ -472,35 +472,34 @@ def _document_information(
 ) -> dict[str, Any]:
     """Build a live, request-shaped document view for the chat agent."""
     records = []
-    requirements = (session.get("graph_state") or {}).get("document_requirements") or []
+    requirements = [
+        document for document in (session.get("graph_state") or {}).get("documents", [])
+        if document.get("purpose") in {"identity_verification", "company_profile"}
+    ]
     for requirement in requirements:
         if person_name and _normalise_document_name(person_name) != _normalise_document_name(
-            requirement.get("entity_name") or ""
+            (requirement.get("subject") or {}).get("name") or ""
         ):
             continue
         if document_type and document_type.casefold() != str(requirement.get("document_type") or "").casefold():
             continue
 
-        processed = _processed_document_for_requirement(session, requirement)
-        artifact = (processed or {}).get("artifact") or requirement.get("artifact") or {}
-        storage = (
-            artifact.get("storage")
-            or (requirement.get("cache_document") or {}).get("storage")
-            or {}
-        )
+        processing = requirement.get("processing") or {}
+        storage = requirement.get("storage") or {}
         record = {
-            "requirement_id": requirement.get("id"),
-            "person_or_entity": requirement.get("entity_name"),
+            "requirement_id": requirement.get("document_id"),
+            "person_or_entity": (requirement.get("subject") or {}).get("name"),
             "document_type": requirement.get("document_type"),
             "status": requirement.get("status"),
-            "source": requirement.get("source") or ("s3_cache" if requirement.get("cache_document") else None),
-            "processed_at": requirement.get("processed_at"),
-            "classification": (processed or {}).get("classification") or requirement.get("classification"),
-            "match": requirement.get("match"),
+            "gap": requirement.get("gap"),
+            "source": (requirement.get("acquisition") or {}).get("source"),
+            "processed_at": processing.get("processed_at"),
+            "classification": processing.get("classification"),
+            "match": processing.get("match"),
             "storage_available": bool(storage.get("bucket") and storage.get("key")),
         }
         if include_extracted_information:
-            record["extracted_information"] = (processed or {}).get("extract")
+            record["extracted_information"] = processing.get("extract")
         if include_download_url:
             record.update(_document_download_link(storage))
         records.append(record)
@@ -563,7 +562,7 @@ def _normalise_document_name(value: str) -> str:
 def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
     """Return live session data, including neutral findings (currently adverse_news)."""
     state = session.get("graph_state") or {}
-    requirements = state.get("document_requirements") or []
+    requirements = state.get("documents") or []
     requirement_counts: dict[str, int] = {}
     for requirement in requirements:
         status = str(requirement.get("status") or "unknown")
@@ -580,8 +579,7 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "case_status": graph_state.get("case_status"),
         "has_cdd": bool(graph_state.get("cdd")),
         "graph_state_keys": sorted(graph_state) if isinstance(graph_state, dict) else [],
-        "document_requirement_counts": requirement_counts,
-        "document_requirements": requirements,
+        "document_status_counts": requirement_counts,
         "document_count": len(graph_state.get("documents") or []),
         "evidence_count": len(graph_state.get("evidence") or []),
         "risk_flags": graph_state.get("risk_flags") or [],

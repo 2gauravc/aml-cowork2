@@ -42,7 +42,6 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     assert response["status"] == "running"
     assert response["cdd"]["company_business_profile"]["status"] == "incomplete"
     assert response["documents"] == []
-    assert response["document_requirements"] == []
     assert response["risk_flags"] == []
     assert response["findings"] == []
     assert response["assessments"] == []

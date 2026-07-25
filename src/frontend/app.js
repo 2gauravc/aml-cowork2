@@ -113,7 +113,7 @@ function App() {
     : latestAssistantMessage(messages) || "Setting up";
   const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
   const missingDocumentRequirements = useMemo(
-    () => documentRequirements.filter((requirement) => requirement.status === "not_found"),
+    () => documentRequirements.filter((requirement) => (requirement.gap || {}).status === "outstanding"),
     [documentRequirements],
   );
   const cddPausedForDocuments = pipelineStatus === "awaiting_documents";
@@ -231,9 +231,8 @@ function App() {
   useEffect(() => {
     if (!sessionId) return;
     documentRequirements.forEach((requirement) => {
-      const document = requirement.cache_document;
-      const key = documentKey(document);
-      if (key && !documentLinks[key]) refreshDocumentLink(document);
+      const key = documentKey(requirement);
+      if (key && !documentLinks[key]) refreshDocumentLink(requirement);
     });
   }, [sessionId, documentRequirements, documentLinks]);
 
@@ -248,11 +247,10 @@ function App() {
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
     setDocuments(data.documents || []);
-    setDocumentRequirements(data.document_requirements || []);
+    setDocumentRequirements((data.documents || []).filter((document) => document.purpose));
     setDocumentLinks((current) => {
       const keys = new Set([
         ...(data.documents || []).map((document) => documentKey(document)),
-        ...(data.document_requirements || []).map((requirement) => documentKey(requirement.cache_document)),
       ].filter(Boolean));
       return Object.fromEntries(
         Object.entries(current).filter(([key]) => keys.has(key)),
@@ -501,18 +499,18 @@ function App() {
 
   async function generateMissingDocuments() {
     if (!sessionId) return;
-    const missing = documentRequirements.filter((requirement) => requirement.status === "not_found");
+    const missing = documentRequirements.filter((requirement) => (requirement.gap || {}).status === "outstanding");
     if (!missing.length) return;
     setLoading(true);
     setError(null);
     try {
       for (const requirement of missing) {
-        setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${requirement.entity_name}...`);
+        setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${(requirement.subject || {}).name}...`);
         await new Promise((resolve) => window.requestAnimationFrame(resolve));
         const response = await fetch("/api/documents/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, requirement_ids: [requirement.id] }),
+          body: JSON.stringify({ session_id: sessionId, requirement_ids: [requirement.document_id] }),
         });
         applyResponse(await readJsonResponse(response, "Document generation failed"));
       }
@@ -1597,9 +1595,9 @@ function DocumentManagement({
   generationStatus,
   demoMode,
 }) {
-  const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
+  const missing = (requirements || []).filter((requirement) => (requirement.gap || {}).status === "outstanding");
   const hasProcessableDocuments = (requirements || []).some((requirement) =>
-    ["cache_found", "provided", "received"].includes(requirement.status),
+    ["located", "received", "processing"].includes(requirement.status),
   );
   return (
     <Section title="Document Management">
@@ -1636,13 +1634,14 @@ function DocumentManagement({
           </thead>
           <tbody>
             {requirements.map((requirement) => {
-              const foundInCache = Boolean(requirement.cache_document);
-              const provided = !foundInCache && ["customer_upload", "generated"].includes(requirement.source);
-              const cacheLink = foundInCache ? links[documentKey(requirement.cache_document)] : null;
+              const foundInCache = Boolean((requirement.acquisition || {}).artifact?.reused_from_s3)
+                || (requirement.acquisition || {}).source === "S3 document cache";
+              const provided = !foundInCache && ["customer_upload", "generated"].includes((requirement.acquisition || {}).source);
+              const cacheLink = foundInCache ? links[documentKey(requirement)] : null;
               const demoLink = requirement.demo_url;
               return (
-                <tr key={requirement.id}>
-                  <td>{documentLabel(requirement.document_type)} — {requirement.entity_name}</td>
+                <tr key={requirement.document_id}>
+                  <td>{documentLabel(requirement.document_type)} — {(requirement.subject || {}).name}</td>
                   <td>
                     {foundInCache && cacheLink?.url ? (
                       <a className="download-link" href={cacheLink.url} target="_blank" rel="noreferrer">Yes</a>

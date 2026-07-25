@@ -507,7 +507,7 @@ async def upload_case_document(
     """Stage an officer-provided PDF and intelligently match it to a requirement."""
     session = SESSIONS.get(session_id)
     state = _active_cdd_state(session)
-    if not state or not state.get("document_requirements"):
+    if not state or not _open_document_requirements(state):
         raise HTTPException(status_code=404, detail="Document requirements not found")
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
@@ -529,19 +529,19 @@ async def upload_case_document(
         path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=f"Unable to identify document: {exc}") from exc
 
-    requirement = _match_requirement(state["document_requirements"], classification, preview)
+    requirement = _match_requirement(_open_document_requirements(state), classification, preview)
     if not requirement:
         path.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail="No open document requirement matched this upload")
-    requirement.update(
-        {
-            "status": "provided",
+    requirement.update({
+        "status": "received",
+        "gap": {"status": "resolved", "reason": ""},
+        "acquisition": {
             "source": "customer_upload",
             "artifact": {**artifact, "document_type": classification.get("document_type")},
-            "classification": classification,
-            "match": _match_summary(requirement, classification, preview),
-        }
-    )
+        },
+        "processing": {"classification": classification, "match": _match_summary(requirement, classification, preview)},
+    })
     await _resume_if_ready(session)
     return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
@@ -551,22 +551,29 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
     """Generate selected unavailable documents locally; processing is still explicit."""
     session = SESSIONS.get(request.session_id)
     state = _active_cdd_state(session)
-    if not state or not state.get("document_requirements"):
+    if not state or not _open_document_requirements(state):
         raise HTTPException(status_code=404, detail="Document requirements not found")
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
     selected = set(request.requirement_ids or [])
-    for requirement in state["document_requirements"]:
-        if selected and requirement["id"] not in selected:
+    for requirement in _open_document_requirements(state):
+        if selected and requirement["document_id"] not in selected:
             continue
-        if requirement.get("status") != "not_found":
+        if requirement.get("status") != "required":
             continue
         artifact = await asyncio.to_thread(
             generate_idv_document,
-            {**requirement["individual"], "selected_document_type": requirement["document_type"]},
+            {
+                **(requirement.get("subject") or {}),
+                "selected_document_type": requirement["document_type"],
+            },
             output_dir=DOCUMENT_STAGING_DIR / request.session_id,
         )
-        requirement.update({"status": "received", "source": "generated", "artifact": artifact})
+        requirement.update({
+            "status": "received",
+            "gap": {"status": "resolved", "reason": ""},
+            "acquisition": {"source": "generated", "artifact": artifact},
+        })
     await _resume_if_ready(session)
     return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
@@ -680,10 +687,14 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
         key: session.pop(key)
         for key in (
             "cdd", "documents", "evidence", "findings", "assessments", "risk_flags",
-            "case_status", "case_assessment_summary", "document_requirements",
+            "case_status", "case_assessment_summary",
         )
         if key in session
     }
+    legacy_requirements = session.pop("document_requirements", [])
+    if legacy_requirements:
+        state = session["graph_state"]
+        state.setdefault("documents", []).extend(_migrate_legacy_document_requirements(legacy_requirements))
     session["session_id"] = session_id
     session["demo_mode"] = True
     state = session.get("graph_state")
@@ -715,7 +726,6 @@ def _response(
         "cdd_state": state,
         "case_status": state.get("case_status"),
         "documents": state.get("documents", []),
-        "document_requirements": state.get("document_requirements", []),
         "risk_flags": state.get("risk_flags", []),
         "findings": state.get("findings", []),
         "assessments": state.get("assessments", []),
@@ -738,7 +748,10 @@ def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
 
 def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
     state = (session or {}).get("graph_state")
-    return state if isinstance(state, dict) else None
+    if not isinstance(state, dict):
+        return None
+    _normalise_document_state(state)
+    return state
 
 
 def _append_cdd_records(state: dict[str, Any], key: str, records: list[dict[str, Any]], id_key: str) -> None:
@@ -747,57 +760,111 @@ def _append_cdd_records(state: dict[str, Any], key: str, records: list[dict[str,
     existing.extend(item for item in records if not item.get(id_key) or item.get(id_key) not in known_ids)
 
 
-def _build_document_requirements(session: dict[str, Any]) -> list[dict[str, Any]]:
-    cdd = (_active_cdd_state(session) or {}).get("cdd") or {}
-    individuals = cdd.get("individual_identity_verification", {}).get("required_individuals", [])
-    available = find_documents_in_s3(
-        company_name=session.get("customer_name"),
-        jurisdiction=session.get("jurisdiction"),
-    )
-    by_name = {document.get("name"): document for document in available}
-    requirements = []
-    for index, individual in enumerate(individuals):
-        document_type = individual.get("selected_document_type") or "passport"
-        expected_name = reusable_document_name(
-            document_type=document_type,
-            company_name=session["customer_name"],
-            person_name=individual.get("name"),
+def _open_document_requirements(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return unresolved canonical document records eligible for officer action."""
+    return [
+        document for document in state.get("documents", [])
+        if document.get("purpose") == "identity_verification"
+        and document.get("status") in {"required", "located", "received"}
+    ]
+
+
+def _migrate_legacy_document_requirements(requirements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Read old persisted requirement records into the canonical document shape."""
+    documents = []
+    for index, requirement in enumerate(requirements):
+        individual = requirement.get("individual") or {}
+        cached = requirement.get("cache_document") or {}
+        old_status = requirement.get("status")
+        resolved = old_status in {"cache_found", "provided", "received", "processed"}
+        documents.append({
+            "document_id": f"legacy:{requirement.get('id') or index}",
+            "purpose": "company_profile" if requirement.get("document_type") == "registry_document" else "identity_verification",
+            "document_type": requirement.get("document_type"),
+            "subject": {"name": requirement.get("entity_name"), "case_common_id": individual.get("case_common_id")},
+            "requirement": {"accepted_types": individual.get("required_documents", [])},
+            "status": "processed" if old_status == "processed" else ("located" if resolved else "required"),
+            "gap": {"status": "resolved" if resolved else "outstanding", "reason": "" if resolved else "No acceptable document is available."},
+            "acquisition": {"source": requirement.get("source") or ("S3 document cache" if cached else None)},
+            "storage": cached.get("storage") or {},
+            "url": cached.get("url"),
+            "name": cached.get("name"),
+            "demo_url": requirement.get("demo_url"),
+        })
+    return documents
+
+
+def _normalise_document_state(state: dict[str, Any]) -> None:
+    """Upgrade persisted pre-#72 document shapes in place on first read."""
+    legacy_requirements = state.pop("document_requirements", [])
+    documents = state.setdefault("documents", [])
+    for index, document in enumerate(list(documents)):
+        if document.get("document_id"):
+            continue
+        document_type = document.get("document_type") or document.get("category") or "unknown"
+        documents[index] = {
+            "document_id": f"legacy:stored:{index}:{document_type}",
+            "purpose": "company_profile" if document_type == "registry_document" else "identity_verification",
+            "document_type": document_type,
+            "subject": {"name": document.get("person_name")},
+            "status": "located",
+            "gap": {"status": "resolved", "reason": ""},
+            "acquisition": {"source": document.get("source")},
+            "storage": document.get("storage") or {},
+            "url": document.get("url"),
+            "name": document.get("name"),
+            "collected_at": document.get("collected_at"),
+        }
+    known_ids = {document.get("document_id") for document in documents if document.get("document_id")}
+    for document in _migrate_legacy_document_requirements(legacy_requirements):
+        if document["document_id"] not in known_ids:
+            documents.append(document)
+            known_ids.add(document["document_id"])
+
+    # Earlier graph states kept extraction records below cdd.documents. Preserve
+    # their classification/extract data while moving them into the same record.
+    cdd = state.get("cdd") or {}
+    legacy_extracts = cdd.pop("documents", [])
+    for index, legacy in enumerate(legacy_extracts):
+        artifact = legacy.get("artifact") or {}
+        extract = legacy.get("extract") or {}
+        document_type = (
+            (legacy.get("classification") or {}).get("document_type")
+            or artifact.get("document_type") or extract.get("document_type") or "unknown"
         )
-        cached = by_name.get(expected_name)
-        requirements.append(
-            {
-                "id": f"idv-{index}-{document_type}",
-                "entity_name": individual.get("name"),
-                "document_type": document_type,
-                "individual": individual,
-                "status": "cache_found" if cached else "not_found",
-                "cache_document": cached,
-                "match": None,
-            }
+        subject_name = artifact.get("person_name") or extract.get("full_name") or extract.get("name")
+        document_id = (
+            "document:registry" if document_type == "registry_document"
+            else f"legacy:extract:{artifact.get('case_common_id') or index}:{document_type}"
         )
-    return requirements
+        update = {
+            "document_id": document_id,
+            "purpose": "company_profile" if document_type == "registry_document" else "identity_verification",
+            "document_type": document_type,
+            "subject": {"name": subject_name, "case_common_id": artifact.get("case_common_id")},
+            "status": "processed",
+            "gap": {"status": "resolved", "reason": ""},
+            "acquisition": {"source": artifact.get("source"), "artifact": artifact},
+            "storage": artifact.get("storage") or {},
+            "url": artifact.get("s3_url"),
+            "processing": {
+                "classification": legacy.get("classification"),
+                "extract": extract,
+                "processed_at": legacy.get("processed_at"),
+            },
+        }
+        existing = next((item for item in documents if item.get("document_id") == document_id), None)
+        if existing is None:
+            documents.append(update)
+        else:
+            existing.update({key: value for key, value in update.items() if value not in ({}, None)})
 
 
 def _artifact_for_processing(
     requirement: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    if requirement.get("status") == "cache_found":
-        document = requirement.get("cache_document")
-        if not document:
-            return None, None
-        return (
-            {
-                "pdf_path": download_document_from_s3(document),
-                "document_type": requirement["document_type"],
-                "person_name": requirement["entity_name"],
-                "case_common_id": requirement["individual"].get("case_common_id"),
-                "source": "S3 document cache",
-                "s3_url": document["url"],
-                "storage": document["storage"],
-            },
-            document,
-        )
-    return requirement.get("artifact"), None
+    artifact = (requirement.get("acquisition") or {}).get("artifact") or {}
+    return artifact, None
 
 
 def _match_requirement(
@@ -809,12 +876,12 @@ def _match_requirement(
     extracted_name = _normalise_name(extract.get("full_name") or extract.get("name") or "")
     candidates = []
     for requirement in requirements:
-        if requirement.get("status") not in {"not_found", "cache_found"}:
+        if requirement.get("status") not in {"required", "located"}:
             continue
         if requirement.get("document_type") != document_type:
             continue
         score = 0.65
-        if extracted_name and extracted_name == _normalise_name(requirement.get("entity_name") or ""):
+        if extracted_name and extracted_name == _normalise_name((requirement.get("subject") or {}).get("name") or ""):
             score += 0.35
         candidates.append((score, requirement))
     if not candidates:
@@ -829,7 +896,7 @@ def _match_summary(
     extract: dict[str, Any],
 ) -> dict[str, Any]:
     extracted_name = _normalise_name(extract.get("full_name") or extract.get("name") or "")
-    exact_name = extracted_name == _normalise_name(requirement.get("entity_name") or "")
+    exact_name = extracted_name == _normalise_name((requirement.get("subject") or {}).get("name") or "")
     return {
         "confidence": 1.0 if exact_name else 0.65,
         "reason": "document type and extracted name match" if exact_name else "document type match",
@@ -846,8 +913,8 @@ def _safe_file_name(name: str) -> str:
 
 
 async def _resume_if_ready(session: dict[str, Any]) -> None:
-    requirements = (_active_cdd_state(session) or {}).get("document_requirements", [])
-    if any(row.get("status") == "not_found" for row in requirements):
+    documents = (_active_cdd_state(session) or {}).get("documents", [])
+    if any((row.get("gap") or {}).get("status") == "outstanding" for row in documents):
         session["pipeline_status"] = "awaiting_documents"
         sync_case_status(session, generation="in_progress")
         return
@@ -862,7 +929,7 @@ async def _resume_if_ready(session: dict[str, Any]) -> None:
         result = await asyncio.to_thread(
             resume_cdd_agent_state,
             thread_id=thread_id,
-            document_requirements=requirements,
+            documents=documents,
             progress_callback=publish_progress,
         )
         _apply_graph_result(session, result)
@@ -881,11 +948,6 @@ def _session_document_by_key(
 ) -> dict[str, Any] | None:
     state = _active_cdd_state(session) or {}
     for document in state.get("documents", []):
-        storage = document.get("storage") or {}
-        if storage.get("key") == document_key:
-            return document
-    for requirement in state.get("document_requirements", []):
-        document = requirement.get("cache_document") or {}
         storage = document.get("storage") or {}
         if storage.get("key") == document_key:
             return document
@@ -1072,7 +1134,10 @@ async def _complete_pipeline_for_session(
         )
         _apply_graph_result(session, graph_state)
         cdd = graph_state.get("cdd", {})
-        if any(row.get("status") == "not_found" for row in graph_state.get("document_requirements", [])):
+        if any(
+            (row.get("gap") or {}).get("status") == "outstanding"
+            for row in graph_state.get("documents", [])
+        ):
             session["pipeline_status"] = "awaiting_documents"
             sync_case_status(session, generation="in_progress")
             return

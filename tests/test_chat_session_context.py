@@ -39,7 +39,10 @@ class ChatSessionContextTests(unittest.TestCase):
                     }
                 ],
             },
-            "graph_state": {"metadata": {"case_id": "sg-001"}, "cdd": {"customer": {"name": "SC ENGINEERING PRIVATE LIMITED"}, "documents": [{"artifact": {"person_name": "Claire Wallace", "document_type": "passport", "storage": {"bucket": "documents", "key": "GB/claire-passport.pdf"}}, "classification": {"document_type": "passport", "confidence": 0.99}, "extract": {"full_name": "Claire Wallace", "document_number": "P123456"}}], "company_business_profile": {"customer_static": {}}}, "documents": [{"name": "registry.pdf"}], "document_requirements": [{"id": "passport-1", "entity_name": "Claire Wallace", "document_type": "passport", "status": "processed", "source": "customer_upload"}, {"id": "passport-2", "status": "not_found"}], "evidence": [{"source": "tool", "tool": "get_customer_static_by_name", "description": "Customer static profile"}, {"source": "graph", "tool": "extract_idv_documents", "description": "ID&V extraction"}], "risk_flags": [{"severity": "low"}], "findings": [_adverse_news_finding()]},
+            "graph_state": {"metadata": {"case_id": "sg-001"}, "cdd": {"customer": {"name": "SC ENGINEERING PRIVATE LIMITED"}, "company_business_profile": {"customer_static": {}}}, "documents": [
+                {"document_id": "document:idv:claire:1", "purpose": "identity_verification", "subject": {"name": "Claire Wallace"}, "document_type": "passport", "status": "processed", "gap": {"status": "resolved"}, "storage": {"bucket": "documents", "key": "GB/claire-passport.pdf"}, "processing": {"classification": {"document_type": "passport", "confidence": 0.99}, "extract": {"full_name": "Claire Wallace", "document_number": "P123456"}}},
+                {"document_id": "document:idv:missing:1", "purpose": "identity_verification", "document_type": "passport", "status": "required", "gap": {"status": "outstanding"}}
+            ], "evidence": [{"source": "tool", "tool": "get_customer_static_by_name", "description": "Customer static profile"}, {"source": "graph", "tool": "extract_idv_documents", "description": "ID&V extraction"}], "risk_flags": [{"severity": "low"}], "findings": [_adverse_news_finding()]},
             "documents": [{"name": "registry.pdf"}],
             "document_requirements": [
                 {
@@ -73,7 +76,7 @@ class ChatSessionContextTests(unittest.TestCase):
 
         self.assertEqual(result["customer_name"], "SC ENGINEERING PRIVATE LIMITED")
         self.assertEqual(result["pipeline_status"], "awaiting_documents")
-        self.assertEqual(result["document_requirement_counts"], {"processed": 1, "not_found": 1})
+        self.assertEqual(result["document_status_counts"], {"processed": 1, "required": 1})
         self.assertIn("metadata", result["graph_state_keys"])
         self.assertEqual(result["findings_count"], 1)
         self.assertEqual(result["findings"][0]["category"], "adverse_news")
@@ -132,7 +135,7 @@ class ChatSessionContextTests(unittest.TestCase):
             self.session,
         )
 
-        self.assertEqual(result["document_status_counts"], {"processed": 1, "not_found": 1})
+        self.assertEqual(result["document_status_counts"], {"processed": 1, "required": 1})
         self.assertEqual(len(result["documents"]), 1)
         document = result["documents"][0]
         self.assertEqual(document["status"], "processed")

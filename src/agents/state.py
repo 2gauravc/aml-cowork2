@@ -97,7 +97,6 @@ class CDD(TypedDict, total=False):
     ownership_and_control: OwnershipAndControlCDD
     company_business_profile: CompanyBusinessProfileCDD
     individual_identity_verification: IndividualIdentityVerificationCDD
-    documents: list[dict[str, Any]]
 
 
 class CaseStatus(TypedDict):
@@ -105,12 +104,43 @@ class CaseStatus(TypedDict):
 
 
 class CaseDocument(TypedDict, total=False):
+    document_id: str
+    purpose: str
+    subject: dict[str, Any]
+    requirement: dict[str, Any]
+    status: str
+    gap: dict[str, Any]
+    acquisition: dict[str, Any]
+    storage: dict[str, Any]
+    processing: dict[str, Any]
     name: str
     category: str
     url: str
     path: str
     source: str
     collected_at: str
+
+
+def merge_documents(
+    existing: list[CaseDocument] | None, updates: list[CaseDocument] | None
+) -> list[CaseDocument]:
+    """Merge document lifecycle updates by stable document ID.
+
+    Documents are stateful requirements, not append-only artefacts: locating a file,
+    extracting it, and validating it must update the same record.
+    """
+    merged: list[CaseDocument] = []
+    positions: dict[str, int] = {}
+    for document in [*(existing or []), *(updates or [])]:
+        document_id = str(document.get("document_id") or "")
+        if document_id and document_id in positions:
+            index = positions[document_id]
+            merged[index] = {**merged[index], **document}
+        else:
+            if document_id:
+                positions[document_id] = len(merged)
+            merged.append(document)
+    return merged
 
 
 class EvidenceItem(TypedDict, total=False):
@@ -155,7 +185,7 @@ class RiskFlag(TypedDict, total=False):
 class CDDState(TypedDict, total=False):
     metadata: Metadata
     cdd: CDD
-    documents: Annotated[list[CaseDocument], add]
+    documents: Annotated[list[CaseDocument], merge_documents]
     evidence: Annotated[list[EvidenceItem], add]
     findings: Annotated[list[Finding], add]
     assessments: Annotated[list[dict[str, Any]], add]
@@ -163,7 +193,6 @@ class CDDState(TypedDict, total=False):
     case_status: CaseStatus
     case_assessment_summary: dict[str, Any] | None
     messages: Annotated[list[AnyMessage], add_messages]
-    document_requirements: list[dict[str, Any]]
 
 
 def new_cdd_state(
@@ -221,5 +250,4 @@ def new_cdd_state(
         "case_status": {"cdd_generation": "in_progress"},
         "case_assessment_summary": None,
         "messages": [],
-        "document_requirements": [],
     }

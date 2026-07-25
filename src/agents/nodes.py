@@ -282,8 +282,19 @@ def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
             )
         ],
     }
-    if document:
-        update["documents"] = [document]
+    update["documents"] = [_document_record(
+        document_id="document:registry",
+        purpose="company_profile",
+        document_type="registry_document",
+        subject={"name": "Registry document"},
+        requirement={"required": True, "reason": ["Company business profile"]},
+        status="located" if artifact.get("pdf_path") else "unavailable",
+        gap={
+            "status": "resolved" if artifact.get("pdf_path") else "outstanding",
+            "reason": "" if artifact.get("pdf_path") else "Registry document could not be obtained.",
+        },
+        artifact=artifact,
+    )]
     return update
 
 
@@ -331,14 +342,21 @@ def enrich_cdd_from_registry_document(state: CDDState) -> dict[str, Any]:
     classification = document_data.get("classification") or {}
     missing_before = missing_about_customer_fields(cdd)
     applied_fields = apply_document_extract_to_cdd(cdd, extract)
-    document_result = {
-        "classification": classification,
-        "missing_fields_before": missing_before,
-        "applied_fields": applied_fields,
-        "artifact": artifact,
+    return {
+        "cdd": cdd,
+        "documents": [{
+            "document_id": "document:registry",
+            "status": "processed",
+            "gap": {"status": "resolved", "reason": ""},
+            "processing": {
+                "classification": classification,
+                "extract": extract,
+                "applied_fields": applied_fields,
+                "missing_fields_before": missing_before,
+                "processed_at": datetime.now(UTC).isoformat(),
+            },
+        }],
     }
-    cdd.setdefault("documents", []).append(document_result)
-    return {"cdd": cdd}
 
 
 def build_ownership_and_control(state: CDDState) -> dict[str, Any]:
@@ -401,26 +419,13 @@ def establish_idv_requirements(state: CDDState) -> dict[str, Any]:
 
 
 def locate_available_documents(state: CDDState) -> dict[str, Any]:
-    """Build the officer work queue and locate reusable S3 documents."""
+    """Create canonical ID&V document requirements and locate reusable files."""
     cdd = state.get("cdd", {})
     individuals = cdd.get("individual_identity_verification", {}).get("required_individuals", [])
     company_name, jurisdiction = _document_scope(state)
     available = find_documents_in_s3(company_name=company_name, jurisdiction=jurisdiction)
     by_name = {item.get("name"): item for item in available}
-    requirements = []
-    registry_artifact = _latest_evidence_data(state, "generate_registry_document") or {}
-    if registry_artifact:
-        requirements.append({
-            "id": "registry-document",
-            "entity_name": "Registry document",
-            "document_type": "registry_document",
-            "individual": {},
-            "status": "processed",
-            "cache_document": registry_artifact.get("storage") and {
-                "storage": registry_artifact.get("storage"),
-                "url": registry_artifact.get("s3_url"),
-            },
-        })
+    documents = []
     for index, individual in enumerate(individuals):
         document_type = individual.get("selected_document_type") or "passport"
         expected_name = reusable_document_name(
@@ -429,21 +434,34 @@ def locate_available_documents(state: CDDState) -> dict[str, Any]:
             person_name=individual.get("name"),
         )
         cached = by_name.get(expected_name)
-        requirements.append({
-            "id": f"idv-{index}-{document_type}",
-            "entity_name": individual.get("name"),
-            "document_type": document_type,
-            "individual": individual,
-            "status": "cache_found" if cached else "not_found",
-            "cache_document": cached,
-        })
-    return {"document_requirements": requirements}
+        documents.append(_document_record(
+            document_id=f"document:idv:{individual.get('case_common_id') or index}:1",
+            purpose="identity_verification",
+            document_type=document_type,
+            subject={"name": individual.get("name"), "case_common_id": individual.get("case_common_id")},
+            requirement={
+                "policy": "identity_verification",
+                "reason": individual.get("reasons", []),
+                "accepted_types": individual.get("required_documents", []),
+                "minimum_required": 1,
+            },
+            status="located" if cached else "required",
+            gap={
+                "status": "resolved" if cached else "outstanding",
+                "reason": "" if cached else "No acceptable identity document is available.",
+            },
+            artifact=_cached_artifact(cached, document_type, individual) if cached else {},
+        ))
+    return {"documents": documents}
 
 
 def await_documents(state: CDDState) -> dict[str, Any]:
     """Pause the graph until every officer document requirement is available."""
-    requirements = state.get("document_requirements", [])
-    outstanding = [row for row in requirements if row.get("status") == "not_found"]
+    outstanding = [
+        document for document in state.get("documents", [])
+        if document.get("purpose") == "identity_verification"
+        and (document.get("gap") or {}).get("status") == "outstanding"
+    ]
     if outstanding:
         interrupt({"status": "awaiting_documents", "requirements": outstanding})
     return {}
@@ -576,31 +594,40 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
         )
 
     _apply_idv_extracts(individuals, extracts)
-    requirements = deepcopy(state.get("document_requirements", []))
-    processed_keys = {
-        _identity_key(
-            {
-                "name": item.get("artifact", {}).get("person_name")
-                or item.get("extract", {}).get("full_name"),
-                "case_common_id": item.get("artifact", {}).get("case_common_id"),
-            }
-        )
-        for item in extracts
-    }
-    for requirement in requirements:
-        identity = _identity_key(requirement.get("individual", {}))
-        if identity in processed_keys:
-            requirement["status"] = "processed"
-            requirement["processed_at"] = datetime.now(UTC).isoformat()
+    document_updates = []
+    for item in extracts:
+        artifact = item.get("artifact", {})
+        identity = _identity_key({
+            "name": artifact.get("person_name") or item.get("extract", {}).get("full_name"),
+            "case_common_id": artifact.get("case_common_id"),
+        })
+        for document in state.get("documents", []):
+            if document.get("purpose") != "identity_verification":
+                continue
+            if _identity_key(document.get("subject") or {}) != identity:
+                continue
+            document_updates.append({
+                "document_id": document["document_id"],
+                "status": "processed",
+                "gap": {"status": "resolved", "reason": ""},
+                "storage": artifact.get("storage") or document.get("storage") or {},
+                "url": artifact.get("s3_url") or document.get("url"),
+                "processing": {
+                    "classification": item.get("classification"),
+                    "extract": item.get("extract"),
+                    "validation": _idv_validation(document, item),
+                    "processed_at": datetime.now(UTC).isoformat(),
+                },
+            })
     idv["required_individuals"] = individuals
     idv["missing_items"] = [
         row.get("name") for row in individuals if row.get("status") != "verified"
     ]
     idv["status"] = "complete" if not idv["missing_items"] else "incomplete"
     cdd["individual_identity_verification"] = idv
-    cdd.setdefault("documents", []).extend(extracts)
     update = {
         "cdd": cdd,
+        "documents": document_updates,
         "messages": [AIMessage(content="Extracting ID&V documents.")],
         "evidence": [
             _evidence(
@@ -612,8 +639,6 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
             )
         ],
     }
-    if requirements:
-        update["document_requirements"] = requirements
     return update
 
 
@@ -832,38 +857,41 @@ def _validate_overlay(value: dict[str, Any], definition: dict[str, Any]) -> None
 
 
 def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
-    """Materialize cached or officer-supplied requirements for graph extraction."""
+    """Materialize canonical document records for graph extraction."""
     artifacts = []
-    for requirement in state.get("document_requirements", []):
-        if requirement.get("status") not in {"cache_found", "provided", "received"}:
+    for document in state.get("documents", []):
+        if document.get("purpose") != "identity_verification":
             continue
-        artifact = deepcopy(requirement.get("artifact") or {})
-        cached = requirement.get("cache_document")
-        if cached and not artifact:
+        if document.get("status") not in {"located", "received", "processing"}:
+            continue
+        artifact = deepcopy(document.get("acquisition", {}).get("artifact") or {})
+        if not artifact.get("pdf_path") and document.get("storage"):
             artifact = {
-                "pdf_path": download_document_from_s3(cached),
-                "s3_url": cached.get("url"),
-                "storage": cached.get("storage"),
+                "pdf_path": download_document_from_s3({
+                    "url": document.get("url"), "storage": document.get("storage"),
+                }),
+                "s3_url": document.get("url"),
+                "storage": document.get("storage"),
                 "source": "S3 document cache",
             }
         if not artifact.get("pdf_path"):
             continue
-        artifact.setdefault("document_type", requirement.get("document_type"))
-        artifact.setdefault("person_name", requirement.get("entity_name"))
-        artifact.setdefault("case_common_id", requirement.get("individual", {}).get("case_common_id"))
+        artifact.setdefault("document_type", document.get("document_type"))
+        artifact.setdefault("person_name", (document.get("subject") or {}).get("name"))
+        artifact.setdefault("case_common_id", (document.get("subject") or {}).get("case_common_id"))
         if not artifact.get("s3_url"):
             company_name, jurisdiction = _document_scope(state)
             document = upload_document_to_s3(
                 artifact["pdf_path"],
-                category=requirement.get("document_type") or "passport",
-                person_name=requirement.get("entity_name"),
+                category=artifact.get("document_type") or "passport",
+                person_name=artifact.get("person_name"),
                 source=artifact.get("source"),
                 company_name=company_name,
                 jurisdiction=jurisdiction,
                 object_name=reusable_document_name(
-                    document_type=requirement.get("document_type") or "passport",
+                    document_type=artifact.get("document_type") or "passport",
                     company_name=company_name or "Company",
-                    person_name=requirement.get("entity_name"),
+                    person_name=artifact.get("person_name"),
                 ),
             )
             if document:
@@ -871,6 +899,62 @@ def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
                 artifact["storage"] = document["storage"]
         artifacts.append(artifact)
     return artifacts
+
+
+def _cached_artifact(
+    cached: dict[str, Any] | None, document_type: str, individual: dict[str, Any]
+) -> dict[str, Any]:
+    if not cached:
+        return {}
+    return {
+        "name": cached.get("name"),
+        "document_type": document_type,
+        "person_name": individual.get("name"),
+        "case_common_id": individual.get("case_common_id"),
+        "source": "S3 document cache",
+        "s3_url": cached.get("url"),
+        "storage": cached.get("storage"),
+    }
+
+
+def _document_record(
+    *,
+    document_id: str,
+    purpose: str,
+    document_type: str,
+    subject: dict[str, Any],
+    requirement: dict[str, Any],
+    status: str,
+    gap: dict[str, Any],
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "document_id": document_id,
+        "purpose": purpose,
+        "document_type": document_type,
+        "subject": _drop_empty(subject),
+        "requirement": requirement,
+        "status": status,
+        "gap": gap,
+        "acquisition": {"source": artifact.get("source"), "artifact": artifact} if artifact else {},
+        "storage": artifact.get("storage") or {},
+        "url": artifact.get("s3_url"),
+        "name": artifact.get("name") or Path(str(artifact.get("pdf_path") or "")).name or None,
+        "source": artifact.get("source"),
+        "collected_at": artifact.get("generated_at"),
+    }
+
+
+def _idv_validation(document: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    extract = item.get("extract") or {}
+    subject = document.get("subject") or {}
+    accepted = (document.get("requirement") or {}).get("accepted_types") or []
+    document_type = extract.get("document_type") or (item.get("classification") or {}).get("document_type")
+    return {
+        "accepted_type": document_type in accepted if accepted else True,
+        "name_match": _normalise_name(extract.get("full_name") or "") == _normalise_name(subject.get("name") or ""),
+        "expiry_date": extract.get("expiry_date"),
+    }
 
 
 def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
@@ -1015,6 +1099,7 @@ def _reused_artifact(
 ) -> dict[str, Any]:
     """Turn an S3 listing result into the artifact shape consumed by extract nodes."""
     return {
+        "name": document.get("name"),
         "document_type": document_type,
         "source": source,
         "person_name": person_name,
@@ -1074,7 +1159,10 @@ def _apply_idv_extracts(
             "document_url": artifact.get("s3_url"),
         }
         individual["document"] = _drop_empty(document)
-        individual["status"] = "verified"
+        accepted_types = individual.get("required_documents") or []
+        type_valid = not accepted_types or extract.get("document_type") in accepted_types
+        name_valid = _normalise_name(extract.get("full_name") or "") == _normalise_name(individual.get("name") or "")
+        individual["status"] = "verified" if type_valid and name_valid else "invalid"
 
 
 def _identity_key(row: dict[str, Any]) -> tuple[str, str]:
@@ -1082,6 +1170,10 @@ def _identity_key(row: dict[str, Any]) -> tuple[str, str]:
     if case_common_id not in (None, ""):
         return ("id", str(case_common_id))
     return ("name", " ".join(str(row.get("name") or "").casefold().split()))
+
+
+def _normalise_name(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
 
 
 def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:
