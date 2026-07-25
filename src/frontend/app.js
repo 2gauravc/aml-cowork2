@@ -987,11 +987,11 @@ function App() {
             />
           </Section>
 
-          <DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />
-
           <AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />
 
-          <Section title="Risk Flags">
+          <DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />
+
+          <Section title="Findings">
             {risks.length ? (
               <div className="risk-list">
                 {risks.map((risk, index) => (
@@ -1476,11 +1476,13 @@ function DigitalFootprintScreening({ cddState, onOpenTool }) {
   const result = digitalFootprintRecords(cddState);
   const assessments = result.digital_footprint_assessments;
   const assessment = assessments[assessments.length - 1];
-  const profile = assessment?.digital_business_profile || {};
-  const evidenceById = Object.fromEntries(result.evidence.map((item) => [item.evidence_id, item]));
 
   if (!assessment) {
     return <Section title="Digital Footprint"><p className="empty">Not run.</p></Section>;
+  }
+
+  if (assessment.outcome === "unavailable") {
+    return <Section title="Digital Footprint"><p className="risk">{`Assessment unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p></Section>;
   }
 
   return (
@@ -1493,20 +1495,6 @@ function DigitalFootprintScreening({ cddState, onOpenTool }) {
         {assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}
         <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Digital Footprint tool</button>
       </div>
-      <h3>Presence and Visibility</h3>
-      <DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} definition={assessment.definition} />
-      <h3>Business Profile</h3>
-      <div className="adverse-news-summary">
-        <span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence} /></span>
-        <span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span>
-        <span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span>
-        <span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span>
-        <span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span>
-      </div>
-      <h3>Findings</h3>
-      {result.findings.length ? <div className="adverse-news-findings">{result.findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={evidenceById} popoverId={`digital-footprint-cdd-${index}`} />)}</div> : <p className="empty">No material digital-footprint findings were identified.</p>}
-      <h3>Sources</h3>
-      {result.evidence.length ? <div className="csp-sources">{result.evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence was recorded.</p>}
     </Section>
   );
 }
