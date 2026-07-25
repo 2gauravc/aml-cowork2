@@ -629,7 +629,7 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             source_evidence.append(
                 {
                     "evidence_id": evidence_id,
-                    "source": "Tavily",
+                    "source": "Brave Search",
                     "tool": "adverse_news_screening",
                     "description": item.get("title") or "Adverse-news web search result",
                     "relevance_tags": ["adverse_news", "web_search"],
@@ -642,7 +642,7 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
         coverage_id = f"evidence:adverse-news:coverage:{uuid4().hex}"
         coverage = {
             "evidence_id": coverage_id,
-            "source": "Tavily/OpenAI",
+            "source": "Brave Search/OpenAI",
             "tool": "adverse_news_screening",
             "description": "Recorded adverse-news screening coverage.",
             "relevance_tags": ["adverse_news", "screening_coverage"],

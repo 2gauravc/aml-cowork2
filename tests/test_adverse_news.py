@@ -109,6 +109,8 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual(finding["adverse_news"]["screened_entity"]["name_used"], "Alex Chen")
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["queries"], ["Alex Chen enforcement"])
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["source_evidence_ids"], finding["relevant_evidence_ids"])
+        self.assertEqual(result["evidence"][0]["source"], "Brave Search")
+        self.assertEqual(result["evidence"][-1]["source"], "Brave Search/OpenAI")
         evidence_ids = {item["evidence_id"] for item in result["evidence"]}
         self.assertTrue(set(finding["relevant_evidence_ids"]) <= evidence_ids)
 
