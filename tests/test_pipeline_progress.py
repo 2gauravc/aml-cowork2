@@ -32,7 +32,7 @@ class PipelineProgressTests(unittest.TestCase):
         self.assertEqual(len(updates), 1)
         self.assertEqual(updates[0]["node"], "fetch_org_chart")
         self.assertEqual(updates[0]["node_number"], 4)
-        self.assertEqual(updates[0]["total_nodes"], 17)
+        self.assertEqual(updates[0]["total_nodes"], 18)
         self.assertTrue(updates[0]["using_cache"])
         self.assertEqual(updates[0]["status"], "running")
 

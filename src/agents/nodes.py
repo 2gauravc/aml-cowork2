@@ -681,7 +681,7 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
 def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
     """Run the standalone digital-footprint tool and normalize its shared outputs."""
     try:
-        inputs = (state.get("digital_footprint_inputs") or {})
+        inputs = _digital_footprint_inputs(state)
         result = evaluate_digital_footprint(**inputs)
         run_id = f"run:digital-footprint:{uuid4().hex}"
         evidence, ids = [], {}
@@ -701,6 +701,21 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
         return {"evidence":evidence,"digital_footprint_assessments":[assessment],"findings":findings}
     except DigitalFootprintError as exc:
         return {"evidence": [_evidence(tool="digital_footprint_assessment",description="Digital-footprint assessment could not be completed.",source="Digital Footprint",data={"reason":str(exc)},relevance_tags=["digital_footprint"])], "digital_footprint_assessments":[{"assessment_id":f"assessment:digital-footprint:{uuid4().hex}","schema_version":"digital_footprint_assessment/v1","tool":"digital_footprint_assessment","run_id":None,"created_at":datetime.now(UTC).isoformat(),"outcome":"unavailable","limitations":[str(exc)],"company_inputs":{},"queries":[],"source_evidence_ids":[]}], "findings":[]}
+
+
+def _digital_footprint_inputs(state: CDDState) -> dict[str, Any]:
+    """Use explicit standalone inputs when present, otherwise derive company identity from CDD."""
+    explicit = state.get("digital_footprint_inputs") or {}
+    if explicit.get("company_name"):
+        return explicit
+    static = ((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {}
+    return {
+        "company_name": static.get("name"),
+        "jurisdiction": static.get("jurisdiction"),
+        "registration_number": static.get("registration_number") or static.get("registrationNumber"),
+        "known_domain": static.get("website") or static.get("website_url") or static.get("domain"),
+        "registered_address": static.get("registered_address") or static.get("registeredAddress"),
+    }
 
 
 def _assemble_adverse_news_assessment(

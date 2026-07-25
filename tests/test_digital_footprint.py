@@ -37,6 +37,13 @@ class DigitalFootprintTests(unittest.TestCase):
         self.assertEqual(result["evidence"][0]["tool"],"digital_footprint_assessment")
         self.assertEqual(result["digital_footprint_assessments"][0]["company_inputs"]["company_name"],"Example Ltd")
 
+    @patch("src.agents.nodes.evaluate_digital_footprint")
+    def test_langgraph_node_derives_company_inputs_from_cdd(self, evaluate):
+        evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
+        digital_footprint_assessment({"cdd":{"company_business_profile":{"customer_static":{"name":"Example Ltd","jurisdiction":"GB","registration_number":"123","website":"https://example.test"}}}})
+        self.assertEqual(evaluate.call_args.kwargs["company_name"],"Example Ltd")
+        self.assertEqual(evaluate.call_args.kwargs["known_domain"],"https://example.test")
+
 def _result():
     profile={"summary":"A credible profile.","business_activity":"Services","geographic_presence":[],"key_people":[],"commercial_relationships":[]}
     indicators={name:{"status":"unknown","rationale":"No evidence.","url":""} for name in ("professional_website","active_linkedin","independent_references","recent_business_activity","basic_website","credible_online_presence","evidence_of_operations","website_currency")}
