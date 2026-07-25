@@ -39,7 +39,6 @@ function App() {
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
   const [caseStatus, setCaseStatus] = useState({
     cdd_generation: "not_started",
-    risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } },
   });
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -107,7 +106,6 @@ function App() {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
     generationStatus: caseStatus.cdd_generation || "not_started",
-    riskSummary: caseStatus.risk_summary?.totals || { yes: 0, inconclusive: 0, no: 0 },
   };
   const formattedCddState = cddState ? JSON.stringify(cddState, null, 2) : "";
   const pipelineStatusText = pipelineProgress
@@ -245,7 +243,7 @@ function App() {
     setCdd(data.cdd || null);
     setCddState(data.cdd_state || null);
     setRiskFlagRecords(data.risk_flags || []);
-    setCaseStatus(data.case_status || { cdd_generation: "not_started", risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } } });
+    setCaseStatus(data.case_status || { cdd_generation: "not_started" });
     setCaseAssessmentSummary(data.case_assessment_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
@@ -274,10 +272,7 @@ function App() {
     setCdd(null);
     setCddState(null);
     setRiskFlagRecords([]);
-    setCaseStatus({
-      cdd_generation: "in_progress",
-      risk_summary: { by_category: {}, totals: { yes: 0, inconclusive: 0, no: 0 } },
-    });
+    setCaseStatus({ cdd_generation: "in_progress" });
     setCaseAssessmentSummary(null);
     setCaseReviewDecision(null);
     setReviewNote("");
@@ -885,14 +880,6 @@ function App() {
             <div className="metadata-item">
               <span>CDD Generation</span>
               <strong>{generationStatusLabel(cddMetadata.generationStatus)}</strong>
-            </div>
-            <div className="metadata-item">
-              <span>Risk Flags</span>
-              <strong className="risk-summary">
-                <span className={cddMetadata.riskSummary.yes > 0 ? "risk-flags-present" : ""}>{`${cddMetadata.riskSummary.yes} Yes`}</span>
-                <span className={cddMetadata.riskSummary.inconclusive > 0 ? "risk-flags-inconclusive" : ""}>{`${cddMetadata.riskSummary.inconclusive} Inconclusive`}</span>
-                <span>{`${cddMetadata.riskSummary.no} No`}</span>
-              </strong>
             </div>
           </section>
 

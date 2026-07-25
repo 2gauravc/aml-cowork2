@@ -598,7 +598,7 @@ def _session(session_id: str | None) -> dict[str, Any]:
     session_id = session_id or str(uuid.uuid4())
     session = {
         "session_id": session_id,
-        "case_status": {"cdd_generation": "not_started", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}}},
+        "case_status": {"cdd_generation": "not_started"},
         "messages": [
             {
                 "role": "assistant",
@@ -635,10 +635,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "pipeline_error",
     ):
         session.pop(key, None)
-    session["case_status"] = {
-        "cdd_generation": "not_started",
-        "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}},
-    }
+    session["case_status"] = {"cdd_generation": "not_started"}
     session["messages"] = [
         {"role": "assistant", "content": "Which company would you like to onboard?"}
     ]
@@ -909,10 +906,9 @@ def _summary(cdd: dict[str, Any], case_status: dict[str, Any]) -> str:
     shareholders = len(ownership.get("shareholders_over_10_percent", []))
     related = len(ownership.get("related_parties", []))
     generation = str(case_status.get("cdd_generation", "not_started")).replace("_", " ")
-    risk_count = (case_status.get("risk_summary") or {}).get("totals", {}).get("yes", 0)
     name = profile.get("name") or "the customer"
     return (
-        f"CDD generation for {name}: {generation}. Risk flags present: {risk_count}. "
+        f"CDD generation for {name}: {generation}. "
         f"UBOs: {ubos}; shareholders >10%: {shareholders}; "
         f"related parties: {related}."
     )

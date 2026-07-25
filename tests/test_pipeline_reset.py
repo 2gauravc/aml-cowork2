@@ -29,7 +29,7 @@ def _previous_case_session() -> dict:
         "pdf_path": "/tmp/old.pdf",
         "pipeline_status": "complete",
         "pipeline_error": "old error",
-        "case_status": {"cdd_generation": "completed", "risk_summary": {"totals": {"yes": 1}}},
+        "case_status": {"cdd_generation": "completed"},
         "demo_csp_result": {"result": "independent tool result"},
     }
 
@@ -59,11 +59,6 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     assert response["case_review_decision"] is None
     assert response["pdf_url"] is None
     assert response["case_status"]["cdd_generation"] == "in_progress"
-    assert response["case_status"]["risk_summary"]["totals"] == {
-        "yes": 0,
-        "inconclusive": 0,
-        "no": 0,
-    }
     assert response["case_id"] is None
     assert response["account_location"] == "SG"
     assert session["account_location"] == "SG"

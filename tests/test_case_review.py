@@ -48,7 +48,7 @@ class CaseReviewTests(unittest.TestCase):
         ):
             result = generate_case_review_summary(
                 cdd={},
-                case_status={"cdd_generation": "completed", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 1, "no": 0}}},
+                case_status={"cdd_generation": "completed"},
                 risk_flags=[{"finding_id": "csp_address:category", "category": "csp_address", "evaluation": "inconclusive", "severity": "medium", "description": "Address evidence is incomplete."}],
                 evidence=[
                     {
@@ -93,7 +93,7 @@ class CaseReviewTests(unittest.TestCase):
         result = generate_case_review(
             {
                 "cdd": {},
-                "case_status": {"cdd_generation": "completed", "risk_summary": {"by_category": {}, "totals": {"yes": 1, "inconclusive": 0, "no": 0}}},
+                "case_status": {"cdd_generation": "completed"},
                 "risk_flags": [{"finding_id": "ownership:category", "evaluation": "yes", "category": "ownership"}],
                 "evidence": [],
             }
@@ -102,7 +102,7 @@ class CaseReviewTests(unittest.TestCase):
         self.assertEqual(result["case_assessment_summary"]["status"], "available")
         self.assertNotIn("case_review_summary", result)
         self.assertEqual(result["risk_flags"][0]["case_review"]["confidence"], "medium")
-        self.assertEqual(generate_summary.call_args.kwargs["case_status"]["risk_summary"]["totals"]["yes"], 1)
+        self.assertEqual(generate_summary.call_args.kwargs["case_status"], {"cdd_generation": "completed"})
 
     def test_unavailable_review_records_limitation(self) -> None:
         result = unavailable_case_review("OpenAI unavailable")

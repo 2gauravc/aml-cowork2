@@ -102,7 +102,6 @@ class CDD(TypedDict, total=False):
 
 class CaseStatus(TypedDict):
     cdd_generation: GenerationStatus
-    risk_summary: dict[str, Any]
 
 
 class CaseDocument(TypedDict, total=False):
@@ -219,7 +218,7 @@ def new_cdd_state(
         "findings": [],
         "assessments": [],
         "risk_flags": [],
-        "case_status": {"cdd_generation": "in_progress", "risk_summary": {"by_category": {}, "totals": {"yes": 0, "inconclusive": 0, "no": 0}}},
+        "case_status": {"cdd_generation": "in_progress"},
         "case_assessment_summary": None,
         "messages": [],
         "document_requirements": [],

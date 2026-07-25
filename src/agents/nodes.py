@@ -913,7 +913,7 @@ def finalize_cdd(state: CDDState) -> dict[str, Any]:
     cdd["completed_at"] = datetime.now(UTC).isoformat()
     return {
         "cdd": cdd,
-        "case_status": build_case_status("completed" if complete else "incomplete", state.get("risk_flags", [])),
+        "case_status": build_case_status("completed" if complete else "incomplete"),
     }
 
 
