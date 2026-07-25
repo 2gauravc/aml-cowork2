@@ -1,6 +1,8 @@
 ---
 name: adverse-news-screening
 description: Assess material, attributable adverse-news search results using public-web evidence. Use when a CDD workflow needs evidence-grounded findings, confidence and severity assessment, or analyst actions and RFIs.
+input:
+  search_terms: 'enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist'
 output:
   schema: adverse_news/v1
   required:
@@ -58,7 +60,7 @@ For every material or analyst-actionable hit, populate the analyst-authored fiel
 
 ## Search procedure
 
-1. Search each selected entity's full name with relevant terms such as enforcement, investigation, allegation, fraud, bribery, corruption, money laundering, sanctions, watchlist, and regulatory action.
+1. Search each selected entity's full name with the Boolean expression in front matter at `input.search_terms`.
 2. Add available jurisdiction, nationality, date of birth, registration number, and associated-company details to ambiguous or common-name searches. Use only information present in CDD, ID&V, or retained evidence.
 3. Prefer regulator, law-enforcement, court, government, sanctions/watchlist, and reputable independent-news sources. Retain every source used for a material conclusion with a stable evidence ID, URL, publisher where known, publication date where known, and retrieval time.
 4. Do not infer identity from a name alone. Record an ambiguous match where unique identifiers or meaningful corroboration are absent.

@@ -17,7 +17,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "adverse-news-screening" / "SKILL.md"
 FINDING_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "findings" / "finding-v1.yaml"
 BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
-ADVERSE_NEWS_TERMS = "enforcement OR investigation OR fraud OR bribery OR corruption OR \"money laundering\" OR sanctions OR watchlist OR 1MDB"
 DEFAULT_MODEL = os.getenv("OPENAI_ADVERSE_NEWS_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 
 
@@ -39,7 +38,21 @@ def load_adverse_news_definition(path: str | Path = SKILL_PATH) -> dict[str, Any
     required = output.get("required")
     if not isinstance(required, list) or set(required) != {"screened_entity", "identity_match", "adverse_event", "screening_coverage"}:
         raise AdverseNewsError("Adverse-news skill must declare the required adverse_news/v1 overlay fields")
-    return {"overlay": output, "instructions": instructions.strip(), "path": str(path)}
+    return {
+        "overlay": output,
+        "input": {"search_terms": _search_terms_from_metadata(metadata)},
+        "instructions": instructions.strip(),
+        "path": str(path),
+    }
+
+
+def _search_terms_from_metadata(metadata: dict[str, Any]) -> str:
+    """Validate the Brave Boolean expression owned by the skill configuration."""
+    input_config = metadata.get("input")
+    search_terms = input_config.get("search_terms") if isinstance(input_config, dict) else None
+    if not isinstance(search_terms, str) or not search_terms.strip():
+        raise AdverseNewsError("Adverse-news skill must declare a non-empty input.search_terms string")
+    return search_terms.strip()
 
 
 def load_finding_schema(path: str | Path = FINDING_SCHEMA_PATH) -> dict[str, Any]:
@@ -74,11 +87,13 @@ def entities_for_screening(cdd: dict[str, Any]) -> list[dict[str, Any]]:
     return _deduplicate_entities(entities)
 
 
-def build_search_queries(entities: list[dict[str, Any]]) -> list[dict[str, str]]:
+def build_search_queries(entities: list[dict[str, Any]], search_terms: str) -> list[dict[str, str]]:
+    if not isinstance(search_terms, str) or not search_terms.strip():
+        raise AdverseNewsError("Adverse-news search terms must be a non-empty string")
     queries = []
     for entity in entities:
         name = _quoted_search_term(entity["name"])
-        query = f'"{name}" AND ({ADVERSE_NEWS_TERMS})'
+        query = f'"{name}" AND ({search_terms.strip()})'
         associated_company = entity.get("disambiguators", {}).get("associated_company")
         if associated_company and str(associated_company).casefold() != str(entity["name"]).casefold():
             query = f'{query} AND "{_quoted_search_term(associated_company)}"'
@@ -137,7 +152,7 @@ def assess_adverse_news(entities: list[dict[str, Any]], sources: list[dict[str, 
 def screen_adverse_news(cdd: dict[str, Any]) -> dict[str, Any]:
     definition = load_adverse_news_definition()
     entities = entities_for_screening(cdd)
-    queries = build_search_queries(entities)
+    queries = build_search_queries(entities, definition["input"]["search_terms"])
     sources = search_adverse_news(queries)
     drafts = assess_adverse_news(entities, sources, definition)
     return {"entities": entities, "queries": queries, "sources": sources, "drafts": drafts, "definition": definition, "evaluated_at": datetime.now(UTC).isoformat()}

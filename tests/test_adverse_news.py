@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from src.agents.nodes import adverse_news_screening
 from src.backend.app import IndependentAdverseNewsRequest, assess_independent_adverse_news
-from src.tools.adverse_news import _assessment_schema, build_search_queries, entities_for_screening, load_adverse_news_definition, load_finding_schema, search_adverse_news
+from src.tools.adverse_news import AdverseNewsError, _assessment_schema, build_search_queries, entities_for_screening, load_adverse_news_definition, load_finding_schema, search_adverse_news
 
 
 class AdverseNewsTests(unittest.TestCase):
@@ -18,6 +18,7 @@ class AdverseNewsTests(unittest.TestCase):
         schema = load_finding_schema()
 
         self.assertEqual(definition["overlay"]["schema"], "adverse_news/v1")
+        self.assertEqual(definition["input"]["search_terms"], 'enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist')
         self.assertEqual(schema["$id"], "finding/v1")
         self.assertIn("relevant_evidence_ids", schema["required"])
 
@@ -56,9 +57,20 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual([entity["name"] for entity in entities], ["Example Ltd", "Director Doe", "Owner Doe"])
 
     def test_brave_query_uses_exact_name_and_boolean_adverse_terms(self) -> None:
-        query = build_search_queries([{"key": "ubo:0", "name": "Leonardo DiCaprio", "disambiguators": {}}])[0]["query"]
+        definition = load_adverse_news_definition()
+        query = build_search_queries([{"key": "ubo:0", "name": "Leonardo DiCaprio", "disambiguators": {}}], definition["input"]["search_terms"])[0]["query"]
 
-        self.assertEqual(query, '"Leonardo DiCaprio" AND (enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist OR 1MDB)')
+        self.assertEqual(query, '"Leonardo DiCaprio" AND (enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist)')
+
+    def test_brave_query_uses_the_skill_configured_terms(self) -> None:
+        query = build_search_queries([{"key": "ubo:0", "name": "Alex Chen", "disambiguators": {}}], "sanctions OR watchlist")[0]["query"]
+
+        self.assertEqual(query, '"Alex Chen" AND (sanctions OR watchlist)')
+
+    def test_skill_requires_non_empty_search_terms_input(self) -> None:
+        with patch("src.tools.adverse_news.yaml.safe_load", return_value={"output": load_adverse_news_definition()["overlay"]}):
+            with self.assertRaisesRegex(AdverseNewsError, "input.search_terms"):
+                load_adverse_news_definition()
 
     @patch("src.tools.adverse_news.requests.get")
     def test_brave_results_are_normalized_with_required_header(self, request_get) -> None:
