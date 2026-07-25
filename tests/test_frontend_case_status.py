@@ -39,6 +39,35 @@ def test_json_view_renders_the_complete_cdd_state() -> None:
     assert "JSON.stringify(cdd, null, 2)" not in app
 
 
+def test_json_view_has_an_accessible_copy_control() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert "navigator.clipboard.writeText(formattedCddState)" in app
+    assert 'aria-label="Copy CDDState JSON to clipboard"' in app
+    assert "Copied JSON to clipboard." in app
+    assert "Unable to copy JSON. Please select and copy it manually." in app
+    assert 'role="status" aria-live="polite"' in app
+
+
+def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_popovers() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles = (Path(__file__).parents[1] / "src" / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    assert '<AdverseNewsScreening cddState={cddState} />' in app
+    assert 'finding.category === "adverse_news"' in app
+    assert '"screening_coverage"' in app
+    assert 'className="adverse-news-entity-list"' in app
+    assert "one query for each screened entity" in app
+    assert "Retained sources are search results, not necessarily adverse-news findings." in app
+    assert "No adverse-news findings were generated from this screening." in app
+    assert "Screening unavailable." in app
+    assert 'type="button"' in app
+    assert "aria-expanded={sourcesOpen}" in app
+    assert 'aria-controls={popoverId}' in app
+    assert 'event.key === "Escape"' in app
+    assert "right: calc(100% + 8px);" in styles
+
+
 def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 

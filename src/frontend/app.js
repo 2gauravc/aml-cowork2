@@ -79,6 +79,7 @@ function App() {
   const [pipelineProgress, setPipelineProgress] = useState(null);
   const [pipelineStatus, setPipelineStatus] = useState(null);
   const [showJson, setShowJson] = useState(false);
+  const [jsonCopyStatus, setJsonCopyStatus] = useState("");
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
   const uploadInputRef = useRef(null);
@@ -101,6 +102,7 @@ function App() {
     generationStatus: caseStatus.cdd_generation || "not_started",
     riskSummary: caseStatus.risk_summary?.totals || { yes: 0, inconclusive: 0, no: 0 },
   };
+  const formattedCddState = cddState ? JSON.stringify(cddState, null, 2) : "";
   const pipelineStatusText = pipelineProgress
     ? formatPipelineProgress(pipelineProgress)
     : latestAssistantMessage(messages) || "Setting up";
@@ -116,6 +118,18 @@ function App() {
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
     [documents],
   );
+
+  async function copyCddStateJson() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard access is unavailable");
+      }
+      await navigator.clipboard.writeText(formattedCddState);
+      setJsonCopyStatus("Copied JSON to clipboard.");
+    } catch {
+      setJsonCopyStatus("Unable to copy JSON. Please select and copy it manually.");
+    }
+  }
 
   useEffect(() => {
     let ignore = false;
@@ -924,6 +938,8 @@ function App() {
             />
           </Section>
 
+          <AdverseNewsScreening cddState={cddState} />
+
           <Section title="Risk Flags">
             {risks.length ? (
               <div className="risk-list">
@@ -944,7 +960,13 @@ function App() {
 
           {showJson && cddState && (
             <Section title="CDDState JSON">
-              <pre className="json-view">{JSON.stringify(cddState, null, 2)}</pre>
+              <div className="json-view-header">
+                <button className="secondary" onClick={copyCddStateJson} aria-label="Copy CDDState JSON to clipboard">
+                  Copy JSON
+                </button>
+                <span className="json-copy-status" role="status" aria-live="polite">{jsonCopyStatus}</span>
+              </div>
+              <pre className="json-view">{formattedCddState}</pre>
             </Section>
           )}
               </>
@@ -1841,6 +1863,138 @@ function RiskEvidenceTooltip({ risk }) {
         ))}
       </span>
     </span>
+  );
+}
+
+function AdverseNewsScreening({ cddState }) {
+  const evidence = Array.isArray(cddState?.evidence) ? cddState.evidence : [];
+  const findings = (Array.isArray(cddState?.findings) ? cddState.findings : [])
+    .filter((finding) => finding.category === "adverse_news");
+  const coverage = evidence.find((item) => item.tool === "adverse_news_screening"
+    && (item.relevance_tags || []).includes("screening_coverage"));
+
+  if (!coverage) {
+    return (
+      <Section title="Adverse News Screening">
+        <p className="empty">Not run.</p>
+      </Section>
+    );
+  }
+
+  if (coverage.data?.status === "unavailable") {
+    return (
+      <Section title="Adverse News Screening">
+        <p className="risk">{`Screening unavailable. ${coverage.data.reason || "No reason was recorded."}`}</p>
+      </Section>
+    );
+  }
+
+  const entities = Array.isArray(coverage.data?.entities) ? coverage.data.entities : [];
+  const sourceCount = Array.isArray(coverage.data?.source_ids) ? coverage.data.source_ids.length : 0;
+  const queryCount = Array.isArray(coverage.data?.queries) ? coverage.data.queries.length : 0;
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+
+  return (
+    <Section title="Adverse News Screening">
+      <div className="adverse-news-summary">
+        <strong>Screening completed</strong>
+        <span>{`Screened ${entities.length} ${entities.length === 1 ? "entity" : "entities"}:`}</span>
+        {entities.length ? (
+          <ul className="adverse-news-entity-list">
+            {entities.map((entity, index) => <li key={entity.key || `${entity.name || "entity"}-${index}`}>{entity.name || "Unnamed entity"}</li>)}
+          </ul>
+        ) : <span>None recorded.</span>}
+        <span>{`${entities.length} ${entities.length === 1 ? "entity was" : "entities were"} searched using ${queryCount} ${queryCount === 1 ? "query" : "queries"} — one query for each screened entity.`}</span>
+        <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained after duplicate URLs returned across searches were removed. Retained sources are search results, not necessarily adverse-news findings.`}</span>
+        <span>{`Screened ${formatDateTime(coverage.collected_at)}.`}</span>
+      </div>
+      {findings.length ? (
+        <div className="adverse-news-findings">
+          {findings.map((finding, index) => (
+            <AdverseNewsFinding
+              evidenceById={evidenceById}
+              finding={finding}
+              key={finding.finding_id || `${finding.subject?.name || "finding"}-${index}`}
+              popoverId={`adverse-news-sources-${index}`}
+            />
+          ))}
+        </div>
+      ) : <p className="empty">No adverse-news findings were generated from this screening.</p>}
+    </Section>
+  );
+}
+
+function AdverseNewsFinding({ evidenceById, finding, popoverId }) {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const sourceButtonRef = useRef(null);
+  const evidenceItems = (finding.relevant_evidence_ids || [])
+    .map((evidenceId) => evidenceById[evidenceId])
+    .filter(Boolean);
+  const subject = finding.subject?.name || "Screened entity";
+
+  function closeSources({ returnFocus = false } = {}) {
+    setSourcesOpen(false);
+    if (returnFocus) sourceButtonRef.current?.focus();
+  }
+
+  return (
+    <article className="adverse-news-finding">
+      <div className="adverse-news-finding-content">
+        <strong>{`${subject}${finding.title ? ` — ${finding.title}` : ""}`}</strong>
+        <span>{finding.summary || "No summary was recorded."}</span>
+        <span>{`Confidence: ${statusLabel(finding.confidence?.level)}. Severity: ${statusLabel(finding.severity?.level)}. Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</span>
+      </div>
+      <div className="adverse-news-source-control">
+        <button
+          aria-controls={popoverId}
+          aria-expanded={sourcesOpen}
+          aria-label={`View sources for ${subject}`}
+          className="adverse-news-source-button"
+          onClick={() => setSourcesOpen((open) => !open)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeSources({ returnFocus: true });
+            }
+          }}
+          ref={sourceButtonRef}
+          type="button"
+        >
+          i
+        </button>
+        {sourcesOpen && (
+          <div
+            aria-label={`Sources for ${subject}`}
+            className="adverse-news-source-popover"
+            id={popoverId}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeSources({ returnFocus: true });
+              }
+            }}
+            role="dialog"
+          >
+            <div className="adverse-news-source-popover-header">
+              <strong>Sources</strong>
+              <button type="button" className="adverse-news-source-close" onClick={() => closeSources({ returnFocus: true })} aria-label="Close sources">×</button>
+            </div>
+            {evidenceItems.length ? evidenceItems.map((item) => {
+              const source = item.data || {};
+              const url = item.source_url || source.url;
+              const title = item.description || source.title || url || "Source";
+              const publishedAt = item.published_at || source.published_date;
+              return (
+                <div className="adverse-news-source" key={item.evidence_id}>
+                  {url ? <a href={url} target="_blank" rel="noreferrer">{title}</a> : <span>{title}</span>}
+                  <small>{`${item.source || "Web source"}${publishedAt ? ` · ${formatDateTime(publishedAt)}` : ""}`}</small>
+                </div>
+              );
+            }) : <span>No cited sources were retained for this finding.</span>}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 

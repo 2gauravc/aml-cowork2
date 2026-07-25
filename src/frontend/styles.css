@@ -796,6 +796,113 @@ th {
   text-decoration: underline;
 }
 
+.adverse-news-summary,
+.adverse-news-findings {
+  display: grid;
+  gap: 8px;
+}
+
+.adverse-news-summary {
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.adverse-news-summary strong,
+.adverse-news-finding strong {
+  color: var(--ink);
+}
+
+.adverse-news-entity-list {
+  margin: -2px 0 0;
+  padding-left: 20px;
+}
+
+.adverse-news-finding {
+  align-items: flex-start;
+  background: #f8fafc;
+  border-left: 4px solid var(--warn);
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+}
+
+.adverse-news-finding-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.adverse-news-source-control {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.adverse-news-source-button,
+.adverse-news-source-close {
+  align-items: center;
+  background: #dfe7f1;
+  border: 1px solid #c9d3e1;
+  color: #40516a;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0;
+  width: 22px;
+}
+
+.adverse-news-source-button:focus-visible,
+.adverse-news-source-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.adverse-news-source-popover {
+  background: #111827;
+  color: #f8fafc;
+  display: grid;
+  font-size: 12px;
+  gap: 10px;
+  left: auto;
+  max-height: min(520px, calc(100vh - 120px));
+  overflow: auto;
+  padding: 10px;
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 0;
+  width: min(360px, calc(100vw - 48px));
+  z-index: 20;
+}
+
+.adverse-news-source-popover-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.adverse-news-source-close {
+  background: transparent;
+  border-color: #64748b;
+  color: #f8fafc;
+}
+
+.adverse-news-source {
+  display: grid;
+  gap: 3px;
+}
+
+.adverse-news-source a {
+  color: #bfdbfe;
+  overflow-wrap: anywhere;
+}
+
+.adverse-news-source small {
+  color: #cbd5e1;
+}
+
 .json-view {
   background: #111827;
   color: #e5e7eb;
@@ -804,6 +911,20 @@ th {
   overflow: auto;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+.json-view-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.json-copy-status {
+  color: var(--muted);
+  font-size: 13px;
+  min-height: 1em;
 }
 
 .case-assessment-header {
