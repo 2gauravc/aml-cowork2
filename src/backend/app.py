@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
-from src.agents.graph import resume_cdd_agent_state, run_cdd_agent_state
+from src.agents.graph import PIPELINE_NODE_LABELS, resume_cdd_agent_state, run_cdd_agent_state
 from src.agents.nodes import adverse_news_screening, digital_footprint_assessment
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
@@ -980,7 +980,7 @@ async def _run_pipeline_for_session(
     session["pipeline_progress"] = {
         "node": "collect_required_inputs",
         "node_number": 1,
-        "total_nodes": 16,
+        "total_nodes": len(PIPELINE_NODE_LABELS),
         "message": "Collecting Inputs",
         "using_cache": False,
         "status": "queued",

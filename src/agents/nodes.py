@@ -699,7 +699,7 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
             _validate_finding(finding)
             findings.append(finding)
         return {"evidence":evidence,"digital_footprint_assessments":[assessment],"findings":findings}
-    except DigitalFootprintError as exc:
+    except Exception as exc:
         return {"evidence": [_evidence(tool="digital_footprint_assessment",description="Digital-footprint assessment could not be completed.",source="Digital Footprint",data={"reason":str(exc)},relevance_tags=["digital_footprint"])], "digital_footprint_assessments":[{"assessment_id":f"assessment:digital-footprint:{uuid4().hex}","schema_version":"digital_footprint_assessment/v1","tool":"digital_footprint_assessment","run_id":None,"created_at":datetime.now(UTC).isoformat(),"outcome":"unavailable","limitations":[str(exc)],"company_inputs":{},"queries":[],"source_evidence_ids":[]}], "findings":[]}
 
 

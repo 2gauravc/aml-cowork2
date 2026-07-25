@@ -44,6 +44,13 @@ class DigitalFootprintTests(unittest.TestCase):
         self.assertEqual(evaluate.call_args.kwargs["company_name"],"Example Ltd")
         self.assertEqual(evaluate.call_args.kwargs["known_domain"],"https://example.test")
 
+    @patch("src.agents.nodes.evaluate_digital_footprint", side_effect=RuntimeError("provider validation failed"))
+    def test_langgraph_node_records_unavailable_assessment_for_unexpected_error(self, evaluate):
+        result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["digital_footprint_assessments"][0]["outcome"], "unavailable")
+        self.assertIn("provider validation failed", result["digital_footprint_assessments"][0]["limitations"][0])
+
 def _result():
     profile={"summary":"A credible profile.","business_activity":"Services","geographic_presence":[],"key_people":[],"commercial_relationships":[]}
     indicators={name:{"status":"unknown","rationale":"No evidence.","url":""} for name in ("professional_website","active_linkedin","independent_references","recent_business_activity","basic_website","credible_online_presence","evidence_of_operations","website_currency")}
