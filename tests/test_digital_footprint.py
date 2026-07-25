@@ -1,15 +1,28 @@
 """Coverage for the Digital Footprint evidence/assessment/findings contract."""
 import json, os, tempfile, unittest
 from unittest.mock import Mock, patch
-from src.tools.digital_footprint import DIGITAL_FOOTPRINT_SCHEMA, DigitalFootprintError, build_search_queries, evaluate_digital_footprint, load_digital_footprint_definition, search_digital_footprint
+from src.tools.digital_footprint import DIGITAL_FOOTPRINT_SCHEMA, DigitalFootprintError, _response_schema, build_search_queries, evaluate_digital_footprint, load_digital_footprint_definition, load_finding_schema, search_digital_footprint
 from src.agents.nodes import digital_footprint_assessment
 
 class DigitalFootprintTests(unittest.TestCase):
     def test_skill_defines_input_assessment_and_overlay(self):
         definition=load_digital_footprint_definition()
-        self.assertEqual(definition["assessment"]["schema"], "digital_footprint_assessment/v1")
+        self.assertEqual(definition["assessment"]["schema"], "digital_footprint_assessment/v2")
         self.assertEqual(definition["overlay"]["schema"], "digital_footprint/v1")
         self.assertTrue(definition["input"]["search_terms"])
+        self.assertEqual([item["key"] for item in definition["assessment_definition"]["sections"][0]["dimensions"]], ["professional_website", "active_linkedin", "multiple_independent_references", "recent_business_activity", "evidence_of_operations"])
+
+    def test_schema_uses_only_skill_declared_dimensions(self):
+        definition = load_digital_footprint_definition()
+        indicators = _response_schema(load_finding_schema(), definition["overlay"], definition["assessment_definition"])["properties"]["assessment"]["properties"]["presence_and_visibility"]["properties"]["indicators"]
+        self.assertEqual(set(indicators["properties"]), {"professional_website", "active_linkedin", "multiple_independent_references", "recent_business_activity", "evidence_of_operations"})
+        self.assertNotIn("basic_website", indicators["properties"])
+
+    def test_skill_allows_an_optional_explicit_dimension_key(self):
+        with tempfile.NamedTemporaryFile("w") as skill:
+            skill.write("---\ninput: {search_terms: [website]}\nassessment:\n  schema: digital_footprint_assessment/v2\n  presence_and_visibility:\n    dimensions: [{id: official_site, label: Official website}]\noutput: {schema: digital_footprint/v1}\n---\nx")
+            skill.flush()
+            self.assertEqual(load_digital_footprint_definition(skill.name)["assessment_definition"]["sections"][0]["dimensions"], [{"key": "official_site", "label": "Official website"}])
 
     def test_query_terms_are_skill_inputs(self):
         self.assertEqual(build_search_queries("Example Ltd", search_terms=["services", "partners"]), ['"Example Ltd" services', '"Example Ltd" partners'])
@@ -32,14 +45,15 @@ class DigitalFootprintTests(unittest.TestCase):
 
     @patch("src.agents.nodes.evaluate_digital_footprint")
     def test_langgraph_node_returns_evidence_and_assessment(self, evaluate):
-        evaluate.return_value={"sources":[{"id":"source:1","url":"https://example.test","title":"Example"}],"assessment":_result()["assessment"],"findings":[],"company_inputs":{"company_name":"Example Ltd"},"queries":["Example"],"evaluated_at":"2026-07-25T00:00:00+00:00"}
+        evaluate.return_value={"sources":[{"id":"source:1","url":"https://example.test","title":"Example"}],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":["Example"],"evaluated_at":"2026-07-25T00:00:00+00:00"}
         result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
         self.assertEqual(result["evidence"][0]["tool"],"digital_footprint_assessment")
         self.assertEqual(result["digital_footprint_assessments"][0]["company_inputs"]["company_name"],"Example Ltd")
+        self.assertEqual(result["digital_footprint_assessments"][0]["definition"]["schema_version"], "digital_footprint_assessment/v2")
 
     @patch("src.agents.nodes.evaluate_digital_footprint")
     def test_langgraph_node_derives_company_inputs_from_cdd(self, evaluate):
-        evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
+        evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
         digital_footprint_assessment({"cdd":{"company_business_profile":{"customer_static":{"name":"Example Ltd","jurisdiction":"GB","registration_number":"123","website":"https://example.test","registered_address":{"full_address":"1 Example Street, London, GB"}}}}})
         self.assertEqual(evaluate.call_args.kwargs["company_name"],"Example Ltd")
         self.assertEqual(evaluate.call_args.kwargs["known_domain"],"https://example.test")
@@ -54,6 +68,6 @@ class DigitalFootprintTests(unittest.TestCase):
 
 def _result():
     profile={"summary":"A credible profile.","business_activity":"Services","geographic_presence":[],"key_people":[],"commercial_relationships":[]}
-    indicators={name:{"status":"unknown","rationale":"No evidence.","url":""} for name in ("professional_website","active_linkedin","independent_references","recent_business_activity","basic_website","credible_online_presence","evidence_of_operations","website_currency")}
+    indicators={name:{"status":"unknown","rationale":"No evidence.","url":""} for name in ("professional_website","active_linkedin","multiple_independent_references","recent_business_activity","evidence_of_operations")}
     assessment={"presence_and_visibility":{"indicator":"moderate","rationale":"Website.","signals":["website"],"indicators":indicators},"digital_business_profile":profile,"confidence":{"level":"medium","rationale":"Evidence.","limitations":[]},"limitations":[]}
     return {"assessment":assessment,"findings":[]}

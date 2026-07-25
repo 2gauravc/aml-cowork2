@@ -688,7 +688,7 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
         for source in result["sources"]:
             evidence_id = f"evidence:digital-footprint:{uuid4().hex}"; ids[source["id"]] = evidence_id
             evidence.append({"evidence_id": evidence_id, "source": "Tavily", "tool": "digital_footprint_assessment", "description": source.get("title") or "Digital-footprint web search result", "relevance_tags": ["digital_footprint", "web_search"], "data": source, "source_url": source.get("url"), "published_at": source.get("published_date"), "collected_at": result["evaluated_at"]})
-        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "schema_version": "digital_footprint_assessment/v1", "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
+        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "schema_version": result["definition"]["assessment_definition"]["schema_version"], "definition": result["definition"]["assessment_definition"], "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
         findings=[]
         for draft in result["findings"]:
             refs=draft.get("source_refs") or []; unknown=set(refs)-set(ids)

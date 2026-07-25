@@ -7,12 +7,20 @@ input:
     - products services customers partners suppliers distributors
     - recent business activity LinkedIn
 assessment:
-  schema: digital_footprint_assessment/v1
+  schema: digital_footprint_assessment/v2
   required:
     - presence_and_visibility
     - digital_business_profile
     - confidence
     - limitations
+  presence_and_visibility:
+    title: Presence and Visibility
+    dimensions:
+      - Professional website
+      - Active LinkedIn
+      - Multiple independent references
+      - Recent business activity
+      - Evidence of operations
 output:
   schema: digital_footprint/v1
   required:

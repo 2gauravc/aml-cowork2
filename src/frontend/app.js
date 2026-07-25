@@ -758,13 +758,13 @@ function App() {
               className={`workspace-tab ${activeWorkspace === "cdd" ? "active" : ""}`}
               onClick={() => setActiveWorkspace("cdd")}
             >
-              CDD
+              CDD Maker
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
               onClick={() => setActiveWorkspace("case-review")}
             >
-              Case Assessment
+              CDD Checker
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
@@ -808,7 +808,7 @@ function App() {
           <div className="workspace-tab-panel">
             {activeWorkspace === "cdd" ? (
               <>
-          <Section title="Run CDD Worker">
+          <Section title="Run CDD Maker">
             <div className="pipeline-form">
               <input
                 aria-label="Company name"
@@ -840,7 +840,7 @@ function App() {
                 disabled={pipelineLoading || (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation))}
                 onClick={() => runPipeline()}
               >
-                Run Full CDD Pipeline
+                Run CDD Maker
               </button>
               {demoMode && <button className="secondary" disabled={pipelineLoading} onClick={loadDemoCase}>Load Demo Case</button>}
             </div>
@@ -1438,10 +1438,22 @@ function DigitalFootprint({ mode, form, result, error, assessing, skill, skillLo
   );
 }
 
-function DigitalPresenceBreakdown({ indicators }) {
-  const labels = { professional_website: "Professional website", active_linkedin: "Active LinkedIn", independent_references: "Independent references", recent_business_activity: "Recent business activity", basic_website: "Website with basic information", credible_online_presence: "Credible online presence", evidence_of_operations: "Evidence of operations", website_currency: "Website currency/completeness" };
+const LEGACY_DIGITAL_PRESENCE_DIMENSIONS = [
+  { key: "professional_website", label: "Professional website" }, { key: "active_linkedin", label: "Active LinkedIn" },
+  { key: "independent_references", label: "Independent references" }, { key: "recent_business_activity", label: "Recent business activity" },
+  { key: "basic_website", label: "Website with basic information" }, { key: "credible_online_presence", label: "Credible online presence" },
+  { key: "evidence_of_operations", label: "Evidence of operations" }, { key: "website_currency", label: "Website currency/completeness" },
+];
+
+function digitalPresenceDimensions(definition) {
+  const section = (definition?.sections || []).find((item) => item.id === "presence_and_visibility" && item.type === "scorecard");
+  return Array.isArray(section?.dimensions) && section.dimensions.length ? section.dimensions : LEGACY_DIGITAL_PRESENCE_DIMENSIONS;
+}
+
+function DigitalPresenceBreakdown({ indicators, definition }) {
+  const dimensions = digitalPresenceDimensions(definition);
   if (!indicators) return null;
-  return <div className="digital-presence-breakdown">{Object.entries(labels).map(([key, label]) => { const item = indicators[key] || {}; return <div className="digital-presence-row" key={key}><strong>{label}</strong><span className={`digital-presence-status ${item.status || "unknown"}`}>{statusLabel(item.status)}</span><span>{item.rationale || "Not assessed."}</span>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">Visit official website</a> : null}</div>; })}</div>;
+  return <div className="digital-presence-breakdown">{dimensions.map(({ key, label }) => { const item = indicators[key] || {}; return <div className="digital-presence-row" key={key}><strong>{label}</strong><span className={`digital-presence-status ${item.status || "unknown"}`}>{statusLabel(item.status)}</span><span>{item.rationale || "Not assessed."}</span>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">View Source</a> : null}</div>; })}</div>;
 }
 
 function DigitalFootprintAssessment({ result }) {
@@ -1449,7 +1461,7 @@ function DigitalFootprintAssessment({ result }) {
   const assessment = assessments[assessments.length - 1];
   if (!assessment) return <Section title="Assessment"><p className="risk">Digital Footprint assessment unavailable.</p></Section>;
   const profile = assessment.digital_business_profile || {};
-  return <><Section title="Presence and Visibility"><div className="adverse-news-summary"><strong>{assessment.company_inputs?.company_name || "Company"}</strong><span>{`Overall score: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span><span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span><span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span><span>{`${(assessment.queries || []).length} queries; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div><DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} /></Section><Section title="Business Profile"><div className="adverse-news-summary"><span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence || []} /></span><span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span><span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span><span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span><span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span></div></Section></>;
+  return <><Section title="Presence and Visibility"><div className="adverse-news-summary"><strong>{assessment.company_inputs?.company_name || "Company"}</strong><span>{`Overall score: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span><span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span><span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span><span>{`${(assessment.queries || []).length} queries; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div><DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} definition={assessment.definition} /></Section><Section title="Business Profile"><div className="adverse-news-summary"><span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence || []} /></span><span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span><span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span><span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span><span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span></div></Section></>;
 }
 
 function digitalFootprintRecords(cddState) {
@@ -1482,7 +1494,7 @@ function DigitalFootprintScreening({ cddState, onOpenTool }) {
         <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Digital Footprint tool</button>
       </div>
       <h3>Presence and Visibility</h3>
-      <DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} />
+      <DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} definition={assessment.definition} />
       <h3>Business Profile</h3>
       <div className="adverse-news-summary">
         <span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence} /></span>

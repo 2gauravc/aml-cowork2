@@ -22,3 +22,6 @@ def test_digital_footprint_tool_supports_cdd_and_independent_modes() -> None:
     assert '(activeWorkspace === "digital-footprint" && digitalFootprintMode === "cdd")' in app
     assert '<DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />' in app
     assert app.index('<DigitalFootprintScreening') < app.index('<AdverseNewsScreening')
+    assert 'function digitalPresenceDimensions(definition)' in app
+    assert 'definition={assessment.definition}' in app
+    assert 'LEGACY_DIGITAL_PRESENCE_DIMENSIONS' in app
