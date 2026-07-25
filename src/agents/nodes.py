@@ -709,12 +709,23 @@ def _digital_footprint_inputs(state: CDDState) -> dict[str, Any]:
     if explicit.get("company_name"):
         return explicit
     static = ((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {}
+    registered_address = static.get("registered_address") or static.get("registeredAddress")
+    if isinstance(registered_address, dict):
+        registered_address = (
+            registered_address.get("full_address")
+            or registered_address.get("raw_address")
+            or ", ".join(
+                str(registered_address[key]).strip()
+                for key in ("address_line_1", "address_line_2", "city", "postcode", "country")
+                if registered_address.get(key)
+            )
+        )
     return {
         "company_name": static.get("name"),
         "jurisdiction": static.get("jurisdiction"),
         "registration_number": static.get("registration_number") or static.get("registrationNumber"),
         "known_domain": static.get("website") or static.get("website_url") or static.get("domain"),
-        "registered_address": static.get("registered_address") or static.get("registeredAddress"),
+        "registered_address": registered_address,
     }
 
 

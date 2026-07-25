@@ -51,6 +51,7 @@ function App() {
   const [cspSkill, setCspSkill] = useState("");
   const [cspSkillLoading, setCspSkillLoading] = useState(false);
   const [digitalFootprintForm, setDigitalFootprintForm] = useState({ company_name: "", jurisdiction: "", registration_number: "", known_domain: "", registered_address: "" });
+  const [digitalFootprintMode, setDigitalFootprintMode] = useState("independent");
   const [digitalFootprintResult, setDigitalFootprintResult] = useState(null);
   const [digitalFootprintError, setDigitalFootprintError] = useState("");
   const [digitalFootprintAssessing, setDigitalFootprintAssessing] = useState(false);
@@ -118,7 +119,7 @@ function App() {
     [documentRequirements],
   );
   const cddPausedForDocuments = pipelineStatus === "awaiting_documents";
-  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review" || (activeWorkspace === "adverse-news" && adverseNewsMode === "cdd");
+  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review" || (activeWorkspace === "adverse-news" && adverseNewsMode === "cdd") || (activeWorkspace === "digital-footprint" && digitalFootprintMode === "cdd");
   const activeToolWorkspace = TOOL_WORKSPACES.some((tool) => tool.id === activeWorkspace);
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
@@ -602,6 +603,19 @@ function App() {
     }
   }
 
+  function selectDigitalFootprintMode(mode) {
+    setDigitalFootprintMode(mode);
+    setDigitalFootprintError("");
+    if (mode === "independent") setDigitalFootprintResult(null);
+  }
+
+  function loadDigitalFootprintFromCdd() {
+    setDigitalFootprintMode("cdd");
+    setDigitalFootprintResult(digitalFootprintRecords(cddState));
+    setDigitalFootprintError("");
+    setActiveWorkspace("digital-footprint");
+  }
+
   async function attachDigitalFootprint() {
     if (!sessionId || !cdd || !digitalFootprintResult) return;
     setDigitalFootprintAttaching(true);
@@ -779,6 +793,7 @@ function App() {
                       onClick={() => {
                         setActiveWorkspace(tool.id);
                         if (tool.id === "adverse-news") setAdverseNewsMode("independent");
+                        if (tool.id === "digital-footprint") selectDigitalFootprintMode("independent");
                         setToolsMenuOpen(false);
                       }}
                     >
@@ -972,6 +987,8 @@ function App() {
             />
           </Section>
 
+          <DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />
+
           <AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />
 
           <Section title="Risk Flags">
@@ -1049,6 +1066,7 @@ function App() {
               />
             ) : activeWorkspace === "digital-footprint" ? (
               <DigitalFootprint
+                mode={digitalFootprintMode}
                 form={digitalFootprintForm}
                 result={digitalFootprintResult}
                 error={digitalFootprintError}
@@ -1058,6 +1076,9 @@ function App() {
                 onChange={updateDigitalFootprintForm}
                 onSkillToggle={(open) => { if (open) loadDigitalFootprintSkill(); }}
                 onAssess={assessDigitalFootprint}
+                canLoadFromCdd={Boolean(cddState)}
+                onLoadFromCdd={loadDigitalFootprintFromCdd}
+                onModeChange={selectDigitalFootprintMode}
                 canAttach={Boolean(sessionId && cdd)}
                 attaching={digitalFootprintAttaching}
                 onAttach={attachDigitalFootprint}
@@ -1370,24 +1391,31 @@ function CSPDetection({
   );
 }
 
-function DigitalFootprint({ form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, canAttach, attaching, onAttach, demoMode }) {
+function DigitalFootprint({ mode, form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, canLoadFromCdd, onLoadFromCdd, onModeChange, canAttach, attaching, onAttach, demoMode }) {
   return (
     <>
       <Section title="Digital Footprint">
-        {demoMode && <p className="empty">Digital Footprint assessment is disabled in Demo Mode.</p>}
-        <p className="empty">Research a company independently of any CDD case. Results are public-web research support, not a compliance decision.</p>
-        <details className="skill-details" onToggle={(event) => onSkillToggle(event.currentTarget.open)}>
-          <summary>Assessment skill</summary>
-          {skillLoading ? <p className="empty">Loading skill…</p> : <pre className="skill-content">{skill || "Open this section to load the current skill."}</pre>}
-        </details>
-        <div className="csp-form digital-footprint-form">
-          <input aria-label="Company legal name" placeholder="Company legal name" value={form.company_name} disabled={demoMode || assessing} onChange={(event) => onChange("company_name", event.target.value)} />
-          <input aria-label="Jurisdiction" placeholder="Jurisdiction (optional)" value={form.jurisdiction} disabled={demoMode || assessing} onChange={(event) => onChange("jurisdiction", event.target.value)} />
-          <input aria-label="Registration number" placeholder="Registration number (optional)" value={form.registration_number} disabled={demoMode || assessing} onChange={(event) => onChange("registration_number", event.target.value)} />
-          <input aria-label="Known website or domain" placeholder="Known website or domain (optional)" value={form.known_domain} disabled={demoMode || assessing} onChange={(event) => onChange("known_domain", event.target.value)} />
-          <textarea aria-label="Registered address" placeholder="Registered address (optional)" value={form.registered_address} disabled={demoMode || assessing} onChange={(event) => onChange("registered_address", event.target.value)} />
-          <button disabled={demoMode || assessing || !form.company_name.trim()} onClick={onAssess}>{assessing ? "Assessing…" : "Assess footprint"}</button>
+        <div className="actions">
+          <button className={mode === "cdd" ? "" : "secondary"} disabled={!canLoadFromCdd} onClick={() => { onModeChange("cdd"); onLoadFromCdd(); }}>Load from CDD</button>
+          <button className={mode === "independent" ? "" : "secondary"} onClick={() => onModeChange("independent")}>Run independent Digital Footprint Check</button>
         </div>
+        {mode === "cdd" ? <p className="empty">Loaded from the active CDD state. The chatbot remains available for this case.</p> : <>
+          {demoMode && <p className="empty">Digital Footprint assessment is disabled in Demo Mode.</p>}
+          <p className="empty">Research a company independently of any CDD case. Results are public-web research support, not a compliance decision.</p>
+          <details className="skill-details" onToggle={(event) => onSkillToggle(event.currentTarget.open)}>
+            <summary>Assessment skill</summary>
+            {skillLoading ? <p className="empty">Loading skill…</p> : <pre className="skill-content">{skill || "Open this section to load the current skill."}</pre>}
+          </details>
+          <div className="csp-form digital-footprint-form">
+            <input aria-label="Company legal name" placeholder="Company legal name" value={form.company_name} disabled={demoMode || assessing} onChange={(event) => onChange("company_name", event.target.value)} />
+            <input aria-label="Jurisdiction" placeholder="Jurisdiction (optional)" value={form.jurisdiction} disabled={demoMode || assessing} onChange={(event) => onChange("jurisdiction", event.target.value)} />
+            <input aria-label="Registration number" placeholder="Registration number (optional)" value={form.registration_number} disabled={demoMode || assessing} onChange={(event) => onChange("registration_number", event.target.value)} />
+            <input aria-label="Known website or domain" placeholder="Known website or domain (optional)" value={form.known_domain} disabled={demoMode || assessing} onChange={(event) => onChange("known_domain", event.target.value)} />
+            <textarea aria-label="Registered address" placeholder="Registered address (optional)" value={form.registered_address} disabled={demoMode || assessing} onChange={(event) => onChange("registered_address", event.target.value)} />
+            <button disabled={demoMode || assessing || !form.company_name.trim()} onClick={onAssess}>{assessing ? "Assessing…" : "Assess footprint"}</button>
+          </div>
+          <p className="empty">Independent results are not attached to the active CDD case. The chatbot is disabled.</p>
+        </>}
         {error && <p className="risk">{error}</p>}
       </Section>
 
@@ -1402,7 +1430,7 @@ function DigitalFootprint({ form, result, error, assessing, skill, skillLoading,
           </Section>
           <Section title="Digital Footprint JSON"><pre className="json-view">{JSON.stringify(result, null, 2)}</pre></Section>
           <Section title="CDD evidence">
-            {canAttach ? <button disabled={attaching || demoMode} onClick={onAttach}>{attaching ? "Attaching…" : "Attach validated result to active CDD case"}</button> : <p className="empty">This result is standalone. Run a CDD case before attaching it as case evidence.</p>}
+            {mode === "cdd" ? <p className="empty">This assessment is already loaded from the active CDD case.</p> : canAttach ? <button disabled={attaching || demoMode} onClick={onAttach}>{attaching ? "Attaching…" : "Attach validated result to active CDD case"}</button> : <p className="empty">This result is standalone. Run a CDD case before attaching it as case evidence.</p>}
           </Section>
         </>
       )}
@@ -1417,10 +1445,58 @@ function DigitalPresenceBreakdown({ indicators }) {
 }
 
 function DigitalFootprintAssessment({ result }) {
-  const assessment = (result.digital_footprint_assessments || [])[0];
+  const assessments = result.digital_footprint_assessments || [];
+  const assessment = assessments[assessments.length - 1];
   if (!assessment) return <Section title="Assessment"><p className="risk">Digital Footprint assessment unavailable.</p></Section>;
   const profile = assessment.digital_business_profile || {};
   return <><Section title="Presence and Visibility"><div className="adverse-news-summary"><strong>{assessment.company_inputs?.company_name || "Company"}</strong><span>{`Overall score: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span><span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span><span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span><span>{`${(assessment.queries || []).length} queries; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div><DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} /></Section><Section title="Business Profile"><div className="adverse-news-summary"><span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence || []} /></span><span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span><span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span><span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span><span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span></div></Section></>;
+}
+
+function digitalFootprintRecords(cddState) {
+  return {
+    evidence: (cddState?.evidence || []).filter((item) => item.tool === "digital_footprint_assessment"),
+    digital_footprint_assessments: cddState?.digital_footprint_assessments || [],
+    findings: (cddState?.findings || []).filter((finding) => finding.category === "digital_footprint"),
+  };
+}
+
+function DigitalFootprintScreening({ cddState, onOpenTool }) {
+  const result = digitalFootprintRecords(cddState);
+  const assessments = result.digital_footprint_assessments;
+  const assessment = assessments[assessments.length - 1];
+  const profile = assessment?.digital_business_profile || {};
+  const evidenceById = Object.fromEntries(result.evidence.map((item) => [item.evidence_id, item]));
+
+  if (!assessment) {
+    return <Section title="Digital Footprint"><p className="empty">Not run.</p></Section>;
+  }
+
+  return (
+    <Section title="Digital Footprint">
+      <div className="adverse-news-summary">
+        <strong>{assessment.company_inputs?.company_name || "Company"}</strong>
+        <span>{`Overall presence and visibility: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span>
+        <span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span>
+        <span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span>
+        {assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}
+        <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Digital Footprint tool</button>
+      </div>
+      <h3>Presence and Visibility</h3>
+      <DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} />
+      <h3>Business Profile</h3>
+      <div className="adverse-news-summary">
+        <span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence} /></span>
+        <span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span>
+        <span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span>
+        <span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span>
+        <span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span>
+      </div>
+      <h3>Findings</h3>
+      {result.findings.length ? <div className="adverse-news-findings">{result.findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={evidenceById} popoverId={`digital-footprint-cdd-${index}`} />)}</div> : <p className="empty">No material digital-footprint findings were identified.</p>}
+      <h3>Sources</h3>
+      {result.evidence.length ? <div className="csp-sources">{result.evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence was recorded.</p>}
+    </Section>
+  );
 }
 
 function ManifestFootprintSection({ section, result }) {

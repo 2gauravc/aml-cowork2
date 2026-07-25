@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_digital_footprint_tool_is_standalone_in_ui() -> None:
+def test_digital_footprint_tool_supports_cdd_and_independent_modes() -> None:
     app = Path("src/frontend/app.js").read_text()
 
     assert '{ id: "digital-footprint", label: "Digital Footprint" }' in app
@@ -13,3 +13,12 @@ def test_digital_footprint_tool_is_standalone_in_ui() -> None:
     assert "digital_footprint_assessments" in app
     assert "<AdverseNewsFinding" in app
     assert 'fetch("/api/digital-footprint/attach"' in app
+    assert 'function loadDigitalFootprintFromCdd()' in app
+    assert 'function digitalFootprintRecords(cddState)' in app
+    assert 'item.tool === "digital_footprint_assessment"' in app
+    assert 'finding.category === "digital_footprint"' in app
+    assert 'Load from CDD' in app
+    assert 'Run independent Digital Footprint Check' in app
+    assert '(activeWorkspace === "digital-footprint" && digitalFootprintMode === "cdd")' in app
+    assert '<DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />' in app
+    assert app.index('<DigitalFootprintScreening') < app.index('<AdverseNewsScreening')

@@ -40,9 +40,10 @@ class DigitalFootprintTests(unittest.TestCase):
     @patch("src.agents.nodes.evaluate_digital_footprint")
     def test_langgraph_node_derives_company_inputs_from_cdd(self, evaluate):
         evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
-        digital_footprint_assessment({"cdd":{"company_business_profile":{"customer_static":{"name":"Example Ltd","jurisdiction":"GB","registration_number":"123","website":"https://example.test"}}}})
+        digital_footprint_assessment({"cdd":{"company_business_profile":{"customer_static":{"name":"Example Ltd","jurisdiction":"GB","registration_number":"123","website":"https://example.test","registered_address":{"full_address":"1 Example Street, London, GB"}}}}})
         self.assertEqual(evaluate.call_args.kwargs["company_name"],"Example Ltd")
         self.assertEqual(evaluate.call_args.kwargs["known_domain"],"https://example.test")
+        self.assertEqual(evaluate.call_args.kwargs["registered_address"],"1 Example Street, London, GB")
 
     @patch("src.agents.nodes.evaluate_digital_footprint", side_effect=RuntimeError("provider validation failed"))
     def test_langgraph_node_records_unavailable_assessment_for_unexpected_error(self, evaluate):
