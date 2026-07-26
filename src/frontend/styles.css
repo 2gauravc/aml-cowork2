@@ -999,6 +999,15 @@ th {
   margin: 10px 0;
 }
 
+.evidence-quality-section + .evidence-quality-section {
+  margin-top: 1rem;
+}
+
+.evidence-quality-section h3 {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
 .evidence-quality-dimension {
   display: grid;
   gap: 5px;

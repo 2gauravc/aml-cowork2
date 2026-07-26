@@ -735,7 +735,7 @@ def _digital_footprint_inputs(state: CDDState) -> dict[str, Any]:
     """Use explicit standalone inputs when present, otherwise derive company identity from CDD."""
     explicit = state.get("digital_footprint_inputs") or {}
     if explicit.get("company_name"):
-        return explicit
+        return {key: explicit.get(key) for key in ("company_name", "jurisdiction", "registration_number", "known_domain", "registered_address")}
     static = ((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {}
     registered_address = static.get("registered_address") or static.get("registeredAddress")
     if isinstance(registered_address, dict):
@@ -748,13 +748,13 @@ def _digital_footprint_inputs(state: CDDState) -> dict[str, Any]:
                 if registered_address.get(key)
             )
         )
-    return classify_evidence_item({
+    return {
         "company_name": static.get("name"),
         "jurisdiction": static.get("jurisdiction"),
         "registration_number": static.get("registration_number") or static.get("registrationNumber"),
         "known_domain": static.get("website") or static.get("website_url") or static.get("domain"),
         "registered_address": registered_address,
-    })
+    }
 
 
 def _assemble_adverse_news_assessment(
@@ -1048,7 +1048,7 @@ def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
         evidence_id = f"evidence:evidence-quality:{uuid4().hex}"
         evidence = _evidence(
             tool="evidence_quality",
-            description="Evaluated configured CDD claims for source integrity and adequacy",
+            description="Evaluated configured CDD claims for source reliability, evidence sufficiency, consistency, and plausibility",
             source="Evidence Quality",
             data={"claims": result["assessments"], "skill_path": result["definition"]["path"]},
             relevance_tags=["evidence_quality", "policy"],
@@ -1064,7 +1064,7 @@ def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
                 "tool": "evidence_quality",
                 "run_id": run_id,
                 "created_at": evaluated_at,
-                "definition": {"skill_path": result["definition"]["path"], "claim_id": check["claim_id"], "display_order": check["display_order"], "dimensions": result["definition"]["dimensions"]},
+                "definition": {"skill_path": result["definition"]["path"], "claim_id": check["claim_id"], "display_order": check["display_order"], "cdd_section": check["cdd_section"], "dimensions": result["definition"]["dimensions"]},
                 "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in check["selected_evidence"]]],
                 **check,
             }
@@ -1081,13 +1081,13 @@ def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
                 "title": check["title"],
                 "summary": check["summary"],
                 "subject": subject,
-                "confidence": {"level": "high", "rationale": "Derived from the configured deterministic evidence selection rules.", "limitations": [check["dimensions"]["veracity_source_integrity"]["rationale"], check["dimensions"]["adequacy"]["rationale"]]},
+                "confidence": {"level": "high", "rationale": "Derived from the configured deterministic evidence selection rules.", "limitations": [dimension["rationale"] for dimension in check["dimensions"].values()]},
                 "severity": {"level": check["severity"], "rationale": "Configured by the Evidence Quality skill."},
                 "potential_impact_risk": "The CDD claim may not be sufficiently supported until the identified evidence-quality concern is resolved.",
                 "recommended_action_rfi": {"internal_actions": [check["action"]], "rfi": []},
                 "source": {"producer_type": "tool", "producer_name": "evidence_quality", "run_id": run_id, "created_at": evaluated_at},
                 "relevant_evidence_ids": relevant_ids,
-                "evidence_quality": {"claim_id": check["claim_id"], "dimensions": check["dimensions"], "excluded_evidence": check["excluded_evidence"]},
+                "evidence_quality": {"claim_id": check["claim_id"], "cdd_section": check["cdd_section"], "dimensions": check["dimensions"], "excluded_evidence": check["excluded_evidence"]},
             }
             _validate_finding(finding)
             findings.append(finding)

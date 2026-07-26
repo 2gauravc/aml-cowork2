@@ -51,6 +51,13 @@ class DigitalFootprintTests(unittest.TestCase):
         self.assertEqual(result["assessments"][0]["company_inputs"]["company_name"],"Example Ltd")
         self.assertEqual(result["assessments"][0]["assessment_type"], "digital_footprint")
         self.assertEqual(result["assessments"][0]["definition"]["schema_version"], "digital_footprint_assessment/v2")
+        self.assertNotIn("cdd_section", evaluate.call_args.kwargs)
+
+    @patch("src.agents.nodes.evaluate_digital_footprint")
+    def test_langgraph_node_does_not_forward_evidence_metadata_to_the_tool(self, evaluate):
+        evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
+        digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd", "cdd_section":"screening"}})
+        self.assertEqual(set(evaluate.call_args.kwargs), {"company_name", "jurisdiction", "registration_number", "known_domain", "registered_address"})
 
     @patch("src.agents.nodes.evaluate_digital_footprint")
     def test_langgraph_node_derives_company_inputs_from_cdd(self, evaluate):

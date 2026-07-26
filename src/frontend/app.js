@@ -1349,27 +1349,31 @@ function EvidenceQuality({ assessments, findings, evidence, loading, demoMode, o
     <Section title="Evidence Quality">
       <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Evidence Quality Check"}</button>
       <div className="review-list">
-        {assessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+        {EVIDENCE_SECTION_ORDER.map((section) => {
+          const sectionAssessments = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section);
+          if (!sectionAssessments.length) return null;
+          return <div className="evidence-quality-section" key={section}>
+            <h3>{EVIDENCE_SECTION_LABELS[section]}</h3>
+            {sectionAssessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
           const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
-          const integrity = assessment.dimensions?.veracity_source_integrity || {};
-          const adequacy = assessment.dimensions?.adequacy || {};
           const sources = assessment.selected_evidence || [];
           const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
           return <div className="review-item" key={assessment.assessment_id}>
             <strong>{assessment.title}</strong>
             <p>{assessment.summary}</p>
             <div className="evidence-quality-dimensions">
-              <div className="evidence-quality-dimension">
-                <div><span className="evidence-quality-tag">{evidenceQualityDimensionLabel(assessment.definition, "veracity_source_integrity")}</span><span className="evidence-quality-outcome">{evidenceQualityOutcomeLabel(integrity.outcome)}</span></div>
-                <small>{integrity.rationale || "No explanation was recorded."}</small>
-              </div>
-              <div className="evidence-quality-dimension">
-                <div><span className="evidence-quality-tag">{evidenceQualityDimensionLabel(assessment.definition, "adequacy")}</span><span className="evidence-quality-outcome">{evidenceQualityOutcomeLabel(adequacy.outcome)}</span></div>
-                <small>{adequacy.rationale || "No explanation was recorded."}</small>
-              </div>
+              {(assessment.definition?.dimensions || []).map((dimension) => {
+                const result = assessment.dimensions?.[dimension.key] || {};
+                return <div className="evidence-quality-dimension" key={dimension.key}>
+                  <div><span className="evidence-quality-tag">{dimension.label}</span><span className="evidence-quality-outcome">{evidenceQualityOutcomeLabel(result.outcome)}</span></div>
+                  <small>{result.rationale || "No explanation was recorded."}</small>
+                </div>;
+              })}
             </div>
             {sources.length ? <EvidenceReview evidence={sources.map((item) => evidenceById[item.evidence_id] || item)} /> : null}
             {finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}
+          </div>;
+            })}
           </div>;
         })}
       </div>
@@ -1408,10 +1412,6 @@ function EvidenceReviewItem({ item }) {
     <div>{url ? <a href={url} target="_blank" rel="noreferrer">View source</a> : <small>No external source link retained.</small>}</div>
     <details><summary>Retained evidence details</summary><pre className="evidence-record">{JSON.stringify(retained, null, 2)}</pre><small>{`Audit reference: ${item.evidence_id}`}</small></details>
   </div>;
-}
-
-function evidenceQualityDimensionLabel(definition, key) {
-  return (definition?.dimensions || []).find((dimension) => dimension.key === key)?.label || key;
 }
 
 function evidenceQualityOutcomeLabel(outcome) {

@@ -27,8 +27,12 @@ def load_evidence_quality_definition(path: str | Path = SKILL_PATH) -> dict[str,
         raise EvidenceQualityError("Evidence Quality skill must declare assessment.schema")
     if not isinstance(claims, list) or not claims or any(not isinstance(item, dict) or not item.get("id") for item in claims):
         raise EvidenceQualityError("Evidence Quality skill must declare identified claims")
-    if not isinstance(dimensions, list) or {item.get("key") for item in dimensions if isinstance(item, dict)} != {"veracity_source_integrity", "adequacy"} or any(not isinstance(item.get("label"), str) or not item["label"].strip() for item in dimensions if isinstance(item, dict)):
-        raise EvidenceQualityError("Evidence Quality skill must declare labelled source-integrity and adequacy dimensions")
+    expected_dimensions = {"veracity_source_integrity", "adequacy", "consistency", "plausibility"}
+    if not isinstance(dimensions, list) or {item.get("key") for item in dimensions if isinstance(item, dict)} != expected_dimensions or any(not isinstance(item.get("label"), str) or not item["label"].strip() for item in dimensions if isinstance(item, dict)):
+        raise EvidenceQualityError("Evidence Quality skill must declare labelled source-integrity, adequacy, consistency, and plausibility dimensions")
+    allowed_sections = {"customer_business_profile", "ownership_and_control", "identity_verification", "screening"}
+    if any(item.get("cdd_section") not in allowed_sections for item in claims):
+        raise EvidenceQualityError("Every Evidence Quality claim must declare a CDD section")
     return {
         "assessment": assessment,
         "claims": sorted(claims, key=lambda item: item.get("order", 0)),
@@ -67,14 +71,17 @@ def _evaluate_claim(state: dict[str, Any], claim: dict[str, Any], definition: di
     else:
         integrity = _dimension("not_triggered", "The retained evidence is linked to this customer and has a recorded source.")
         adequacy = _adequacy(claim, selected, source_classes)
-    statuses = {integrity["outcome"], adequacy["outcome"]}
+    consistency = _consistency(claim, value, selected, state, applicable)
+    plausibility = _plausibility(claim, value, selected, state, applicable)
+    statuses = {integrity["outcome"], adequacy["outcome"], consistency["outcome"], plausibility["outcome"]}
     outcome = next((status for status in ("invalid", "unavailable", "inconclusive", "gap") if status in statuses), "not_triggered")
     return {
         "claim_id": claim["id"], "title": claim["title"], "display_order": claim.get("order", 0),
         "claim": {"value": value, "subject": subject, "applicable": applicable},
         "outcome": outcome,
-        "summary": "Evidence reviewed: source reliability is confirmed and the evidence is sufficient for this check." if outcome == "not_triggered" else _summary(claim["title"], integrity, adequacy),
-        "dimensions": {"veracity_source_integrity": integrity, "adequacy": adequacy},
+        "summary": "Evidence reviewed: source reliability is confirmed, the evidence is sufficient, and no material inconsistency or plausibility concern was identified." if outcome == "not_triggered" else _summary(claim["title"], integrity, adequacy, consistency, plausibility),
+        "dimensions": {"veracity_source_integrity": integrity, "adequacy": adequacy, "consistency": consistency, "plausibility": plausibility},
+        "cdd_section": claim["cdd_section"],
         "selected_evidence": selected, "excluded_evidence": excluded,
         "severity": claim.get("severity", "medium"), "action": claim.get("action", "Review the evidence quality concern."),
     }
@@ -101,8 +108,12 @@ def _claim_value(state: dict[str, Any], adapter: str) -> tuple[dict[str, Any], d
         candidates = [item for item in state.get("assessments") or [] if item.get("assessment_type") == "digital_footprint"]
         profile_assessment = candidates[-1] if candidates else {}
         digital_profile = profile_assessment.get("digital_business_profile") or {}
-        value = {"name": profile.get("name") or customer.get("name"), "business_activity": digital_profile.get("business_activity"), "geographic_presence": digital_profile.get("geographic_presence") or []}
+        value = {"name": profile.get("name") or customer.get("name"), "registry_activity": profile.get("activity_type"), "business_activity": digital_profile.get("business_activity"), "geographic_presence": digital_profile.get("geographic_presence") or [], "registered_address": ((profile.get("registered_address") or {}).get("full_address") if isinstance(profile.get("registered_address"), dict) else profile.get("registered_address"))}
         return value, subject, bool(value.get("business_activity"))
+    if adapter == "screening_conclusions":
+        screening = [item for item in state.get("assessments") or [] if item.get("assessment_type") in {"adverse_news", "digital_footprint"}]
+        value = {"outcomes": [{"type": item.get("assessment_type"), "outcome": item.get("outcome"), "summary": item.get("summary")} for item in screening]}
+        return value, subject, bool(screening)
     raise EvidenceQualityError(f"Unknown claim value adapter: {adapter}")
 
 
@@ -160,16 +171,54 @@ def _adequacy(claim: dict[str, Any], selected: list[dict[str, Any]], source_clas
     return _dimension("gap", "More suitable evidence is needed for this check.", [item["evidence_id"] for item in selected])
 
 
+def _consistency(claim: dict[str, Any], value: dict[str, Any], selected: list[dict[str, Any]], state: dict[str, Any], applicable: bool) -> dict[str, Any]:
+    if not applicable:
+        return _dimension("not_applicable", "No consistency decision is needed because the claim is unavailable.")
+    if claim["value_adapter"] == "business_activity":
+        registry_activity = str(value.get("registry_activity") or "").strip()
+        digital_activity = str(value.get("business_activity") or "").strip()
+        if registry_activity and digital_activity and not _descriptions_overlap(registry_activity, digital_activity):
+            return _dimension("inconclusive", "The registry/KYC activity and the digital business description appear materially different. The retained evidence does not explain how they relate, so an analyst should confirm the current principal activity.", [item["evidence_id"] for item in selected])
+    if claim["value_adapter"] == "identity_verification":
+        required_count = len(value.get("required_individuals") or [])
+        if required_count and value.get("validated_document_count", 0) < required_count:
+            return _dimension("inconclusive", "The final ID&V record does not show a validated document for every required individual. Reconcile the policy requirement and document-validation records.", [item["evidence_id"] for item in selected])
+    if claim["value_adapter"] == "screening_conclusions":
+        outcomes = value.get("outcomes") or []
+        if any(item.get("outcome") in {"completed_clear", "clear", "negative"} for item in outcomes) and any(item.get("tool") == "adverse_news_screening" for item in selected):
+            return _dimension("inconclusive", "A clear screening conclusion needs entity-specific retained results. Generic screening-resource pages alone do not demonstrate clearance.", [item["evidence_id"] for item in selected])
+    return _dimension("not_triggered", "No material contradiction was identified in the retained information for this check.")
+
+
+def _plausibility(claim: dict[str, Any], value: dict[str, Any], selected: list[dict[str, Any]], state: dict[str, Any], applicable: bool) -> dict[str, Any]:
+    if not applicable:
+        return _dimension("not_applicable", "No plausibility decision is needed because the claim is unavailable.")
+    if claim["value_adapter"] == "business_activity":
+        if not value.get("geographic_presence"):
+            return _dimension("inconclusive", "The retained business description does not include corroborated operating-location evidence. Obtain a current operating address, website, licence, or other business-presence evidence.", [item["evidence_id"] for item in selected])
+        address = str(value.get("registered_address") or "").casefold()
+        activity = f"{value.get('registry_activity') or ''} {value.get('business_activity') or ''}".casefold()
+        residential_markers = ("apartment", "residential", "flat", "unit ")
+        operational_markers = ("manufactur", "factory", "industrial", "warehouse")
+        if any(marker in address for marker in residential_markers) and any(marker in activity for marker in operational_markers):
+            return _dimension("inconclusive", "The retained address appears residential while the stated activity suggests a substantial operating footprint. Obtain evidence that explains the operating location.", [item["evidence_id"] for item in selected])
+    return _dimension("not_triggered", "The retained information does not present a clear fact-pattern mismatch requiring additional corroboration.")
+
+
 def _dimension(outcome: str, rationale: str, evidence_ids: list[str] | None = None, provenance: list[dict[str, str]] | None = None) -> dict[str, Any]:
     return {"outcome": outcome, "rationale": rationale, "evidence_ids": evidence_ids or [], "provenance": provenance or []}
 
 
-def _summary(title: str, integrity: dict[str, Any], adequacy: dict[str, Any]) -> str:
+def _summary(title: str, integrity: dict[str, Any], adequacy: dict[str, Any], consistency: dict[str, Any], plausibility: dict[str, Any]) -> str:
     concerns = []
     if integrity["outcome"] not in {"not_triggered", "not_applicable"}:
         concerns.append("source reliability could not be confirmed")
     if adequacy["outcome"] not in {"not_triggered", "not_applicable"}:
         concerns.append("more evidence is needed")
+    if consistency["outcome"] not in {"not_triggered", "not_applicable"}:
+        concerns.append("the retained information needs reconciliation")
+    if plausibility["outcome"] not in {"not_triggered", "not_applicable"}:
+        concerns.append("the fact pattern needs further corroboration")
     return f"{title}: {' and '.join(concerns)}."
 
 
@@ -184,3 +233,24 @@ def _text(value: Any) -> str:
 def _valid_idv_document(document: dict[str, Any]) -> bool:
     validation = (document.get("processing") or {}).get("validation") or {}
     return document.get("status") == "processed" and (document.get("gap") or {}).get("status") == "resolved" and validation.get("accepted_type") is True and validation.get("name_match") is True
+
+
+def _descriptions_overlap(left: str, right: str) -> bool:
+    stop_words = {"and", "the", "for", "with", "services", "service", "business", "company", "activities", "activity", "limited", "private"}
+    left_terms = {term for term in _words(left) if term not in stop_words}
+    right_terms = {term for term in _words(right) if term not in stop_words}
+    return bool(left_terms & right_terms)
+
+
+def _words(value: str) -> list[str]:
+    token = ""
+    words = []
+    for character in value.casefold():
+        if character.isalnum():
+            token += character
+        elif token:
+            words.append(token)
+            token = ""
+    if token:
+        words.append(token)
+    return words

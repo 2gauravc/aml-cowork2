@@ -26,11 +26,12 @@ def _state() -> dict:
 
 def test_supported_claims_create_assessments_without_findings() -> None:
     result = assess_evidence_quality(_state())
-    assert len(result["assessments"]) == 4
+    assert len(result["assessments"]) == 5
     assert {item["outcome"] for item in result["assessments"]} == {"not_triggered"}
     assert result["findings"] == []
     assert all(item["selected_evidence"] for item in result["assessments"])
     assert result["assessments"][0]["definition"]["dimensions"] == load_evidence_quality_definition()["dimensions"]
+    assert {item["cdd_section"] for item in result["assessments"]} == {"customer_business_profile", "ownership_and_control", "identity_verification", "screening"}
 
 
 def test_evidence_is_classified_under_a_cdd_section() -> None:
@@ -76,3 +77,34 @@ def test_unknown_provenance_evidence_creates_a_source_integrity_finding() -> Non
     result = assess_evidence_quality(state)
     assessment = next(item for item in result["assessments"] if item["claim_id"] == "company_legal_existence")
     assert assessment["dimensions"]["veracity_source_integrity"]["outcome"] == "inconclusive"
+
+
+def test_material_business_activity_conflict_creates_consistency_finding() -> None:
+    state = _state()
+    profile = state["cdd"]["company_business_profile"]["customer_static"]
+    profile["activity_type"] = "Investment holding and business support services"
+    state["assessments"][0]["digital_business_profile"]["business_activity"] = "Cloud-based AIoT platform for airport and supply-chain operations"
+    result = assess_evidence_quality(state)
+    assessment = next(item for item in result["assessments"] if item["claim_id"] == "business_activity_and_operating_presence")
+    assert assessment["dimensions"]["consistency"]["outcome"] == "inconclusive"
+    assert "principal activity" in assessment["dimensions"]["consistency"]["rationale"]
+    assert any(item["assessment_id"] == assessment["assessment_id"] for item in result["findings"])
+
+
+def test_compatible_activity_descriptions_do_not_create_a_false_conflict() -> None:
+    state = _state()
+    profile = state["cdd"]["company_business_profile"]["customer_static"]
+    profile["activity_type"] = "Electrical engineering services"
+    state["assessments"][0]["digital_business_profile"]["business_activity"] = "Engineering services and electrical installation"
+    result = assess_evidence_quality(state)
+    assessment = next(item for item in result["assessments"] if item["claim_id"] == "business_activity_and_operating_presence")
+    assert assessment["dimensions"]["consistency"]["outcome"] == "not_triggered"
+
+
+def test_missing_operating_presence_requires_plausibility_corroboration() -> None:
+    state = _state()
+    state["assessments"][0]["digital_business_profile"]["geographic_presence"] = []
+    result = assess_evidence_quality(state)
+    assessment = next(item for item in result["assessments"] if item["claim_id"] == "business_activity_and_operating_presence")
+    assert assessment["dimensions"]["plausibility"]["outcome"] == "inconclusive"
+    assert any(item["assessment_id"] == assessment["assessment_id"] for item in result["findings"])

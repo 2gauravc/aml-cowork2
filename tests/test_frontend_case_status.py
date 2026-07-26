@@ -16,10 +16,12 @@ def test_cdd_metadata_uses_case_status_from_api_response() -> None:
     assert "cddStatusLabel" not in app
     assert "Evidence Quality" in app
     assert "/api/evidence-quality/run" in app
-    assert "evidenceQualityDimensionLabel(assessment.definition" in app
+    assert "assessment.definition?.dimensions" in app
     assert "evidence-quality-tag" in app
     assert "Customer Business Profile" in app
     assert "EvidenceReview" in app
+    assert "dimension.label" in app
+    assert "evidence-quality-section" in app
 
 
 def test_case_assessment_workspace_uses_the_renamed_summary_field() -> None:
