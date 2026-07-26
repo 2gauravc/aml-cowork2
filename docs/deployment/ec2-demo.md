@@ -1,96 +1,94 @@
 # EC2 demo deployment
 
-This guide provisions a single `t3.medium` EC2 instance for an internal/demo deployment. It is intentionally not a production architecture: sessions, active CDD jobs, and reviewer state are held in process memory and are lost if the instance restarts.
+This guide provisions one `t3.medium` EC2 instance for an internal/demo
+deployment. It is intentionally not a production architecture: the endpoint is
+HTTP-only on an Elastic IP, and sessions, active CDD jobs, and reviewer state
+are held in process memory.
 
 ## Prerequisites
 
-- An AWS account with permissions to create CloudFormation, EC2, IAM, and Elastic IP resources in **`us-east-1`**. The template creates its own VPC, public subnet, Internet Gateway, and route table.
-- AWS CLI credentials that can create CloudFormation, EC2, IAM, and Elastic IP resources.
-- A DNS name, such as `demo.example.com`. Caddy needs the name to obtain a browser-trusted HTTPS certificate.
-- The deployment branch pushed to the configured repository. User data downloads `infrastructure/ec2/user-data.sh` from that branch.
-- Optional: an existing S3 bucket/prefix for documents. The stack grants only the supplied bucket/prefix access to the EC2 role.
+- An AWS account with permission to create CloudFormation, EC2, IAM, Elastic
+  IP, and networking resources in the target region. The template creates its
+  own VPC, public subnet, Internet Gateway, and route table.
+- AWS CLI credentials for the deployer.
+- One existing Secrets Manager JSON secret containing `KYCCLIENTID`,
+  `KYCCLIENTSECRET`, `OPENAI_API_KEY`, `TAVILY_API_KEY`, and `BRAVE_API_KEY`.
+  Start with [`infrastructure/ec2/secrets.example.json`](../../infrastructure/ec2/secrets.example.json).
+- An existing S3 bucket for generated documents, if document storage is
+  required. The EC2 role is scoped to the configured bucket and prefix.
+
+Do not put AWS access keys in the application secret. The EC2 instance role
+provides temporary credentials for S3, Secrets Manager, and Systems Manager.
 
 ## Deploy
 
-Create the stack from the repository root:
+From the repository root, run:
 
 ```bash
-aws cloudformation deploy \
+./infrastructure/ec2/deploy.sh \
   --region us-east-1 \
-  --stack-name aml-cowork2-demo \
-  --template-file infrastructure/cloudformation/ec2-demo.yml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides \
-    DomainName=demo.example.com \
-    RepositoryBranch=deploy/ec2-demo \
-    S3BucketName=onbo-bkt \
-    S3Prefix=aml-cowork2/
+  --secret-arn arn:aws:secretsmanager:us-east-1:123456789012:secret:demo/amlcowork-xxxxx
 ```
 
-Get the Elastic IP, then create a DNS `A` record from `DomainName` to that IP:
+The script validates the CloudFormation template and secret metadata, creates
+or updates the stack, waits for the HTTP health check, and prints the public
+URL and an SSM Session Manager command. `main` is the default repository
+branch. Use `--repository-branch` only when deliberately deploying another
+pushed branch, for example an isolated test branch.
+
+The deployment is HTTP-only and uses no DNS name or TLS certificate. Do not
+use it with production or sensitive customer traffic.
+
+## Runtime configuration
+
+Bootstrap downloads the selected repository branch, fetches the application
+secret through the EC2 role, and creates `/opt/aml-cowork2/.env` with
+`DEMO_MODE=false`, the configured S3 location, and restrictive permissions.
+Normal, non-secret configuration remains in `.env.example`, including
+`KYCBASEURL` and optional OpenAI model overrides. The application derives the
+KYC token endpoint from `KYCBASEURL`.
+
+No SSH ingress is opened. Use Systems Manager for host access:
 
 ```bash
-aws cloudformation describe-stacks \
-  --stack-name aml-cowork2-demo \
-  --query 'Stacks[0].Outputs' \
-  --output table
-```
-
-Do not open port 22. The instance profile includes Systems Manager permissions, so access it with:
-
-```bash
-aws ssm start-session --target <instance-id>
-```
-
-## Configure the application
-
-Bootstrap creates `/opt/aml-cowork2/.env` with `DEMO_MODE=true`, the supplied domain, and restrictive file permissions. Add live credentials only when ready:
-
-```bash
-sudo -i
-cd /opt/aml-cowork2
-nano .env
-chmod 600 .env
-docker compose up --detach
-```
-
-For demo mode, leave `DEMO_MODE=true`; no OpenAI, KYC, Tavily, or S3 credentials are required. For live mode, set `DEMO_MODE=false` and add the values from `.env.example`. Do not commit `.env` or copy it into the CloudFormation template, user data, or logs.
-
-After DNS propagation, Caddy obtains the HTTPS certificate automatically. If DNS was created after Caddy started, retry with:
-
-```bash
-cd /opt/aml-cowork2
-docker compose restart caddy
+aws ssm start-session --region us-east-1 --target <instance-id>
 ```
 
 ## Smoke test
 
-1. Open `https://<your-domain>` and confirm the CDD tab loads.
-2. Confirm the floating chat launcher opens on CDD and is hidden on other tabs.
-3. In demo mode, select **Load Demo Case** and review the CDD and Case Review tabs.
-4. In live mode, run a CDD case and confirm document actions use the configured S3 location.
-5. Reboot the instance with `sudo reboot`, reconnect using Session Manager, and run `docker compose ps` to confirm both services restart.
+1. Open the printed `http://<elastic-ip>` URL and confirm the CDD tab loads.
+2. Run a live CDD case and confirm documents use the configured S3 location.
+3. In the SSM session, run `cd /opt/aml-cowork2 && docker compose ps` to
+   confirm both services are healthy.
 
-## Update and rollback
+## Updating the application
 
-To deploy a new application commit, update `RepositoryBranch` or recreate the stack after the branch is pushed, then on the instance run:
+The initial bootstrap runs when an EC2 instance is first launched. On the
+current single-instance template, changing CloudFormation user data restarts an
+existing EBS-backed instance but does not rerun its Linux bootstrap script.
+Until automated instance replacement is added, update the running application
+through an SSM session after the target branch is pushed:
 
 ```bash
+sudo -i
 cd /opt/aml-cowork2
-git fetch origin
-git checkout <branch-or-commit>
-docker compose up --build --detach
+git fetch --depth 1 origin main
+git checkout --force origin/main
+docker compose up --build --detach --wait
+curl --fail http://127.0.0.1/
 ```
 
-CloudFormation rollback applies to infrastructure failures. It does not preserve in-memory sessions or active jobs.
+This does not change the existing runtime `.env`. Do not edit it to add static
+AWS credentials.
 
 ## Teardown
 
 Delete the stack when the demo is finished:
 
 ```bash
-aws cloudformation delete-stack --stack-name aml-cowork2-demo
-aws cloudformation wait stack-delete-complete --stack-name aml-cowork2-demo
+aws cloudformation delete-stack --region us-east-1 --stack-name aml-cowork2-demo
+aws cloudformation wait stack-delete-complete --region us-east-1 --stack-name aml-cowork2-demo
 ```
 
-This releases the Elastic IP and terminates the EC2 instance. It does not delete the existing S3 document bucket.
+This releases the Elastic IP and terminates the EC2 instance. It does not
+delete the existing S3 document bucket or Secrets Manager secret.
