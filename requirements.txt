@@ -5,9 +5,11 @@ langchain-openai
 langgraph
 openai
 pydantic
+PyYAML
 python-dotenv
 requests
 uvicorn
 xhtml2pdf
 boto3
 python-multipart
+jsonschema

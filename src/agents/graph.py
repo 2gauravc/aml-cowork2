@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
@@ -33,8 +33,15 @@ from src.agents.nodes import (  # noqa: E402
     establish_idv_requirements,
     locate_available_documents,
     await_documents,
+    adverse_news_screening,
+    digital_footprint_assessment,
     process_available_documents,
     evaluate_risk_flags,
+    assess_cdd_completeness,
+    assess_evidence_quality,
+    assess_other_risk_factors,
+    assess_shell_company_risk,
+    assess_risk_rating,
     extract_idv_documents,
     extract_registry_document,
     fetch_customer_static,
@@ -70,9 +77,16 @@ PIPELINE_NODE_LABELS = {
     "establish_idv_requirements": "Establishing ID&V requirements",
     "locate_available_documents": "Locating documents",
     "extract_idv_documents": "Extracting from ID&V documents",
+    "digital_footprint_assessment": "Assessing digital footprint",
+    "adverse_news_screening": "Screening adverse news",
     "evaluate_risk_flags": "Evaluating red flags",
+    "assess_cdd_completeness": "Checking CDD completeness",
+    "assess_evidence_quality": "Checking evidence quality",
+    "assess_other_risk_factors": "Assessing other risk factors",
+    "assess_shell_company_risk": "Assessing shell company risk",
+    "assess_risk_rating": "Assessing overall risk rating",
     "finalize_cdd": "Completing CDD",
-    "generate_case_review": "Preparing case review",
+    "generate_case_review": "Preparing Case Assessment",
 }
 
 
@@ -203,7 +217,14 @@ def build_cdd_graph(
     # The interrupt node is an internal pause point, not a visible pipeline step.
     graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
+    add_node("digital_footprint_assessment", digital_footprint_assessment)
+    add_node("adverse_news_screening", adverse_news_screening)
     add_node("evaluate_risk_flags", evaluate_risk_flags)
+    add_node("assess_cdd_completeness", assess_cdd_completeness)
+    add_node("assess_evidence_quality", assess_evidence_quality)
+    add_node("assess_other_risk_factors", assess_other_risk_factors)
+    add_node("assess_shell_company_risk", assess_shell_company_risk)
+    add_node("assess_risk_rating", assess_risk_rating)
     add_node("finalize_cdd", finalize_cdd)
     add_node("generate_case_review", generate_case_review)
 
@@ -229,10 +250,17 @@ def build_cdd_graph(
     graph.add_edge("locate_available_documents", "process_available_documents")
     graph.add_edge("process_available_documents", "await_documents")
     graph.add_edge("await_documents", "extract_idv_documents")
-    graph.add_edge("extract_idv_documents", "evaluate_risk_flags")
-    graph.add_edge("evaluate_risk_flags", "finalize_cdd")
-    graph.add_edge("finalize_cdd", "generate_case_review")
-    graph.add_edge("generate_case_review", END)
+    graph.add_edge("extract_idv_documents", "digital_footprint_assessment")
+    graph.add_edge("digital_footprint_assessment", "adverse_news_screening")
+    graph.add_edge("adverse_news_screening", "evaluate_risk_flags")
+    graph.add_edge("evaluate_risk_flags", "assess_cdd_completeness")
+    graph.add_edge("assess_cdd_completeness", "assess_evidence_quality")
+    graph.add_edge("assess_evidence_quality", "assess_shell_company_risk")
+    graph.add_edge("assess_shell_company_risk", "assess_other_risk_factors")
+    graph.add_edge("assess_other_risk_factors", "assess_risk_rating")
+    graph.add_edge("assess_risk_rating", "generate_case_review")
+    graph.add_edge("generate_case_review", "finalize_cdd")
+    graph.add_edge("finalize_cdd", END)
     return graph.compile(checkpointer=CHECKPOINTER)
 
 
@@ -240,11 +268,13 @@ def run_cdd_agent(
     *,
     customer_name: str | None = None,
     jurisdiction: str | None = None,
+    account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
 ) -> dict[str, Any]:
     result = run_cdd_agent_state(
         customer_name=customer_name,
         jurisdiction=jurisdiction,
+        account_location=account_location,
         case_id=case_id,
     )
     return result.get("cdd", {})
@@ -254,6 +284,7 @@ def run_cdd_agent_state(
     *,
     customer_name: str | None = None,
     jurisdiction: str | None = None,
+    account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     thread_id: str | None = None,
@@ -263,6 +294,7 @@ def run_cdd_agent_state(
     state = new_cdd_state(
         customer_name=customer_name,
         jurisdiction=jurisdiction,
+        account_location=account_location,
         case_id=case_id,
     )
     return app.invoke(state, config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}})
@@ -271,13 +303,13 @@ def run_cdd_agent_state(
 def resume_cdd_agent_state(
     *,
     thread_id: str,
-    document_requirements: list[dict[str, Any]],
+    documents: list[dict[str, Any]],
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Update a paused graph thread and resume it after officer intervention."""
     app = build_cdd_graph(progress_callback=progress_callback)
     config = {"configurable": {"thread_id": thread_id}}
-    app.update_state(config, {"document_requirements": document_requirements})
+    app.update_state(config, {"documents": documents})
     return app.invoke(Command(resume={}), config=config)
 
 

@@ -32,6 +32,8 @@ from src.tools.customer_static import get_customer_static_by_name
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.pdf import render_cdd_pdf
+from src.utils.case_status import sync_case_status
+from src.tools.risk_severity_policy import apply_risk_severity_policy, interpret_risk_severity_policy
 from src.utils.s3_documents import presign_document_url
 
 
@@ -140,11 +142,14 @@ Available workflows:
   authoritative live document source. Request extracted information or a
   temporary download URL only when the user asks for it.
 - Use inspect_current_session when the user asks what is currently held in the
-  session, CDD state, graph state, case, pipeline, or document requirements.
+  session, CDD state, graph state, case, pipeline, document requirements, or
+  neutral findings. Findings are evidence-referenced records; currently,
+  `adverse_news` findings come from Adverse News Screening.
 - Use list_session_evidence when the user asks what evidence is available, its
   provenance, or whether a source/API result is retained as evidence.
 - Use answer_from_context for analytical questions about the current
-  CDD/evidence, rather than answering from general knowledge.
+  CDD/evidence/findings, rather than answering from general knowledge. Use it
+  for adverse-news findings, severity, potential impact, actions, and RFIs.
 - Use evaluate_csp_address when the user asks whether a registered address is a
   company service provider, virtual office, registered office, or formation agent.
 - When asked whether CSP assessment has run, use list_session_evidence or
@@ -342,9 +347,10 @@ def _execute_tool_call(name: str, args: dict[str, Any], session: dict[str, Any])
             return {
                 "answer": answer_cdd_question(
                     question=args.get("question") or "",
-                    cdd=session.get("cdd", {}),
-                    evidence=session.get("evidence", []),
-                    risk_flags=session.get("risk_flags", []),
+                cdd=(session.get("graph_state") or {}).get("cdd", {}),
+                evidence=(session.get("graph_state") or {}).get("evidence", []),
+                risk_flags=(session.get("graph_state") or {}).get("risk_flags", []),
+                findings=(session.get("graph_state") or {}).get("findings", []),
                 )
             }
         if name == "evaluate_csp_address":
@@ -418,7 +424,8 @@ def _tool_specs() -> list[StructuredTool]:
             description=(
                 "Inspect the active CDD session and return its live state: customer, case, "
                 "pipeline/graph status, CDD availability, document requirements and their "
-                "statuses, documents, risk flags, and final recommendation. Use this before "
+                "statuses, documents, legacy risk flags, and neutral findings. Findings are "
+                "evidence-referenced records; currently adverse_news is produced by Adverse News Screening. Use this before "
                 "answering questions about what the application currently holds or where the "
                 "case is in its workflow."
             ),
@@ -465,35 +472,34 @@ def _document_information(
 ) -> dict[str, Any]:
     """Build a live, request-shaped document view for the chat agent."""
     records = []
-    requirements = session.get("document_requirements") or []
+    requirements = [
+        document for document in (session.get("graph_state") or {}).get("documents", [])
+        if document.get("purpose") in {"identity_verification", "company_profile"}
+    ]
     for requirement in requirements:
         if person_name and _normalise_document_name(person_name) != _normalise_document_name(
-            requirement.get("entity_name") or ""
+            (requirement.get("subject") or {}).get("name") or ""
         ):
             continue
         if document_type and document_type.casefold() != str(requirement.get("document_type") or "").casefold():
             continue
 
-        processed = _processed_document_for_requirement(session, requirement)
-        artifact = (processed or {}).get("artifact") or requirement.get("artifact") or {}
-        storage = (
-            artifact.get("storage")
-            or (requirement.get("cache_document") or {}).get("storage")
-            or {}
-        )
+        processing = requirement.get("processing") or {}
+        storage = requirement.get("storage") or {}
         record = {
-            "requirement_id": requirement.get("id"),
-            "person_or_entity": requirement.get("entity_name"),
+            "requirement_id": requirement.get("document_id"),
+            "person_or_entity": (requirement.get("subject") or {}).get("name"),
             "document_type": requirement.get("document_type"),
             "status": requirement.get("status"),
-            "source": requirement.get("source") or ("s3_cache" if requirement.get("cache_document") else None),
-            "processed_at": requirement.get("processed_at"),
-            "classification": (processed or {}).get("classification") or requirement.get("classification"),
-            "match": requirement.get("match"),
+            "gap": requirement.get("gap"),
+            "source": (requirement.get("acquisition") or {}).get("source"),
+            "processed_at": processing.get("processed_at"),
+            "classification": processing.get("classification"),
+            "match": processing.get("match"),
             "storage_available": bool(storage.get("bucket") and storage.get("key")),
         }
         if include_extracted_information:
-            record["extracted_information"] = (processed or {}).get("extract")
+            record["extracted_information"] = processing.get("extract")
         if include_download_url:
             record.update(_document_download_link(storage))
         records.append(record)
@@ -515,7 +521,7 @@ def _processed_document_for_requirement(
     session: dict[str, Any], requirement: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Locate the processed extract matching one live document requirement."""
-    documents = (session.get("cdd") or {}).get("documents") or []
+    documents = ((session.get("graph_state") or {}).get("cdd") or {}).get("documents") or []
     for document in documents:
         artifact = document.get("artifact") or {}
         extracted = document.get("extract") or {}
@@ -554,14 +560,15 @@ def _normalise_document_name(value: str) -> str:
 
 
 def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
-    """Return structured live session data for the LLM to interpret."""
-    requirements = session.get("document_requirements") or []
+    """Return live session data, including neutral findings (currently adverse_news)."""
+    state = session.get("graph_state") or {}
+    requirements = state.get("documents") or []
     requirement_counts: dict[str, int] = {}
     for requirement in requirements:
         status = str(requirement.get("status") or "unknown")
         requirement_counts[status] = requirement_counts.get(status, 0) + 1
 
-    graph_state = session.get("graph_state") or {}
+    graph_state = state
     return {
         "session_id": session.get("session_id"),
         "customer_name": session.get("customer_name"),
@@ -569,20 +576,22 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "case_id": session.get("case_id"),
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
-        "has_cdd": bool(session.get("cdd")),
+        "case_status": graph_state.get("case_status"),
+        "has_cdd": bool(graph_state.get("cdd")),
         "graph_state_keys": sorted(graph_state) if isinstance(graph_state, dict) else [],
-        "document_requirement_counts": requirement_counts,
-        "document_requirements": requirements,
-        "document_count": len(session.get("documents") or []),
-        "evidence_count": len(session.get("evidence") or []),
-        "risk_flags": session.get("risk_flags") or [],
-        "final_recommendation": session.get("final_recommendation"),
+        "document_status_counts": requirement_counts,
+        "document_count": len(graph_state.get("documents") or []),
+        "evidence_count": len(graph_state.get("evidence") or []),
+        "risk_flags": graph_state.get("risk_flags") or [],
+        "findings_count": len(graph_state.get("findings") or []),
+        "findings": graph_state.get("findings") or [],
+        "assessments": graph_state.get("assessments") or [],
     }
 
 
 def _session_evidence_snapshot(session: dict[str, Any]) -> dict[str, Any]:
     """Return the retained evidence itself, rather than a guessed description."""
-    evidence = session.get("evidence") or []
+    evidence = (session.get("graph_state") or {}).get("evidence") or []
     return {
         "count": len(evidence),
         # This response is itself handled as a tool result. Return a snapshot so
@@ -674,7 +683,8 @@ def _run_named_company_tool(tool_func, *, args: dict[str, Any], session: dict[st
 
 
 def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
-    cdd = session.get("cdd") or {}
+    state = session.get("graph_state") or {}
+    cdd = state.get("cdd") or {}
     customer_static = cdd.get("company_business_profile", {}).get("customer_static", {})
     address = args.get("registered_address") or (
         customer_static.get("registered_address") or {}
@@ -692,20 +702,27 @@ def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> d
     outcome = str(assessment.get("is_csp") or "inconclusive").casefold()
     if outcome in {"yes", "no", "inconclusive"}:
         flag = {
+            "finding_id": "csp_address:category",
             "category": "csp_address",
-            "severity": "low" if outcome == "no" else "medium",
-            "description": (
-                f"CSP: Evaluation: {outcome.title()}. "
-                f"{(assessment.get('explanation') or '').strip()}"
-            ).strip(),
+            "evaluation": outcome,
+            "severity": "none",
+            "description": (assessment.get("explanation") or "CSP assessment completed.").strip(),
             "source": "csp_address_assessment",
-            "status": "cleared" if outcome == "no" else "open",
-            "evidence_tool": "evaluate_csp_address",
+            "subject": {},
             "evidence": result,
         }
-        existing = session.setdefault("risk_flags", [])
+        flag = apply_risk_severity_policy([flag], interpret_risk_severity_policy())[0]
+        existing = state.setdefault("risk_flags", [])
         if not any(item.get("category") == "csp_address" for item in existing):
             existing.append(flag)
+        state.setdefault("evidence", []).append({
+            "source": "CSP assessment tool",
+            "tool": "evaluate_csp_address",
+            "description": "Assessed registered address for company service provider indicators.",
+            "relevance_tags": ["risk_flag", "csp_address", "registered_address"],
+            "data": result,
+        })
+        sync_case_status(state)
     return result
 
 
@@ -736,25 +753,22 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     session["jurisdiction"] = str(jurisdiction).strip().upper()
     if case_id:
         session["case_id"] = case_id
-    session["cdd"] = cdd
     session["graph_state"] = graph_state
-    session["documents"] = graph_state.get("documents", [])
-    session["evidence"] = graph_state.get("evidence", [])
-    session["risk_flags"] = graph_state.get("risk_flags", [])
-    session["final_recommendation"] = graph_state.get("final_recommendation")
+    sync_case_status(graph_state)
     return {
         "cdd": cdd,
-        "documents": session["documents"],
-        "evidence_count": len(session["evidence"]),
-        "risk_flags": session["risk_flags"],
-        "final_recommendation": session["final_recommendation"],
+        "documents": graph_state.get("documents", []),
+        "evidence_count": len(graph_state.get("evidence", [])),
+        "risk_flags": graph_state.get("risk_flags", []),
+        "case_status": graph_state.get("case_status", {}),
     }
 
 
 def _generate_pdf_tool(*, session: dict[str, Any]) -> dict[str, Any]:
-    if not session.get("cdd"):
+    state = session.get("graph_state") or {}
+    if not state.get("cdd"):
         return {"error": {"message": "Run the full CDD pipeline before generating a PDF."}}
-    pdf_path = render_cdd_pdf(session["cdd"])
+    pdf_path = render_cdd_pdf(state["cdd"])
     session["pdf_path"] = str(pdf_path)
     return {"pdf_path": str(pdf_path), "message": "PDF generated and ready to download."}
 
@@ -769,7 +783,10 @@ def _record_tool_result(session: dict[str, Any], tool_name: str, result: dict[st
     session.setdefault("tool_results", []).append({"tool": tool_name, "data": result})
     if tool_name == "list_jurisdictions":
         return
-    session.setdefault("evidence", []).append(
+    state = session.get("graph_state")
+    if not isinstance(state, dict):
+        return
+    state.setdefault("evidence", []).append(
         {
             "source": "tool",
             "tool": tool_name,

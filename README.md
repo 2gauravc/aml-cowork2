@@ -1,28 +1,28 @@
-# AML Case Review Workspace
+# AML Case Assessment Workspace
 
 An evidence-first workspace for corporate customer due diligence (CDD). It brings
-registry data, ownership structure, identity-verification requirements, AML
-signals, and company-service-provider (CSP) address indicators into one
+registry data, ownership structure, identity-verification requirements, and
+company-service-provider (CSP) address indicators into one
 reviewable case. A structured AI review turns the completed evidence packet into
-a **Case Review** brief; it does not make the compliance decision.
+a **Case Assessment** brief; it does not make the compliance decision.
 
 ## Why this exists
 
-CDD reviewers often have to reconcile ownership records, adverse AML signals,
-registered-address evidence, and missing documents across separate systems.
-AML Case Review Workspace makes that work easier to audit: every generated review
+CDD reviewers often have to reconcile ownership records, registered-address
+evidence, and missing documents across separate systems.
+AML Case Assessment Workspace makes that work easier to audit: every generated review
 is grounded in the retained CDD object, risk flags, and collected evidence.
 
 ## Features
 
 - **Full CDD pipeline:** creates or reuses a KYC case and collects the company
   profile, members, ownership chart, and ID&V requirements.
-- **Evidence-first risk flags:** checks for ownership gaps, AML-positive
-  controlling members, and CSP-address indicators.
+- **Evidence-first risk flags:** checks for ownership gaps and CSP-address
+  indicators.
 - **CSP Detection:** searches the registered address with Tavily and applies the
   reusable [`csp-detector` skill](skills/csp-detector/SKILL.md) through a strict
   structured assessment.
-- **Case Review:** uses the reusable [`case-review` skill](skills/case-review/SKILL.md)
+- **Case Assessment:** uses the reusable [`case-assessment` skill](skills/case-assessment/SKILL.md)
   to synthesize evidence, limitations, internal actions, and draft customer
   Requests for Information (RFIs).
 - **Human controls:** a reviewer records **Approve**, **Request information**, or
@@ -38,24 +38,98 @@ flowchart LR
   UI[React workspace] --> API[FastAPI session API]
   API --> Graph[LangGraph CDD pipeline]
   Graph --> KYC[KYC registry and ownership data]
-  Graph --> Flags[Ownership, AML, and CSP checks]
+  Graph --> Adverse[Adverse News Screening]
+  Adverse --> Web[Tavily search + adverse-news-screening skill]
+  Graph --> Flags[Ownership and CSP checks]
   Flags --> CSP[Tavily search + CSP skill]
   Graph --> Finalize[Deterministic CDD outcome]
-  Finalize --> Review[Case Review skill]
+  Finalize --> Review[Case Assessment skill]
   Review --> UI
   Review --> Decision[Human reviewer decision]
 ```
 
-### CDD and Case Review flow
+### CDD and Case Assessment flow
 
 ```text
 Company + jurisdiction
   → registry profile, ownership, members, and documents
-  → ownership / AML / CSP risk flags with retained evidence
+  → Adverse News Screening after final ID&V extraction
+  → ownership / CSP risk flags with retained evidence
   → deterministic outcome: ready to complete or human review required
-  → Case Review skill
+  → Case Assessment skill
   → evidence summary, limitations, analyst actions, and draft RFIs
   → human reviewer records a decision
+```
+
+## CDD state data hierarchy
+
+The LangGraph pipeline carries one shared `CDDState` object. `findings` is the
+new neutral, evidence-referenced collection used by Adverse News Screening;
+`risk_flags` remains the legacy deterministic-check record and powers the current
+`case_status` UI/API summary. `case_assessment_summary` adds reviewer support
+without changing the underlying evaluation or severity.
+
+```text
+CDDState
+├─ metadata                          Customer inputs and KYC case identity
+│  ├─ customer
+│  │  ├─ name
+│  │  ├─ jurisdiction
+│  │  └─ registration_number
+│  └─ kyc_case
+│     ├─ case_id
+│     ├─ status_id, status, ready
+│     └─ selected_registry_match
+│
+├─ cdd                               Assembled due-diligence record
+│  ├─ started_at / completed_at
+│  ├─ company_business_profile
+│  │  └─ customer_static: company identity, status, activity, capital,
+│  │     registration dates, jurisdiction, registered address, and source
+│  ├─ ownership_and_control
+│  │  ├─ ubos, shareholders_over_10_percent, related_parties
+│  │  ├─ members: controlling members, shareholders, beneficial owners
+│  │  └─ org_chart
+│  ├─ individual_identity_verification
+│  │  └─ policy and required_individuals
+│  └─ documents
+│
+├─ documents                         Append-only document references
+│  └─ each: name, category, URL/path, source, collected_at
+│
+├─ evidence                          Append-only audit trail of gathered material
+│  └─ each: source, tool, description, relevance_tags, data, collected_at
+│
+├─ risk_flags                        Detailed deterministic findings
+│  ├─ ownership                       Ownership completeness and UBO identification
+│  ├─ csp_address                     Company-service-provider address indicators
+│  └─ each finding
+│     ├─ finding_id                   Stable category/subject identifier
+│     ├─ category                     ownership | csp_address
+│     ├─ evaluation                   yes | no | inconclusive
+│     ├─ severity                     none | low | medium | high
+│     ├─ description, source, subject, evidence
+│     └─ case_review (optional)       Confidence, potential impact, action/RFI
+│
+├─ case_status                       Compact UI/API projection of risk_flags
+│  ├─ cdd_generation                 not_started | in_progress | completed |
+│  │                                 incomplete | failed
+│  └─ risk_summary
+│     ├─ by_category
+│     │  └─ ownership / csp_address: yes, no, inconclusive counts
+│     └─ totals                       Yes, no, inconclusive across all categories
+│
+├─ case_assessment_summary               Reviewer decision-support brief
+│  ├─ status, executive_summary, key_evidence, limitations
+│  ├─ recommended_actions
+│  ├─ requests_for_information        Request, reason, linked risk/gap, priority
+│  ├─ finding_assessments             One confidence assessment per risk finding
+│  └─ evidence_index                  Evidence IDs and available source URLs
+│
+├─ document_requirements             ID&V/document workflow items
+│  └─ required person/entity, document type, status, available/uploaded reference
+│
+└─ messages                          Accumulated LangGraph user/assistant/tool messages
 ```
 
 ## Quick start
@@ -115,7 +189,7 @@ python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8000
 
 Open [http://localhost:8000](http://localhost:8000) and select **Load Demo
 Case**. The fixture populates the normal CDD, Documents, CSP evidence, and Case
-Review screens without any external request. Its Case Review is deliberately
+Assessment screens without any external request. Its Case Assessment is deliberately
 pre-generated demo content; use Live Mode to run the AI workflows against live
 evidence.
 
@@ -192,7 +266,7 @@ root-owned runtime `.env`; it never needs static AWS credentials.
 1. Run a full CDD case from the **CDD** tab.
 2. Review the company profile, ownership structure, ID&V requirements, and risk
    flags.
-3. Open **Case Review** to see the evidence synthesis and draft RFIs.
+3. Open **Case Assessment** to see the evidence synthesis and draft RFIs.
 4. Use **Refresh summary** after evidence changes.
 5. Record the reviewer decision and optional note.
 
@@ -213,22 +287,25 @@ The application uses structured AI in core product workflows:
   requirements.
 - **CSP assessment:** evaluates compact, cited web-search evidence using the
   [`csp-detector` skill](skills/csp-detector/SKILL.md).
-- **Case Review:** loads the [`case-review` skill](skills/case-review/SKILL.md)
+- **Adverse News Screening:** screens the company, directors, and UBOs after
+  ID&V extraction using the [`adverse-news-screening` skill](skills/adverse-news-screening/SKILL.md),
+  retaining web evidence and emitting validated neutral findings.
+- **Case Assessment:** loads the [`case-assessment` skill](skills/case-assessment/SKILL.md)
   and produces a strict JSON reviewer brief from the completed CDD object,
   retained risk flags, and tagged evidence.
 
 All structured workflows use strict JSON schemas. The default model is
 configurable through `OPENAI_MODEL` and the feature-specific environment
-variables. Case Review receives the deterministic outcome as non-editable
+variables. Case Assessment receives the deterministic outcome as non-editable
 context; it explains and prioritizes the case but cannot approve, reject,
 escalate, or clear risk flags.
 
 ## Responsible AI and limitations
 
 - This software is decision support, not an automated compliance decision.
-- A CSP indicator or AML signal is a review item, not proof of wrongdoing.
+- A CSP indicator is a review item, not proof of wrongdoing.
 - Search results and registry data may be incomplete, stale, unavailable, or
-  contradictory. The Case Review tab surfaces these limitations explicitly.
+  contradictory. The Case Assessment tab surfaces these limitations explicitly.
 - RFIs are drafts for a reviewer; the app does not contact customers.
 - Reviewers must verify source material, follow their organisation's policy, and
   protect personal data when operating the system.
@@ -241,7 +318,7 @@ Run the complete test suite:
 python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-The tests cover CDD graph behavior, CSP assessment, Case Review structured
+The tests cover CDD graph behavior, CSP assessment, Case Assessment structured
 output and guardrails, document processing, and pipeline progress.
 
 ### Verify a clean Demo Mode install
@@ -256,7 +333,7 @@ python -m uvicorn src.backend.app:app --port 8000
 ```
 
 Open the local app and select **Load Demo Case**. The CDD, Documents, CSP, and
-Case Review tabs should populate without sending an external request.
+Case Assessment tabs should populate without sending an external request.
 
 ## Troubleshooting
 
@@ -276,6 +353,6 @@ src/backend/       FastAPI routes and session handling
 src/agents/        LangGraph CDD pipeline and chat workflow
 src/tools/         KYC, Tavily, OpenAI, document, and assessment integrations
 src/frontend/      React workspace served by FastAPI
-skills/            Reusable CSP and Case Review instructions
+skills/            Reusable CSP and Case Assessment instructions
 tests/             Unit and workflow tests
 ```

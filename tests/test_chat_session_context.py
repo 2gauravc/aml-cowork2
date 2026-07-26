@@ -39,7 +39,10 @@ class ChatSessionContextTests(unittest.TestCase):
                     }
                 ],
             },
-            "graph_state": {"metadata": {"case_id": "sg-001"}},
+            "graph_state": {"metadata": {"case_id": "sg-001"}, "cdd": {"customer": {"name": "SC ENGINEERING PRIVATE LIMITED"}, "company_business_profile": {"customer_static": {}}}, "documents": [
+                {"document_id": "document:idv:claire:1", "purpose": "identity_verification", "subject": {"name": "Claire Wallace"}, "document_type": "passport", "status": "processed", "gap": {"status": "resolved"}, "storage": {"bucket": "documents", "key": "GB/claire-passport.pdf"}, "processing": {"classification": {"document_type": "passport", "confidence": 0.99}, "extract": {"full_name": "Claire Wallace", "document_number": "P123456"}}},
+                {"document_id": "document:idv:missing:1", "purpose": "identity_verification", "document_type": "passport", "status": "required", "gap": {"status": "outstanding"}}
+            ], "evidence": [{"source": "tool", "tool": "get_customer_static_by_name", "description": "Customer static profile"}, {"source": "graph", "tool": "extract_idv_documents", "description": "ID&V extraction"}], "risk_flags": [{"severity": "low"}], "findings": [_adverse_news_finding()]},
             "documents": [{"name": "registry.pdf"}],
             "document_requirements": [
                 {
@@ -64,6 +67,7 @@ class ChatSessionContextTests(unittest.TestCase):
                 },
             ],
             "risk_flags": [{"severity": "low"}],
+            "findings": [_adverse_news_finding()],
             "messages": [],
         }
 
@@ -72,8 +76,33 @@ class ChatSessionContextTests(unittest.TestCase):
 
         self.assertEqual(result["customer_name"], "SC ENGINEERING PRIVATE LIMITED")
         self.assertEqual(result["pipeline_status"], "awaiting_documents")
-        self.assertEqual(result["document_requirement_counts"], {"processed": 1, "not_found": 1})
+        self.assertEqual(result["document_status_counts"], {"processed": 1, "required": 1})
         self.assertIn("metadata", result["graph_state_keys"])
+        self.assertEqual(result["findings_count"], 1)
+        self.assertEqual(result["findings"][0]["category"], "adverse_news")
+
+    def test_context_answers_adverse_news_rfi_from_findings(self) -> None:
+        result = _execute_tool_call(
+            "answer_from_context",
+            {"question": "What RFI is recommended for Alex Chen's adverse news finding?"},
+            self.session,
+        )
+
+        self.assertIn("Provide the regulatory notice", result["answer"])
+
+    def test_session_inspection_handles_no_findings(self) -> None:
+        self.session["graph_state"].pop("findings")
+
+        result = _execute_tool_call("inspect_current_session", {}, self.session)
+
+        self.assertEqual(result["findings_count"], 0)
+        self.assertEqual(result["findings"], [])
+
+    def test_findings_are_described_to_the_chatbot(self) -> None:
+        inspect_tool = next(tool for tool in _tool_specs() if tool.name == "inspect_current_session")
+
+        self.assertIn("adverse_news", inspect_tool.description)
+        self.assertIn("neutral findings", inspect_tool.description)
 
     def test_evidence_tool_returns_retained_evidence_and_scope(self) -> None:
         result = _execute_tool_call("list_session_evidence", {}, self.session)
@@ -106,7 +135,7 @@ class ChatSessionContextTests(unittest.TestCase):
             self.session,
         )
 
-        self.assertEqual(result["document_status_counts"], {"processed": 1, "not_found": 1})
+        self.assertEqual(result["document_status_counts"], {"processed": 1, "required": 1})
         self.assertEqual(len(result["documents"]), 1)
         document = result["documents"][0]
         self.assertEqual(document["status"], "processed")
@@ -162,9 +191,10 @@ class ChatSessionContextTests(unittest.TestCase):
             "A normal chat completion.",
         )
 
+    @patch("src.agents.chat_graph.interpret_risk_severity_policy", return_value={"policy_name": "test", "source_path": "test", "rules": [{"category": "csp_address", "evaluation": "yes", "severity": "medium"}]})
     @patch("src.agents.chat_graph.evaluate_csp_address")
-    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp) -> None:
-        self.session["cdd"] = {
+    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp, _) -> None:
+        self.session["graph_state"]["cdd"] = {
             "company_business_profile": {
                 "customer_static": {
                     "name": "SC ENGINEERING PRIVATE LIMITED",
@@ -181,4 +211,23 @@ class ChatSessionContextTests(unittest.TestCase):
 
         evaluate_csp.assert_called_once_with("1 Example Street", company_name="SC ENGINEERING PRIVATE LIMITED")
         self.assertEqual(result["assessment"]["is_csp"], "yes")
-        self.assertEqual(self.session["risk_flags"][-1]["category"], "csp_address")
+        self.assertEqual(self.session["graph_state"]["risk_flags"][-1]["category"], "csp_address")
+
+
+def _adverse_news_finding() -> dict:
+    return {
+        "category": "adverse_news",
+        "summary": "Public reporting may concern the UBO; identity remains ambiguous.",
+        "subject": {"name": "Alex Chen"},
+        "confidence": {"level": "medium"},
+        "severity": {"level": "high"},
+        "recommended_action_rfi": {
+            "rfi": [
+                {
+                    "request": "Provide the regulatory notice and explain the reported matter.",
+                    "reason": "Confirm identity and status.",
+                    "priority": "high",
+                }
+            ]
+        },
+    }

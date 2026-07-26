@@ -1,6 +1,14 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const FALLBACK_JURISDICTIONS = ["GB", "HK", "US", "SG"];
+const ACCOUNT_OPENING_LOCATIONS = ["SG", "HK", "GB"];
+const TOOL_WORKSPACES = [
+  { id: "adverse-news", label: "Adverse News" },
+  { id: "csp", label: "CSP Detection" },
+  { id: "digital-footprint", label: "Digital Footprint" },
+  { id: "document-extraction", label: "Document Extraction" },
+  { id: "idv-document-generation", label: "ID&V Document Generation" },
+];
 
 function App() {
   const [sessionId, setSessionId] = useState(null);
@@ -13,13 +21,13 @@ function App() {
     },
   ]);
   const [customerName, setCustomerName] = useState("");
-  const [jurisdiction, setJurisdiction] = useState("GB");
+  const [jurisdiction, setJurisdiction] = useState("");
+  const [accountLocation, setAccountLocation] = useState("");
   const [jurisdictions, setJurisdictions] = useState(FALLBACK_JURISDICTIONS);
-  const [caseId, setCaseId] = useState("");
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
-  const [riskFlagRecords, setRiskFlagRecords] = useState([]);
-  const [caseReviewSummary, setCaseReviewSummary] = useState(null);
+  const [cddState, setCddState] = useState(null);
+  const [caseAssessmentSummary, setCaseAssessmentSummary] = useState(null);
   const [caseReviewDecision, setCaseReviewDecision] = useState(null);
   const [reviewDecisionDraft, setReviewDecisionDraft] = useState("request_information");
   const [reviewNote, setReviewNote] = useState("");
@@ -28,6 +36,10 @@ function App() {
   const [documentRequirements, setDocumentRequirements] = useState([]);
   const [generationStatus, setGenerationStatus] = useState("");
   const [activeWorkspace, setActiveWorkspace] = useState("cdd");
+  const [caseStatus, setCaseStatus] = useState({
+    cdd_generation: "not_started",
+  });
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [cspCompanyName, setCspCompanyName] = useState("");
   const [cspAddress, setCspAddress] = useState("");
@@ -36,6 +48,19 @@ function App() {
   const [cspAssessing, setCspAssessing] = useState(false);
   const [cspSkill, setCspSkill] = useState("");
   const [cspSkillLoading, setCspSkillLoading] = useState(false);
+  const [digitalFootprintForm, setDigitalFootprintForm] = useState({ company_name: "", jurisdiction: "", registration_number: "", known_domain: "", registered_address: "" });
+  const [digitalFootprintMode, setDigitalFootprintMode] = useState("independent");
+  const [digitalFootprintResult, setDigitalFootprintResult] = useState(null);
+  const [digitalFootprintError, setDigitalFootprintError] = useState("");
+  const [digitalFootprintAssessing, setDigitalFootprintAssessing] = useState(false);
+  const [digitalFootprintSkill, setDigitalFootprintSkill] = useState("");
+  const [digitalFootprintSkillLoading, setDigitalFootprintSkillLoading] = useState(false);
+  const [digitalFootprintAttaching, setDigitalFootprintAttaching] = useState(false);
+  const [adverseNewsMode, setAdverseNewsMode] = useState("independent");
+  const [adverseNewsResult, setAdverseNewsResult] = useState(null);
+  const [adverseNewsNames, setAdverseNewsNames] = useState("");
+  const [adverseNewsError, setAdverseNewsError] = useState("");
+  const [adverseNewsRunning, setAdverseNewsRunning] = useState(false);
   const [extractionFile, setExtractionFile] = useState(null);
   const [extractionResult, setExtractionResult] = useState(null);
   const [extractionError, setExtractionError] = useState("");
@@ -59,32 +84,56 @@ function App() {
   const [pipelineProgress, setPipelineProgress] = useState(null);
   const [pipelineStatus, setPipelineStatus] = useState(null);
   const [showJson, setShowJson] = useState(false);
+  const [jsonCopyStatus, setJsonCopyStatus] = useState("");
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
   const uploadInputRef = useRef(null);
   const extractionInputRef = useRef(null);
   const chatLauncherRef = useRef(null);
   const chatCloseRef = useRef(null);
+  const toolsMenuRef = useRef(null);
+  const toolsMenuButtonRef = useRef(null);
+  const cddRunEpochRef = useRef(0);
 
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
   const idv = cdd?.individual_identity_verification || {};
-  const risks = useMemo(() => riskFlags(riskFlagRecords), [riskFlagRecords]);
   const capital = capitalDisplay(profile);
   const fieldSources = profile.source || {};
+  const principalBusinessActivity = latestAssessment(cddState, "digital_footprint")?.digital_business_profile?.business_activity || "";
   const cddMetadata = {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
-    status: cdd ? cddStatusLabel(cdd.status) : "-",
+    generationStatus: caseStatus.cdd_generation || "not_started",
   };
+  const formattedCddState = cddState ? JSON.stringify(cddState, null, 2) : "";
   const pipelineStatusText = pipelineProgress
     ? formatPipelineProgress(pipelineProgress)
     : latestAssistantMessage(messages) || "Setting up";
   const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
+  const missingDocumentRequirements = useMemo(
+    () => documentRequirements.filter((requirement) => (requirement.gap || {}).status === "outstanding"),
+    [documentRequirements],
+  );
+  const cddPausedForDocuments = pipelineStatus === "awaiting_documents";
+  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review" || (activeWorkspace === "adverse-news" && adverseNewsMode === "cdd") || (activeWorkspace === "digital-footprint" && digitalFootprintMode === "cdd");
+  const activeToolWorkspace = TOOL_WORKSPACES.some((tool) => tool.id === activeWorkspace);
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
     [documents],
   );
+
+  async function copyCddStateJson() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard access is unavailable");
+      }
+      await navigator.clipboard.writeText(formattedCddState);
+      setJsonCopyStatus("Copied JSON to clipboard.");
+    } catch {
+      setJsonCopyStatus("Unable to copy JSON. Please select and copy it manually.");
+    }
+  }
 
   useEffect(() => {
     let ignore = false;
@@ -95,9 +144,6 @@ function App() {
         const data = await readJsonResponse(response, "Jurisdictions request failed");
         if (!ignore && Array.isArray(data.jurisdictions) && data.jurisdictions.length) {
           setJurisdictions(data.jurisdictions);
-          if (!data.jurisdictions.includes(jurisdiction)) {
-            setJurisdiction(data.jurisdictions[0]);
-          }
         }
       } catch (err) {
         if (!ignore) setError(err.message);
@@ -131,8 +177,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (activeWorkspace !== "cdd") setChatOpen(false);
-  }, [activeWorkspace]);
+    if (!chatWorkspaceActive) setChatOpen(false);
+  }, [chatWorkspaceActive]);
 
   useEffect(() => {
     if (!chatOpen) return undefined;
@@ -146,10 +192,30 @@ function App() {
   useEffect(() => {
     if (chatOpen) {
       chatCloseRef.current?.focus();
-    } else if (activeWorkspace === "cdd") {
+    } else if (chatWorkspaceActive) {
       chatLauncherRef.current?.focus();
     }
-  }, [activeWorkspace, chatOpen]);
+  }, [chatOpen, chatWorkspaceActive]);
+
+  useEffect(() => {
+    if (!toolsMenuOpen) return undefined;
+
+    const closeMenu = (event) => {
+      if (event.type === "keydown" && event.key === "Escape") {
+        setToolsMenuOpen(false);
+        toolsMenuButtonRef.current?.focus();
+      } else if (event.type === "mousedown" && !toolsMenuRef.current?.contains(event.target)) {
+        setToolsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", closeMenu);
+    document.addEventListener("mousedown", closeMenu);
+    return () => {
+      document.removeEventListener("keydown", closeMenu);
+      document.removeEventListener("mousedown", closeMenu);
+    };
+  }, [toolsMenuOpen]);
 
   useEffect(() => {
     if (!sessionId || !documents.length) return;
@@ -164,9 +230,8 @@ function App() {
   useEffect(() => {
     if (!sessionId) return;
     documentRequirements.forEach((requirement) => {
-      const document = requirement.cache_document;
-      const key = documentKey(document);
-      if (key && !documentLinks[key]) refreshDocumentLink(document);
+      const key = documentKey(requirement);
+      if (key && !documentLinks[key]) refreshDocumentLink(requirement);
     });
   }, [sessionId, documentRequirements, documentLinks]);
 
@@ -174,14 +239,17 @@ function App() {
     setSessionId(data.session_id);
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
-    setRiskFlagRecords(data.risk_flags || []);
-    setCaseReviewSummary(data.case_review_summary || null);
+    setCddState(data.cdd_state || null);
+    setCaseStatus(data.case_status || { cdd_generation: "not_started" });
+    setCaseAssessmentSummary(data.case_assessment_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
     setDocuments(data.documents || []);
-    setDocumentRequirements(data.document_requirements || []);
+    setDocumentRequirements((data.documents || []).filter((document) => document.purpose));
     setDocumentLinks((current) => {
-      const keys = new Set((data.documents || []).map((document) => documentKey(document)));
+      const keys = new Set([
+        ...(data.documents || []).map((document) => documentKey(document)),
+      ].filter(Boolean));
       return Object.fromEntries(
         Object.entries(current).filter(([key]) => keys.has(key)),
       );
@@ -189,11 +257,27 @@ function App() {
     setPdfUrl(data.pdf_url || null);
     if (data.customer_name) setCustomerName(data.customer_name);
     if (data.jurisdiction) setJurisdiction(data.jurisdiction);
-    if (data.case_id) setCaseId(String(data.case_id));
     setPipelineProgress(data.pipeline_progress || null);
     setPipelineStatus(data.pipeline_status || data.status || null);
     if (typeof data.demo_mode === "boolean") setDemoMode(data.demo_mode);
     if (data.error) setError(data.error);
+  }
+
+  function resetCddRunDisplay() {
+    cddRunEpochRef.current += 1;
+    setCdd(null);
+    setCddState(null);
+    setCaseStatus({ cdd_generation: "in_progress" });
+    setCaseAssessmentSummary(null);
+    setCaseReviewDecision(null);
+    setReviewNote("");
+    setDocuments([]);
+    setDocumentRequirements([]);
+    setDocumentLinks({});
+    setRefreshingDocumentKey(null);
+    setPdfUrl(null);
+    setPipelineProgress(null);
+    setPipelineStatus("running");
   }
 
   async function sendChat() {
@@ -230,7 +314,7 @@ function App() {
   }
 
   async function runPipeline({ generatePdf = false } = {}) {
-    if (!demoMode && (!customerName.trim() || !jurisdiction.trim())) return;
+    if (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation)) return;
     setPipelineLoading(true);
     setError(null);
     try {
@@ -241,11 +325,12 @@ function App() {
           session_id: sessionId,
           customer_name: customerName.trim(),
           jurisdiction: jurisdiction.trim(),
-          case_id: caseId.trim() || null,
+          account_location: accountLocation,
           generate_pdf: generatePdf,
         }),
       });
       const data = await readJsonResponse(response, "CDD pipeline failed");
+      if (data.status === "running") resetCddRunDisplay();
       applyResponse(data);
       if (data.status === "running") {
         await pollSession(data.session_id);
@@ -308,12 +393,84 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      applyResponse(await readJsonResponse(response, "Case review refresh failed"));
+      applyResponse(await readJsonResponse(response, "Case Assessment refresh failed"));
     } catch (err) {
       setError(err.message);
     } finally {
       setCaseReviewLoading(false);
     }
+  }
+
+  async function runCDDCompleteness() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/cdd-completeness/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "CDD Completeness check failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
+  async function runEvidenceQuality() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/evidence-quality/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Evidence Quality check failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
+  async function runOtherRiskFactors() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/other-risk-factors/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Other Risk Factors check failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
+  async function runShellCompanyRisk() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true); setError(null);
+    try {
+      const response = await fetch("/api/shell-company-risk/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) });
+      applyResponse(await readJsonResponse(response, "Shell Company Risk check failed"));
+    } catch (err) { setError(err.message); } finally { setCaseReviewLoading(false); }
+  }
+
+  async function runRiskRating() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true); setError(null);
+    try {
+      const response = await fetch("/api/risk-rating/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) });
+      applyResponse(await readJsonResponse(response, "Risk Rating assessment failed"));
+    } catch (err) { setError(err.message); } finally { setCaseReviewLoading(false); }
   }
 
   async function saveCaseReviewDecision() {
@@ -341,6 +498,8 @@ function App() {
   async function refreshDocumentLink(document) {
     const key = documentKey(document);
     if (!sessionId || !key) return;
+    const runEpoch = cddRunEpochRef.current;
+    const activeSessionId = sessionId;
     setRefreshingDocumentKey(key);
     setError(null);
     try {
@@ -353,11 +512,13 @@ function App() {
         }),
       });
       const data = await readJsonResponse(response, "Document link refresh failed");
-      setDocumentLinks((current) => ({ ...current, [key]: data }));
+      if (runEpoch === cddRunEpochRef.current && activeSessionId === sessionId) {
+        setDocumentLinks((current) => ({ ...current, [key]: data }));
+      }
     } catch (err) {
-      setError(err.message);
+      if (runEpoch === cddRunEpochRef.current) setError(err.message);
     } finally {
-      setRefreshingDocumentKey(null);
+      if (runEpoch === cddRunEpochRef.current) setRefreshingDocumentKey(null);
     }
   }
 
@@ -407,18 +568,18 @@ function App() {
 
   async function generateMissingDocuments() {
     if (!sessionId) return;
-    const missing = documentRequirements.filter((requirement) => requirement.status === "not_found");
+    const missing = documentRequirements.filter((requirement) => (requirement.gap || {}).status === "outstanding");
     if (!missing.length) return;
     setLoading(true);
     setError(null);
     try {
       for (const requirement of missing) {
-        setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${requirement.entity_name}...`);
+        setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${(requirement.subject || {}).name}...`);
         await new Promise((resolve) => window.requestAnimationFrame(resolve));
         const response = await fetch("/api/documents/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, requirement_ids: [requirement.id] }),
+          body: JSON.stringify({ session_id: sessionId, requirement_ids: [requirement.document_id] }),
         });
         applyResponse(await readJsonResponse(response, "Document generation failed"));
       }
@@ -426,6 +587,12 @@ function App() {
     } catch (err) {
       setError(err.message);
       setGenerationStatus("Document generation failed.");
+      try {
+        const response = await fetch(`/api/session/${sessionId}`);
+        applyResponse(await readJsonResponse(response, "Unable to refresh document status"));
+      } catch (refreshError) {
+        setError(`${err.message} Unable to refresh document status: ${refreshError.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -464,6 +631,101 @@ function App() {
       setCspError(err.message);
     } finally {
       setCspAssessing(false);
+    }
+  }
+
+  async function loadDigitalFootprintSkill() {
+    if (digitalFootprintSkill || digitalFootprintSkillLoading) return;
+    setDigitalFootprintSkillLoading(true);
+    try {
+      const response = await fetch("/api/digital-footprint/skill");
+      const data = await readJsonResponse(response, "Unable to load Digital Footprint skill");
+      setDigitalFootprintSkill(data.skill || "");
+    } catch (err) {
+      setDigitalFootprintError(err.message);
+    } finally {
+      setDigitalFootprintSkillLoading(false);
+    }
+  }
+
+  function updateDigitalFootprintForm(field, value) {
+    setDigitalFootprintForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function assessDigitalFootprint() {
+    if (!digitalFootprintForm.company_name.trim()) return;
+    setDigitalFootprintAssessing(true);
+    setDigitalFootprintError("");
+    setDigitalFootprintResult(null);
+    try {
+      const response = await fetch("/api/digital-footprint/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(Object.entries(digitalFootprintForm).map(([key, value]) => [key, value.trim() || null]))),
+      });
+      setDigitalFootprintResult(await readJsonResponse(response, "Digital Footprint assessment failed"));
+    } catch (err) {
+      setDigitalFootprintError(err.message);
+    } finally {
+      setDigitalFootprintAssessing(false);
+    }
+  }
+
+  function selectDigitalFootprintMode(mode) {
+    setDigitalFootprintMode(mode);
+    setDigitalFootprintError("");
+    if (mode === "independent") setDigitalFootprintResult(null);
+  }
+
+  function loadDigitalFootprintFromCdd() {
+    setDigitalFootprintMode("cdd");
+    setDigitalFootprintResult(digitalFootprintRecords(cddState));
+    setDigitalFootprintError("");
+    setActiveWorkspace("digital-footprint");
+  }
+
+  async function attachDigitalFootprint() {
+    if (!sessionId || !cdd || !digitalFootprintResult) return;
+    setDigitalFootprintAttaching(true);
+    setDigitalFootprintError("");
+    try {
+      const response = await fetch("/api/digital-footprint/attach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, result: digitalFootprintResult }),
+      });
+      applyResponse(await readJsonResponse(response, "Digital Footprint attachment failed"));
+    } catch (err) {
+      setDigitalFootprintError(err.message);
+    } finally {
+      setDigitalFootprintAttaching(false);
+    }
+  }
+
+  function loadAdverseNewsFromCdd() {
+    setAdverseNewsMode("cdd");
+    setAdverseNewsResult(adverseNewsRecords(cddState));
+    setAdverseNewsError("");
+    setActiveWorkspace("adverse-news");
+  }
+
+  async function assessIndependentAdverseNews() {
+    const entity_names = adverseNewsNames.split(/[\n,]/).map((name) => name.trim()).filter(Boolean);
+    if (!entity_names.length) return;
+    setAdverseNewsRunning(true);
+    setAdverseNewsError("");
+    setAdverseNewsResult(null);
+    try {
+      const response = await fetch("/api/adverse-news/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_names }),
+      });
+      setAdverseNewsResult(await readJsonResponse(response, "Adverse-news screening failed"));
+    } catch (err) {
+      setAdverseNewsError(err.message);
+    } finally {
+      setAdverseNewsRunning(false);
     }
   }
 
@@ -559,61 +821,62 @@ function App() {
 
       <div className="workspace">
         <main className="main">
-          <div className="workspace-tabs" role="tablist" aria-label="Workspace">
+          <nav className="workspace-tabs" aria-label="Workspace">
             <button
               className={`workspace-tab ${activeWorkspace === "cdd" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "cdd"}
               onClick={() => setActiveWorkspace("cdd")}
             >
-              CDD
+              CDD Maker
+            </button>
+            <button
+              className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
+              onClick={() => setActiveWorkspace("case-review")}
+            >
+              CDD Checker
             </button>
             <button
               className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "generation"}
               onClick={() => setActiveWorkspace("generation")}
             >
               Documents
             </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "case-review"}
-              onClick={() => setActiveWorkspace("case-review")}
-            >
-              Case Review
-            </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "csp" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "csp"}
-              onClick={() => setActiveWorkspace("csp")}
-            >
-              CSP Detection
-            </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "document-extraction" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "document-extraction"}
-              onClick={() => setActiveWorkspace("document-extraction")}
-            >
-              Document Extraction
-            </button>
-            <button
-              className={`workspace-tab ${activeWorkspace === "idv-document-generation" ? "active" : ""}`}
-              role="tab"
-              aria-selected={activeWorkspace === "idv-document-generation"}
-              onClick={() => setActiveWorkspace("idv-document-generation")}
-            >
-              ID&V Document Generation
-            </button>
-          </div>
+            <div className="workspace-tools" ref={toolsMenuRef}>
+              <button
+                className={`workspace-tab workspace-tools-trigger ${activeToolWorkspace ? "active" : ""}`}
+                ref={toolsMenuButtonRef}
+                aria-expanded={toolsMenuOpen}
+                aria-controls="workspace-tools-menu"
+                aria-haspopup="menu"
+                onClick={() => setToolsMenuOpen((open) => !open)}
+              >
+                Tools <span aria-hidden="true">▾</span>
+              </button>
+              {toolsMenuOpen && (
+                <div className="workspace-tools-menu" id="workspace-tools-menu" role="menu">
+                  {TOOL_WORKSPACES.map((tool) => (
+                    <button
+                      key={tool.id}
+                      className={activeWorkspace === tool.id ? "active" : ""}
+                      role="menuitem"
+                      onClick={() => {
+                        setActiveWorkspace(tool.id);
+                        if (tool.id === "adverse-news") setAdverseNewsMode("independent");
+                        if (tool.id === "digital-footprint") selectDigitalFootprintMode("independent");
+                        setToolsMenuOpen(false);
+                      }}
+                    >
+                      {tool.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </nav>
 
-          <div className="workspace-tab-panel" role="tabpanel">
+          <div className="workspace-tab-panel">
             {activeWorkspace === "cdd" ? (
               <>
-          <Section title="Run CDD Worker">
+          <Section title="Run CDD Maker">
             <div className="pipeline-form">
               <input
                 aria-label="Company name"
@@ -626,26 +889,44 @@ function App() {
                 value={jurisdiction}
                 onChange={(event) => setJurisdiction(event.target.value)}
               >
+                <option value="" disabled>Jurisdiction</option>
                 {jurisdictions.map((code) => (
                   <option value={code} key={code}>{code}</option>
                 ))}
               </select>
-              <input
-                aria-label="Case ID"
-                placeholder="Case ID optional"
-                value={caseId}
-                onChange={(event) => setCaseId(event.target.value)}
-              />
+              <select
+                aria-label="Account opening location"
+                value={accountLocation}
+                onChange={(event) => setAccountLocation(event.target.value)}
+              >
+                <option value="" disabled>AO Location</option>
+                {ACCOUNT_OPENING_LOCATIONS.map((code) => (
+                  <option value={code} key={code}>{code}</option>
+                ))}
+              </select>
               <button
-                disabled={pipelineLoading || (!demoMode && !customerName.trim())}
+                disabled={pipelineLoading || (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation))}
                 onClick={() => runPipeline()}
               >
-                Run Full CDD Pipeline
+                Run CDD Maker
               </button>
               {demoMode && <button className="secondary" disabled={pipelineLoading} onClick={loadDemoCase}>Load Demo Case</button>}
             </div>
             {pipelineLoading && <p className="empty">{pipelineStatusText}</p>}
           </Section>
+
+          {cddPausedForDocuments && (
+            <section className="pipeline-paused-callout" aria-live="polite">
+              <div>
+                <strong>CDD paused — documents required</strong>
+                <p>
+                  {`${missingDocumentRequirements.length} required ID&V ${missingDocumentRequirements.length === 1 ? "document is" : "documents are"} unavailable.`}
+                  {" Generate the missing documents or upload them to continue the CDD pipeline."}
+                </p>
+              </div>
+              <button onClick={() => setActiveWorkspace("generation")}>Review required documents</button>
+            </section>
+          )}
 
           <div className="actions">
             <button disabled={!cdd || loading || pipelineRunning} onClick={generatePdf}>Generate PDF</button>
@@ -670,12 +951,12 @@ function App() {
               <strong>{cddMetadata.date}</strong>
             </div>
             <div className="metadata-item">
-              <span>CDD Status</span>
-              <strong>{cddMetadata.status}</strong>
+              <span>CDD Generation</span>
+              <strong>{generationStatusLabel(cddMetadata.generationStatus)}</strong>
             </div>
           </section>
 
-          <Section title="About the Customer">
+          <Section title="Customer Business Profile">
             <div className="grid">
               <Field label="Name" value={profile.name || customerName} source={fieldSources.name} />
               <Field
@@ -702,6 +983,7 @@ function App() {
                 value={profile.registered_address?.full_address}
                 source={fieldSources.registered_address}
               />
+              <Field className="field-full-width" label="Principal Business Activity" value={principalBusinessActivity} source={{ source: "Digital Footprint", field: "digital_business_profile.business_activity" }} />
             </div>
           </Section>
 
@@ -766,27 +1048,19 @@ function App() {
             />
           </Section>
 
-          <Section title="Risk Flags">
-            {risks.length ? (
-              <div className="risk-list">
-                {risks.map((risk, index) => (
-                  <div className="risk" key={`${risk.category || "risk"}-${index}`}>
-                    <div className="risk-content">
-                      <strong>{riskPresentation(risk).title}</strong>
-                      <span>{`Evaluation: ${riskPresentation(risk).evaluation}. ${riskPresentation(risk).summary}`}</span>
-                    </div>
-                    <RiskEvidenceTooltip risk={risk} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="empty">No open risk flags in the current CDD object.</p>
-            )}
-          </Section>
+          <AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />
 
-          {showJson && cdd && (
-            <Section title="CDD JSON">
-              <pre className="json-view">{JSON.stringify(cdd, null, 2)}</pre>
+          <DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />
+
+          {showJson && cddState && (
+            <Section title="CDDState JSON">
+              <div className="json-view-header">
+                <button className="secondary" onClick={copyCddStateJson} aria-label="Copy CDDState JSON to clipboard">
+                  Copy JSON
+                </button>
+                <span className="json-copy-status" role="status" aria-live="polite">{jsonCopyStatus}</span>
+              </div>
+              <pre className="json-view">{formattedCddState}</pre>
             </Section>
           )}
               </>
@@ -795,6 +1069,7 @@ function App() {
                 requirements={documentRequirements}
                 links={documentLinks}
                 loading={loading}
+                error={error}
                 generationStatus={generationStatus}
                 onGenerate={generateMissingDocuments}
                 onProcess={() => documentAction("/api/documents/process")}
@@ -806,13 +1081,19 @@ function App() {
               />
             ) : activeWorkspace === "case-review" ? (
               <CaseReview
-                summary={caseReviewSummary}
+                cddState={cddState}
+                summary={caseAssessmentSummary}
                 decision={caseReviewDecision}
                 decisionDraft={reviewDecisionDraft}
                 note={reviewNote}
                 loading={caseReviewLoading}
                 hasCdd={Boolean(cdd)}
                 onRefresh={refreshCaseReview}
+                onRunCompleteness={runCDDCompleteness}
+                onRunEvidenceQuality={runEvidenceQuality}
+                onRunOtherRiskFactors={runOtherRiskFactors}
+                onRunShellCompanyRisk={runShellCompanyRisk}
+                onRunRiskRating={runRiskRating}
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
@@ -832,6 +1113,39 @@ function App() {
                 onSkillToggle={(open) => { if (open) loadCspSkill(); }}
                 onAssess={assessCsp}
                 demoMode={demoMode}
+              />
+            ) : activeWorkspace === "digital-footprint" ? (
+              <DigitalFootprint
+                mode={digitalFootprintMode}
+                form={digitalFootprintForm}
+                result={digitalFootprintResult}
+                error={digitalFootprintError}
+                assessing={digitalFootprintAssessing}
+                skill={digitalFootprintSkill}
+                skillLoading={digitalFootprintSkillLoading}
+                onChange={updateDigitalFootprintForm}
+                onSkillToggle={(open) => { if (open) loadDigitalFootprintSkill(); }}
+                onAssess={assessDigitalFootprint}
+                canLoadFromCdd={Boolean(cddState)}
+                onLoadFromCdd={loadDigitalFootprintFromCdd}
+                onModeChange={selectDigitalFootprintMode}
+                canAttach={Boolean(sessionId && cdd)}
+                attaching={digitalFootprintAttaching}
+                onAttach={attachDigitalFootprint}
+                demoMode={demoMode}
+              />
+            ) : activeWorkspace === "adverse-news" ? (
+              <AdverseNewsTool
+                mode={adverseNewsMode}
+                result={adverseNewsResult}
+                names={adverseNewsNames}
+                error={adverseNewsError}
+                running={adverseNewsRunning}
+                canLoadFromCdd={Boolean(cddState)}
+                onLoadFromCdd={loadAdverseNewsFromCdd}
+                onModeChange={setAdverseNewsMode}
+                onNamesChange={setAdverseNewsNames}
+                onAssess={assessIndependentAdverseNews}
               />
             ) : activeWorkspace === "document-extraction" ? (
               <DocumentExtraction
@@ -858,7 +1172,7 @@ function App() {
           </div>
         </main>
 
-        {activeWorkspace === "cdd" && (
+        {chatWorkspaceActive && (
           <>
             <button
               className="chat-launcher"
@@ -927,6 +1241,7 @@ function Section({ title, children }) {
 }
 
 function CaseReview({
+  cddState,
   summary,
   decision,
   decisionDraft,
@@ -934,6 +1249,11 @@ function CaseReview({
   loading,
   hasCdd,
   onRefresh,
+  onRunCompleteness,
+  onRunEvidenceQuality,
+  onRunOtherRiskFactors,
+  onRunShellCompanyRisk,
+  onRunRiskRating,
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
@@ -941,22 +1261,24 @@ function CaseReview({
 }) {
   if (!hasCdd) {
     return (
-      <Section title="Case Review">
+      <Section title="Case Assessment">
         <p className="empty">Run a CDD case to generate an evidence-grounded reviewer brief.</p>
       </Section>
     );
   }
 
-  const humanReviewRequired = summary?.outcome !== "ready_to_complete";
   const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
   return (
     <>
-      <Section title="Case Review">
-        <div className="case-review-header">
+      <RiskFlags findings={cddState?.findings || []} evidence={cddState?.evidence || []} assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
+      <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
+      <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
+      <ShellCompanyRisk assessments={assessmentsByType(cddState, "shell_company_risk")} findings={(cddState?.findings || []).filter((finding) => finding.category === "shell_company_risk")} riskFlags={(cddState?.risk_flags || []).filter((flag) => flag.category === "csp_address")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunShellCompanyRisk} />
+      <OtherRiskFactors assessments={assessmentsByType(cddState, "other_risk_factors")} findings={(cddState?.findings || []).filter((finding) => finding.category === "other_risk_factors")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunOtherRiskFactors} />
+
+      <Section title="Case Assessment">
+        <div className="case-assessment-header">
           <div>
-            <span className={`case-outcome ${humanReviewRequired ? "review" : "complete"}`}>
-              {humanReviewRequired ? "Human review required" : "Ready to complete"}
-            </span>
             <p className="review-disclaimer">Decision support only. A human reviewer remains responsible for the case decision.</p>
           </div>
           <button disabled={loading || demoMode} onClick={onRefresh}>
@@ -964,10 +1286,10 @@ function CaseReview({
           </button>
         </div>
         {!summary ? (
-          <p className="empty">No case review has been generated yet.</p>
+          <p className="empty">No case assessment has been generated yet.</p>
         ) : (
           <>
-            {summary.status === "unavailable" && <p className="risk">The generated review is unavailable. The recorded CDD evidence remains available for review.</p>}
+            {summary.status === "unavailable" && <p className="risk">The generated assessment is unavailable. The recorded CDD evidence remains available for review.</p>}
             <h3>Executive summary</h3>
             <p>{summary.executive_summary}</p>
           </>
@@ -1047,6 +1369,149 @@ function CaseReview({
       </Section>
     </>
   );
+}
+
+function RiskFlags({ findings, evidence, assessments, loading, demoMode, onRun }) {
+  const rating = assessments[assessments.length - 1];
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  return <Section title="Risk Flags"><div className="case-assessment-header"><div><h3>Risk Rating</h3>{rating ? <div className="adverse-news-summary"><strong>{statusLabel(rating.rating)}</strong><span>{rating.summary || "No rationale was recorded."}</span><span>{`Monitoring: ${rating.monitoring_posture || "Not recorded."}`}</span>{rating.matched_criteria?.length ? <span>{`Matched criteria: ${rating.matched_criteria.join("; ")}`}</span> : null}{rating.limitations?.length ? <span>{`Limitations: ${rating.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No Risk Rating assessment is available.</p>}</div><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Assessing…" : (rating ? "Re-run Risk Rating" : "Run Risk Rating")}</button></div><h3>Findings</h3>{findings.length ? <div className="review-list">{findings.map((finding) => <div className="review-item" key={finding.finding_id}><strong>{finding.title || finding.category || "Finding"}</strong><p>{finding.summary || "No summary was recorded."}</p><small>{`Confidence: ${statusLabel(finding.confidence?.level)} · Severity: ${statusLabel(finding.severity?.level)}`}</small>{finding.recommended_action_rfi?.internal_actions?.length ? <p className="risk">{`Recommended action: ${finding.recommended_action_rfi.internal_actions.join(" ")}`}</p> : null}{finding.recommended_action_rfi?.rfi?.length ? <BulletList items={finding.recommended_action_rfi.rfi.map((item) => `${item.request} — ${item.reason} (${item.priority})`)} /> : null}{(finding.relevant_evidence_ids || []).length ? <EvidenceReview evidence={finding.relevant_evidence_ids.map((id) => evidenceById[id] || { evidence_id: id, description: "Referenced evidence is not currently retained." })} /> : null}<small>{`Source: ${finding.source?.producer_name || "Not recorded"}${finding.source?.created_at ? ` · ${formatDateTime(finding.source.created_at)}` : ""}`}</small></div>)}</div> : <p className="empty">No canonical findings are currently recorded.</p>}</Section>;
+}
+
+function CDDCompleteness({ assessments, findings, loading, demoMode, onRun }) {
+  if (!assessments.length) {
+    return <Section title="CDD Completeness"><p className="empty">No completeness assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run CDD Completeness Check"}</button></Section>;
+  }
+  return (
+    <Section title="CDD Completeness">
+      <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run CDD Completeness Check"}</button>
+      <div className="review-list">
+        {assessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+          const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
+          return <div className="review-item" key={assessment.assessment_id}>
+            <strong>{assessment.title}</strong>
+            <p>{assessment.summary}</p>
+            {assessment.detail?.missing_items?.length ? <small>{`Missing: ${assessment.detail.missing_items.join(", ")}`}</small> : null}
+            {finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>Complete — no finding raised.</small>}
+          </div>;
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function EvidenceQuality({ assessments, findings, evidence, loading, demoMode, onRun }) {
+  if (!assessments.length) {
+    return <Section title="Evidence Quality"><p className="empty">No Evidence Quality assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Evidence Quality Check"}</button></Section>;
+  }
+  return (
+    <Section title="Evidence Quality">
+      <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Evidence Quality Check"}</button>
+      <div className="review-list">
+        {EVIDENCE_SECTION_ORDER.map((section) => {
+          const sectionAssessments = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section);
+          if (!sectionAssessments.length) return null;
+          return <div className="evidence-quality-section" key={section}>
+            <h3>{EVIDENCE_SECTION_LABELS[section]}</h3>
+            {sectionAssessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+          const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
+          const sources = assessment.selected_evidence || [];
+          const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+          return <div className="review-item" key={assessment.assessment_id}>
+            <strong>{assessment.title}</strong>
+            <p>{assessment.summary}</p>
+            <div className="evidence-quality-dimensions">
+              {(assessment.definition?.dimensions || []).map((dimension) => {
+                const result = assessment.dimensions?.[dimension.key] || {};
+                return <div className="evidence-quality-dimension" key={dimension.key}>
+                  <div><span className="evidence-quality-tag">{dimension.label}</span><span className="evidence-quality-outcome">{evidenceQualityOutcomeLabel(result.outcome)}</span></div>
+                  <small>{result.rationale || "No explanation was recorded."}</small>
+                </div>;
+              })}
+            </div>
+            {sources.length ? <EvidenceReview evidence={sources.map((item) => evidenceById[item.evidence_id] || item)} /> : null}
+            {finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}
+          </div>;
+            })}
+          </div>;
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function OtherRiskFactors({ assessments, findings, evidence, loading, demoMode, onRun }) {
+  if (!assessments.length) {
+    return <Section title="Other Risk Factors"><p className="empty">No Other Risk Factors assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Other Risk Factors Check"}</button></Section>;
+  }
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  return <Section title="Other Risk Factors">
+    <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Other Risk Factors Check"}</button>
+    <div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
+      const group = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section);
+      if (!group.length) return null;
+      return <div className="evidence-quality-section" key={section}><h3>{EVIDENCE_SECTION_LABELS[section]}</h3>{group.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+        const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
+        const reviewed = (assessment.selected_evidence || []).map((item) => evidenceById[item.evidence_id] || item);
+        const upstreamCount = (assessment.upstream_assessment_ids || []).length + (assessment.upstream_finding_ids || []).length;
+        const indicators = assessment.detail?.matched_indicators || [];
+        return <div className="review-item" key={assessment.assessment_id}><strong>{assessment.title}</strong><p>{assessment.summary}</p>{indicators.map((indicator, index) => <small key={`${indicator.evidence_id}-${indicator.field_path}-${index}`}>{`Matched evidence: ${indicator.evidence_id} · ${indicator.field_path} · ${indicator.value}`}</small>)}{upstreamCount ? <small>{`Related retained screening records: ${upstreamCount}.`}</small> : null}{reviewed.length ? <EvidenceReview evidence={reviewed} /> : null}{finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}</div>;
+      })}</div>;
+    })}</div>
+  </Section>;
+}
+
+function ShellCompanyRisk({ assessments, findings, riskFlags, evidence, loading, demoMode, onRun }) {
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  const cspEvidence = evidence.filter((item) => item.tool === "csp_address_assessment");
+  if (!assessments.length && !riskFlags.length) return <Section title="Shell Company Risk"><p className="empty">No Shell Company Risk assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Shell Company Risk Check"}</button></Section>;
+  return <Section title="Shell Company Risk"><button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Shell Company Risk Check"}</button><div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
+    const group = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section); if (!group.length) return null;
+    return <div className="evidence-quality-section" key={section}><h3>{EVIDENCE_SECTION_LABELS[section]}</h3>{group.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => { const finding = findings.find((item) => item.assessment_id === assessment.assessment_id); const reviewed = (assessment.selected_evidence || []).map((item) => evidenceById[item.evidence_id] || item); return <div className="review-item" key={assessment.assessment_id}><strong>{assessment.title}</strong><p>{assessment.summary}</p>{reviewed.length ? <EvidenceReview evidence={reviewed} /> : null}{finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}</div>; })}</div>;
+  })}<div className="evidence-quality-section"><h3>Screening</h3><strong>CSP Address</strong>{riskFlags.length ? riskFlags.map((flag) => <div className="review-item" key={flag.finding_id}><p>{flag.description || "CSP assessment recorded."}</p><small>{`Outcome: ${flag.evaluation || "inconclusive"} · severity: ${flag.severity || "not recorded"}. This is the existing CSP record; no duplicate Shell Company Risk finding was created.`}</small></div>) : <p className="empty">No upstream CSP assessment is available.</p>}{cspEvidence.length ? <EvidenceReview evidence={cspEvidence} /> : null}</div></div></Section>;
+}
+
+const EVIDENCE_SECTION_ORDER = ["customer_business_profile", "ownership_and_control", "identity_verification", "screening"];
+const EVIDENCE_SECTION_LABELS = {
+  customer_business_profile: "Customer Business Profile",
+  ownership_and_control: "Ownership & Control",
+  identity_verification: "ID&V",
+  screening: "Screening",
+};
+
+function evidenceSection(item) {
+  if (item.cdd_section) return item.cdd_section;
+  if (["get_customer_static_by_case_id", "create_company_case", "generate_registry_document", "extract_registry_document"].includes(item.tool)) return "customer_business_profile";
+  if (["get_company_org_chart_by_case_id", "get_company_members_by_case_id"].includes(item.tool)) return "ownership_and_control";
+  if (["establish_idv_requirements", "generate_idv_documents", "extract_idv_documents"].includes(item.tool)) return "identity_verification";
+  return "screening";
+}
+
+function EvidenceReview({ evidence }) {
+  const groups = EVIDENCE_SECTION_ORDER.map((section) => [section, evidence.filter((item) => evidenceSection(item) === section)]).filter(([, items]) => items.length);
+  return <details className="evidence-review"><summary>{`Evidence reviewed (${evidence.length})`}</summary>{groups.map(([section, items]) => <div className="evidence-review-group" key={section}><h4>{EVIDENCE_SECTION_LABELS[section]}</h4>{items.map((item) => <EvidenceReviewItem item={item} key={item.evidence_id} />)}</div>)}</details>;
+}
+
+function EvidenceReviewItem({ item }) {
+  const url = item.source_url || item.url || item.data?.url || item.storage?.url;
+  const retained = item.data || item;
+  return <div className="evidence-review-item">
+    <strong>{item.source || "Source not recorded"}</strong>
+    <span>{item.description || item.evidence_area || "Retained evidence"}</span>
+    <small>{[item.evidence_area, item.collected_at ? `Collected ${formatDateTime(item.collected_at)}` : null].filter(Boolean).join(" · ")}</small>
+    <div>{url ? <a href={url} target="_blank" rel="noreferrer">View source</a> : <small>No external source link retained.</small>}</div>
+    <details><summary>Retained evidence details</summary><pre className="evidence-record">{JSON.stringify(retained, null, 2)}</pre><small>{`Audit reference: ${item.evidence_id}`}</small></details>
+  </div>;
+}
+
+function evidenceQualityOutcomeLabel(outcome) {
+  return {
+    not_triggered: "Confirmed from available evidence",
+    gap: "More evidence needed",
+    unavailable: "Unable to confirm from available evidence",
+    invalid: "Unable to confirm from available evidence",
+    inconclusive: "Unable to confirm from available evidence",
+    not_applicable: "Not assessed",
+  }[outcome] || "Unable to confirm from available evidence";
 }
 
 function BulletList({ items, empty }) {
@@ -1129,6 +1594,138 @@ function CSPDetection({
       )}
     </>
   );
+}
+
+function DigitalFootprint({ mode, form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, canLoadFromCdd, onLoadFromCdd, onModeChange, canAttach, attaching, onAttach, demoMode }) {
+  return (
+    <>
+      <Section title="Digital Footprint">
+        <div className="actions">
+          <button className={mode === "cdd" ? "" : "secondary"} disabled={!canLoadFromCdd} onClick={() => { onModeChange("cdd"); onLoadFromCdd(); }}>Load from CDD</button>
+          <button className={mode === "independent" ? "" : "secondary"} onClick={() => onModeChange("independent")}>Run independent Digital Footprint Check</button>
+        </div>
+        {mode === "cdd" ? <p className="empty">Loaded from the active CDD state. The chatbot remains available for this case.</p> : <>
+          {demoMode && <p className="empty">Digital Footprint assessment is disabled in Demo Mode.</p>}
+          <p className="empty">Research a company independently of any CDD case. Results are public-web research support, not a compliance decision.</p>
+          <details className="skill-details" onToggle={(event) => onSkillToggle(event.currentTarget.open)}>
+            <summary>Assessment skill</summary>
+            {skillLoading ? <p className="empty">Loading skill…</p> : <pre className="skill-content">{skill || "Open this section to load the current skill."}</pre>}
+          </details>
+          <div className="csp-form digital-footprint-form">
+            <input aria-label="Company legal name" placeholder="Company legal name" value={form.company_name} disabled={demoMode || assessing} onChange={(event) => onChange("company_name", event.target.value)} />
+            <input aria-label="Jurisdiction" placeholder="Jurisdiction (optional)" value={form.jurisdiction} disabled={demoMode || assessing} onChange={(event) => onChange("jurisdiction", event.target.value)} />
+            <input aria-label="Registration number" placeholder="Registration number (optional)" value={form.registration_number} disabled={demoMode || assessing} onChange={(event) => onChange("registration_number", event.target.value)} />
+            <input aria-label="Known website or domain" placeholder="Known website or domain (optional)" value={form.known_domain} disabled={demoMode || assessing} onChange={(event) => onChange("known_domain", event.target.value)} />
+            <textarea aria-label="Registered address" placeholder="Registered address (optional)" value={form.registered_address} disabled={demoMode || assessing} onChange={(event) => onChange("registered_address", event.target.value)} />
+            <button disabled={demoMode || assessing || !form.company_name.trim()} onClick={onAssess}>{assessing ? "Assessing…" : "Assess footprint"}</button>
+          </div>
+          <p className="empty">Independent results are not attached to the active CDD case. The chatbot is disabled.</p>
+        </>}
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <>
+          <DigitalFootprintAssessment result={result} />
+          <Section title="Findings">
+            {(result.findings || []).length ? (result.findings || []).map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`digital-footprint-${index}`} />) : <p className="empty">No material digital-footprint findings were identified.</p>}
+          </Section>
+          <Section title="Sources">
+            <div className="csp-sources">{(result.evidence || []).map((source) => <div key={source.evidence_id}><a href={source.source_url || source.data?.url} target="_blank" rel="noreferrer">{source.description || source.source_url || "Source"}</a><small>{` — ${source.data?.query || ""}`}</small></div>)}</div>
+          </Section>
+          <Section title="Digital Footprint JSON"><pre className="json-view">{JSON.stringify(result, null, 2)}</pre></Section>
+          <Section title="CDD evidence">
+            {mode === "cdd" ? <p className="empty">This assessment is already loaded from the active CDD case.</p> : canAttach ? <button disabled={attaching || demoMode} onClick={onAttach}>{attaching ? "Attaching…" : "Attach validated result to active CDD case"}</button> : <p className="empty">This result is standalone. Run a CDD case before attaching it as case evidence.</p>}
+          </Section>
+        </>
+      )}
+    </>
+  );
+}
+
+const LEGACY_DIGITAL_PRESENCE_DIMENSIONS = [
+  { key: "professional_website", label: "Professional website" }, { key: "active_linkedin", label: "Active LinkedIn" },
+  { key: "independent_references", label: "Independent references" }, { key: "recent_business_activity", label: "Recent business activity" },
+  { key: "basic_website", label: "Website with basic information" }, { key: "credible_online_presence", label: "Credible online presence" },
+  { key: "evidence_of_operations", label: "Evidence of operations" }, { key: "website_currency", label: "Website currency/completeness" },
+];
+
+function digitalPresenceDimensions(definition) {
+  const section = (definition?.sections || []).find((item) => item.id === "presence_and_visibility" && item.type === "scorecard");
+  return Array.isArray(section?.dimensions) && section.dimensions.length ? section.dimensions : LEGACY_DIGITAL_PRESENCE_DIMENSIONS;
+}
+
+function DigitalPresenceBreakdown({ indicators, definition }) {
+  const dimensions = digitalPresenceDimensions(definition);
+  if (!indicators) return null;
+  return <div className="digital-presence-breakdown">{dimensions.map(({ key, label }) => { const item = indicators[key] || {}; return <div className="digital-presence-row" key={key}><strong>{label}</strong><span className={`digital-presence-status ${item.status || "unknown"}`}>{statusLabel(item.status)}</span><span>{item.rationale || "Not assessed."}</span>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">View Source</a> : null}</div>; })}</div>;
+}
+
+function assessmentsByType(result, assessmentType) {
+  return (result?.assessments || []).filter((assessment) => assessment.assessment_type === assessmentType);
+}
+
+function latestAssessment(result, assessmentType) {
+  return assessmentsByType(result, assessmentType).reduce((latest, assessment) => {
+    if (!latest || String(assessment.created_at || "") >= String(latest.created_at || "")) return assessment;
+    return latest;
+  }, null);
+}
+
+function DigitalFootprintAssessment({ result }) {
+  const assessment = latestAssessment(result, "digital_footprint");
+  if (!assessment) return <Section title="Assessment"><p className="risk">Digital Footprint assessment unavailable.</p></Section>;
+  const profile = assessment.digital_business_profile || {};
+  return <><Section title="Presence and Visibility"><div className="adverse-news-summary"><strong>{assessment.company_inputs?.company_name || "Company"}</strong><span>{`Overall score: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span><span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span><span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span><span>{`${(assessment.queries || []).length} queries; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div><DigitalPresenceBreakdown indicators={assessment.presence_and_visibility?.indicators} definition={assessment.definition} /></Section><Section title="Business Profile"><div className="adverse-news-summary"><span><LinkedAdverseNewsText text={profile.summary || "No business profile was recorded."} evidence={result.evidence || []} /></span><span>{`Business activity: ${profile.business_activity || "Not identified."}`}</span><span>{`Geographic presence: ${(profile.geographic_presence || []).join(", ") || "Not identified."}`}</span><span>{`Key people: ${(profile.key_people || []).join(", ") || "Not identified."}`}</span><span>{`Commercial relationships: ${(profile.commercial_relationships || []).join(", ") || "Not identified."}`}</span></div></Section></>;
+}
+
+function digitalFootprintRecords(cddState) {
+  return {
+    evidence: (cddState?.evidence || []).filter((item) => item.tool === "digital_footprint_assessment"),
+    assessments: assessmentsByType(cddState, "digital_footprint"),
+    findings: (cddState?.findings || []).filter((finding) => finding.category === "digital_footprint"),
+  };
+}
+
+function DigitalFootprintScreening({ cddState, onOpenTool }) {
+  const result = digitalFootprintRecords(cddState);
+  const assessment = latestAssessment(result, "digital_footprint");
+
+  if (!assessment) {
+    return <Section title="Digital Footprint"><p className="empty">Not run.</p></Section>;
+  }
+
+  if (assessment.outcome === "unavailable") {
+    return <Section title="Digital Footprint"><p className="risk">{`Assessment unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p></Section>;
+  }
+
+  return (
+    <Section title="Digital Footprint">
+      <div className="adverse-news-summary">
+        <strong>{assessment.company_inputs?.company_name || "Company"}</strong>
+        <span>{`Overall presence and visibility: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span>
+        <span>{assessment.presence_and_visibility?.rationale || "No presence assessment was recorded."}</span>
+        <span>{`Confidence: ${statusLabel(assessment.confidence?.level)}`}</span>
+        {assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}
+        <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Digital Footprint tool</button>
+      </div>
+    </Section>
+  );
+}
+
+function ManifestFootprintSection({ section, result }) {
+  const generated = (result.custom_sections || []).find((item) => item.id === section.id);
+  return <DynamicFootprintSection section={generated} sources={result.sources || []} />;
+}
+
+function DynamicFootprintSection({ section, sources }) {
+  if (!section) return <p className="empty">No supported evidence was returned.</p>;
+  const sourceById = Object.fromEntries(sources.map((source) => [source.id, source]));
+  const links = (refs) => refs?.length ? <small>Evidence: {refs.map((ref, index) => <React.Fragment key={ref}>{index > 0 && ", "}{sourceById[ref]?.url ? <a href={sourceById[ref].url} target="_blank" rel="noreferrer">{ref}</a> : ref}</React.Fragment>)}</small> : null;
+  if (section.type === "narrative") return <div className="review-item"><p>{section.content.text}</p>{links(section.source_refs)}</div>;
+  if (section.type === "findings") return <div className="review-list">{section.content.items.map((item, index) => <div className="review-item" key={index}><p>{item.finding}</p>{links(item.source_refs)}</div>)}</div>;
+  if (section.type === "table") return <div><h3>{section.title}</h3><table><thead><tr>{section.content.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{section.content.rows.map((row, index) => <tr key={index}>{row.cells.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>{links(section.source_refs)}</div>;
+  return null;
 }
 
 function DocumentExtraction({ file, result, error, extracting, inputRef, onFileChange, onExtract, demoMode }) {
@@ -1215,12 +1812,13 @@ function DocumentManagement({
   onGenerate,
   onProcess,
   loading,
+  error,
   generationStatus,
   demoMode,
 }) {
-  const missing = (requirements || []).filter((requirement) => requirement.status === "not_found");
+  const missing = (requirements || []).filter((requirement) => (requirement.gap || {}).status === "outstanding");
   const hasProcessableDocuments = (requirements || []).some((requirement) =>
-    ["cache_found", "provided", "received"].includes(requirement.status),
+    ["located", "received", "processing"].includes(requirement.status),
   );
   return (
     <Section title="Document Management">
@@ -1239,6 +1837,12 @@ function DocumentManagement({
         <button disabled={demoMode || loading || !hasProcessableDocuments} onClick={onProcess}>Process Documents</button>
       </div>
 
+      {missing.length > 0 && (
+        <p className="document-required-note">
+          {`${missing.length} required document${missing.length === 1 ? " is" : "s are"} unavailable. Generate the missing ID&V documents or upload customer-provided PDFs; CDD resumes automatically once all requirements are available.`}
+        </p>
+      )}
+
       {requirements.length ? (
         <table>
           <thead>
@@ -1251,13 +1855,14 @@ function DocumentManagement({
           </thead>
           <tbody>
             {requirements.map((requirement) => {
-              const foundInCache = Boolean(requirement.cache_document);
-              const provided = !foundInCache && ["customer_upload", "generated"].includes(requirement.source);
-              const cacheLink = foundInCache ? links[documentKey(requirement.cache_document)] : null;
+              const foundInCache = Boolean((requirement.acquisition || {}).artifact?.reused_from_s3)
+                || (requirement.acquisition || {}).source === "S3 document cache";
+              const provided = !foundInCache && ["customer_upload", "generated"].includes((requirement.acquisition || {}).source);
+              const cacheLink = foundInCache ? links[documentKey(requirement)] : null;
               const demoLink = requirement.demo_url;
               return (
-                <tr key={requirement.id}>
-                  <td>{documentLabel(requirement.document_type)} — {requirement.entity_name}</td>
+                <tr key={requirement.document_id}>
+                  <td>{documentLabel(requirement.document_type)} — {(requirement.subject || {}).name}</td>
                   <td>
                     {foundInCache && cacheLink?.url ? (
                       <a className="download-link" href={cacheLink.url} target="_blank" rel="noreferrer">Yes</a>
@@ -1276,14 +1881,15 @@ function DocumentManagement({
         </table>
       ) : <p className="empty">Run the CDD pipeline to determine required documents.</p>}
       {generationStatus && <p className="empty">{generationStatus}</p>}
+      {error && <p className="risk">{error}</p>}
     </Section>
   );
 }
 
-function Field({ label, value, source }) {
+function Field({ label, value, source, className = "" }) {
   const sourceText = sourceTooltip(source);
   return (
-    <div className="field">
+    <div className={`field ${className}`.trim()}>
       <div className="label-row">
         <div className="label">{label}</div>
         {sourceText && (
@@ -1488,8 +2094,14 @@ function latestAssistantMessage(messages) {
   return null;
 }
 
-function cddStatusLabel(status) {
-  return status === "complete" ? "Complete" : "Incomplete";
+function generationStatusLabel(status) {
+  return {
+    not_started: "Not started",
+    in_progress: "In Progress",
+    completed: "Completed",
+    incomplete: "Incomplete",
+    failed: "Failed",
+  }[status] || "Not started";
 }
 
 function formatPipelineProgress(progress) {
@@ -1539,10 +2151,6 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function riskFlags(records) {
-  return Array.isArray(records) ? records : [];
-}
-
 function riskPresentation(risk) {
   const assessment = risk.evidence?.assessment || {};
   const evaluation = String(assessment.is_csp || risk.description?.match(/Evaluation:\s*(Yes|No|Inconclusive)/i)?.[1] || "Inconclusive");
@@ -1553,12 +2161,6 @@ function riskPresentation(risk) {
       yes: "No individual UBO above 25% was identified.",
       no: "Individual UBOs above 25% were identified.",
       inconclusive: "Ownership review is required.",
-    },
-    aml: {
-      title: "AML Risk",
-      yes: "An AML-positive controlling member requires review.",
-      no: "No AML-positive controlling member was identified.",
-      inconclusive: "AML review is required.",
     },
     csp_address: {
       title: "CSP Risk",
@@ -1577,23 +2179,221 @@ function riskPresentation(risk) {
   return { title: presentation.title, evaluation, summary: presentation[outcome] || presentation.inconclusive };
 }
 
-function RiskEvidenceTooltip({ risk }) {
-  const evidence = risk.evidence || {};
-  const assessment = evidence.assessment || {};
-  const sources = evidence.sources || [];
-  const detail = assessment.explanation || risk.description || "No detailed explanation is available.";
+function AdverseNewsScreening({ cddState, onOpenTool }) {
+  const evidence = Array.isArray(cddState?.evidence) ? cddState.evidence : [];
+  const findings = (Array.isArray(cddState?.findings) ? cddState.findings : [])
+    .filter((finding) => finding.category === "adverse_news");
+  const assessment = adverseNewsAssessment(cddState);
+
+  if (!assessment) {
+    return (
+      <Section title="Adverse News Screening">
+        <p className="empty">Not run.</p>
+      </Section>
+    );
+  }
+
+  if (assessment.outcome === "unavailable") {
+    return (
+      <Section title="Adverse News Screening">
+        <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p>
+      </Section>
+    );
+  }
+
+  const entities = Array.isArray(assessment.screened_entities) ? assessment.screened_entities : [];
+  const sourceCount = Array.isArray(assessment.source_evidence_ids) ? assessment.source_evidence_ids.length : 0;
+  const queryCount = Array.isArray(assessment.queries) ? assessment.queries.length : 0;
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+
   return (
-    <span className="source-tip risk-evidence-tip" tabIndex="0" aria-label="View risk evidence">
-      i
-      <span className="source-tooltip risk-evidence-tooltip" role="tooltip">
-        <span>{detail}</span>
-        {sources.map((source, index) => (
-          <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
-            {source.title || source.url || "Source"}
-          </a>
-        ))}
-      </span>
-    </span>
+    <Section title="Adverse News Screening">
+      <div className="adverse-news-summary">
+        <strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong>
+        <span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={evidence} /></span>
+        <span>{`Screened ${entities.length} ${entities.length === 1 ? "entity" : "entities"}:`}</span>
+        {entities.length ? (
+          <ul className="adverse-news-entity-list">
+            {entities.map((entity, index) => <li key={entity.key || `${entity.name || "entity"}-${index}`}>{entity.name || "Unnamed entity"}</li>)}
+          </ul>
+        ) : <span>None recorded.</span>}
+        <span>{`${entities.length} ${entities.length === 1 ? "entity was" : "entities were"} searched using ${queryCount} ${queryCount === 1 ? "query" : "queries"} — one query for each screened entity.`}</span>
+        <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained.`}</span>
+        {assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}
+        <span>{`Screened ${formatDateTime(assessment.created_at)}.`}</span>
+        <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Adverse News tool</button>
+      </div>
+      {findings.length ? (
+        <div className="adverse-news-findings">
+          {findings.map((finding, index) => (
+            <AdverseNewsFinding
+              evidenceById={evidenceById}
+              finding={finding}
+              key={finding.finding_id || `${finding.subject?.name || "finding"}-${index}`}
+              popoverId={`adverse-news-sources-${index}`}
+            />
+          ))}
+        </div>
+      ) : <p className="empty">No material attributable adverse-news findings were identified in the retained results.</p>}
+    </Section>
+  );
+}
+
+function adverseNewsRecords(cddState) {
+  return {
+    findings: (cddState?.findings || []).filter((finding) => finding.category === "adverse_news"),
+    evidence: (cddState?.evidence || []).filter((item) => item.tool === "adverse_news_screening"),
+    assessments: assessmentsByType(cddState, "adverse_news"),
+  };
+}
+
+function adverseNewsAssessment(result) {
+  const assessment = latestAssessment(result, "adverse_news");
+  return assessment;
+}
+
+function LinkedAdverseNewsText({ text, evidence }) {
+  const sourceByReference = Object.fromEntries((evidence || [])
+    .filter((item) => item.data?.id)
+    .map((item) => [item.data.id, item]));
+  return String(text || "").split(/(source:\d+)/gi).map((part, index) => {
+    const source = sourceByReference[part.toLowerCase()];
+    const url = source?.source_url || source?.data?.url;
+    return url ? <a key={`${part}-${index}`} href={url} target="_blank" rel="noreferrer">{part}</a> : <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+  });
+}
+
+function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, onLoadFromCdd, onModeChange, onNamesChange, onAssess }) {
+  const [entityIndex, setEntityIndex] = useState(0);
+  const assessment = adverseNewsAssessment(result);
+  const entities = assessment?.screened_entities || [];
+  const entity = entities[entityIndex] || null;
+  const entityName = entity?.name || "";
+  const findings = (result?.findings || []).filter((finding) => String(finding.subject?.name || "").toUpperCase() === entityName.toUpperCase());
+  const evidence = (result?.evidence || []).filter((item) => item.data?.entity_key === entity?.key);
+  const entityOutcome = (assessment?.entity_outcomes || []).find((outcome) => outcome.entity_key === entity?.key);
+
+  useEffect(() => setEntityIndex(0), [result, mode]);
+
+  return (
+    <>
+      <Section title="Adverse News">
+        <div className="actions">
+          <button className={mode === "cdd" ? "" : "secondary"} disabled={!canLoadFromCdd} onClick={() => { onModeChange("cdd"); onLoadFromCdd(); }}>Load from CDD</button>
+          <button className={mode === "independent" ? "" : "secondary"} onClick={() => onModeChange("independent")}>Run independent Adverse News Check</button>
+        </div>
+        {mode === "cdd" ? <p className="empty">Loaded from the active CDD state. The chatbot remains available for this case.</p> : (
+          <div className="csp-form adverse-news-form">
+            <textarea aria-label="Entity names" placeholder="One entity name per line" value={names} onChange={(event) => onNamesChange(event.target.value)} disabled={running} />
+            <button disabled={running || !names.trim()} onClick={onAssess}>{running ? "Screening…" : "Run check"}</button>
+          </div>
+        )}
+        {mode === "independent" && <p className="empty">Independent results are not attached to the active CDD case. The chatbot is disabled.</p>}
+        {error && <p className="risk">{error}</p>}
+      </Section>
+
+      {result && (
+        <>
+          <Section title="Screening Summary">
+            {assessment?.outcome === "unavailable" ? <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p> : assessment ? <div className="adverse-news-summary"><strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong><span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={result.evidence || []} /></span><span>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No screening assessment is available.</p>}
+          </Section>
+          {entity && (
+            <Section title="Entity Screening">
+              <div className="adverse-news-navigation">
+                <button className="secondary" disabled={entityIndex === 0} onClick={() => setEntityIndex((index) => index - 1)}>← Previous</button>
+                <strong>{`${entityIndex + 1} of ${entities.length} — ${entityName}`}</strong>
+                <button className="secondary" disabled={entityIndex === entities.length - 1} onClick={() => setEntityIndex((index) => index + 1)}>Next →</button>
+              </div>
+              <h3>Assessment</h3>
+              <p><LinkedAdverseNewsText text={entityOutcome?.summary || "No entity-level assessment was recorded."} evidence={result.evidence || []} /></p>
+              {entityOutcome?.limitations?.length ? <p className="empty">{`Limitations: ${entityOutcome.limitations.join(" ")}`}</p> : null}
+              <h3>Findings</h3>
+              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">No material attributable adverse-news findings were identified in the retained results for this entity.</p>}
+              <h3>Evidence</h3>
+              {evidence.length ? <div className="csp-sources">{evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence for this entity.</p>}
+            </Section>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function AdverseNewsFinding({ evidenceById, finding, popoverId }) {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const sourceButtonRef = useRef(null);
+  const evidenceItems = (finding.relevant_evidence_ids || [])
+    .map((evidenceId) => evidenceById[evidenceId])
+    .filter(Boolean);
+  const subject = finding.subject?.name || "Screened entity";
+
+  function closeSources({ returnFocus = false } = {}) {
+    setSourcesOpen(false);
+    if (returnFocus) sourceButtonRef.current?.focus();
+  }
+
+  return (
+    <article className="adverse-news-finding">
+      <div className="adverse-news-finding-content">
+        <strong>{`${subject}${finding.title ? ` — ${finding.title}` : ""}`}</strong>
+        <span>{finding.summary || "No summary was recorded."}</span>
+        <div className="adverse-news-finding-tags">
+          <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(finding.confidence?.level)}`}</span>
+          <span className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}>{`Severity: ${statusLabel(finding.severity?.level)}`}</span>
+          <small>{`Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</small>
+        </div>
+      </div>
+      <div className="adverse-news-source-control">
+        <button
+          aria-controls={popoverId}
+          aria-expanded={sourcesOpen}
+          aria-label={`View sources for ${subject}`}
+          className="adverse-news-source-button"
+          onClick={() => setSourcesOpen((open) => !open)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeSources({ returnFocus: true });
+            }
+          }}
+          ref={sourceButtonRef}
+          type="button"
+        >
+          i
+        </button>
+        {sourcesOpen && (
+          <div
+            aria-label={`Sources for ${subject}`}
+            className="adverse-news-source-popover"
+            id={popoverId}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeSources({ returnFocus: true });
+              }
+            }}
+            role="dialog"
+          >
+            <div className="adverse-news-source-popover-header">
+              <strong>Sources</strong>
+              <button type="button" className="adverse-news-source-close" onClick={() => closeSources({ returnFocus: true })} aria-label="Close sources">×</button>
+            </div>
+            {evidenceItems.length ? evidenceItems.map((item) => {
+              const source = item.data || {};
+              const url = item.source_url || source.url;
+              const title = item.description || source.title || url || "Source";
+              const publishedAt = item.published_at || source.published_date;
+              return (
+                <div className="adverse-news-source" key={item.evidence_id}>
+                  {url ? <a href={url} target="_blank" rel="noreferrer">{title}</a> : <span>{title}</span>}
+                  <small>{`${item.source || "Web source"}${publishedAt ? ` · ${formatDateTime(publishedAt)}` : ""}`}</small>
+                </div>
+              );
+            }) : <span>No cited sources were retained for this finding.</span>}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 

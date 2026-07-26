@@ -137,6 +137,8 @@ class IDVPipelineTests(unittest.TestCase):
             )
 
             self.assertEqual(artifact["document_type"], "passport")
+            self.assertEqual(artifact["provenance"], "synthetic_demo")
+            self.assertTrue(artifact["synthetic"])
             self.assertTrue(Path(artifact["pdf_path"]).exists())
             self.assertTrue(Path(artifact["html_path"]).exists())
             self.assertTrue(Path(artifact["json_path"]).exists())

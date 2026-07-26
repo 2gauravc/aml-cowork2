@@ -3,6 +3,28 @@
   "jurisdiction": "GB",
   "case_id": "demo-northstar-001",
   "pipeline_status": "complete",
+  "case_status": {
+    "cdd_generation": "completed",
+    "risk_summary": {
+      "by_category": {
+        "ownership": {
+          "yes": 0,
+          "inconclusive": 0,
+          "no": 1
+        },
+        "csp_address": {
+          "yes": 0,
+          "inconclusive": 1,
+          "no": 0
+        }
+      },
+      "totals": {
+        "yes": 0,
+        "inconclusive": 1,
+        "no": 1
+      }
+    }
+  },
   "pipeline_progress": {
     "node": "generate_case_review",
     "node_number": 16,
@@ -14,11 +36,10 @@
   "messages": [
     {
       "role": "assistant",
-      "content": "Demo case loaded. This fixture contains pre-generated CDD evidence and a Case Review; no external services were called."
+      "content": "Demo case loaded. This fixture contains pre-generated CDD evidence and a Case Assessment; no external services were called."
     }
   ],
   "cdd": {
-    "status": "incomplete",
     "started_at": "2026-07-13T09:00:00+00:00",
     "company_business_profile": {
       "status": "complete",
@@ -72,9 +93,7 @@
         "controlling_members": [
           {
             "name": "Maya Chen",
-            "kyc": {
-              "is_aml_positive": false
-            }
+            "kyc": {}
           }
         ]
       }
@@ -84,8 +103,14 @@
       "required_individuals": [
         {
           "name": "Maya Chen",
-          "roles": ["UBO", "Director"],
-          "required_documents": ["passport", "proof_of_address"],
+          "roles": [
+            "UBO",
+            "Director"
+          ],
+          "required_documents": [
+            "passport",
+            "proof_of_address"
+          ],
           "selected_document_type": "passport",
           "status": "processed",
           "document": {
@@ -156,24 +181,19 @@
   ],
   "risk_flags": [
     {
+      "finding_id": "ownership:category",
       "category": "ownership",
-      "severity": "low",
-      "status": "cleared",
-      "description": "Ownership: Evaluation: No. Individual UBOs above 25% were identified: Maya Chen.",
+      "evaluation": "no",
+      "severity": "none",
+      "description": "Individual UBOs above 25% were identified: Maya Chen.",
       "source": "demo_fixture"
     },
     {
-      "category": "aml",
-      "severity": "low",
-      "status": "cleared",
-      "description": "AML: Evaluation: No. No controlling member has an AML-positive result.",
-      "source": "demo_fixture"
-    },
-    {
+      "finding_id": "csp_address:category",
       "category": "csp_address",
       "severity": "medium",
-      "status": "open",
-      "description": "CSP: Evaluation: Inconclusive. Search evidence identifies corporate-services activity at the building, but does not establish a provider at the exact address.",
+      "evaluation": "inconclusive",
+      "description": "Search evidence identifies corporate-services activity at the building, but does not establish a provider at the exact address.",
       "source": "csp_address_assessment",
       "evidence_tool": "csp_address_assessment",
       "evidence": {
@@ -197,7 +217,11 @@
       "source": "Demo fixture",
       "tool": "csp_address_assessment",
       "description": "Pre-generated CSP address evidence for the demo case.",
-      "relevance_tags": ["risk_flag", "csp_address", "registered_address"],
+      "relevance_tags": [
+        "risk_flag",
+        "csp_address",
+        "registered_address"
+      ],
       "data": {
         "assessment": {
           "is_csp": "inconclusive",
@@ -214,22 +238,25 @@
       "collected_at": "2026-07-13T09:00:00+00:00"
     }
   ],
-  "final_recommendation": "human_review",
-  "case_review_summary": {
+  "case_assessment_summary": {
     "status": "available",
     "demo_fixture": true,
-    "outcome": "human_review_required",
-    "executive_summary": "Northstar Trading Ltd has a documented individual UBO and no AML-positive controlling member in this demonstration case. The registered-address assessment remains inconclusive because the retained evidence is limited to the building level, so human review is required.",
+    "executive_summary": "Northstar Trading Ltd has a documented individual UBO. The registered-address assessment remains inconclusive because the retained evidence is limited to the building level, so human review is required.",
     "key_evidence": [
       {
         "category": "Ownership",
         "finding": "Maya Chen is identified as a 60% individual UBO and director.",
-        "source_refs": ["risk:ownership:1"]
+        "source_refs": [
+          "risk:ownership:1"
+        ]
       },
       {
         "category": "CSP address",
         "finding": "The address evidence is building-level and does not confirm a company-service provider at the exact address.",
-        "source_refs": ["risk:csp_address:3", "evidence:csp_address_assessment:1"]
+        "source_refs": [
+          "risk:csp_address:3",
+          "evidence:csp_address_assessment:1"
+        ]
       }
     ],
     "limitations": [
@@ -248,12 +275,26 @@
         "priority": "medium"
       }
     ],
+    "finding_assessments": [
+      {
+        "finding_id": "csp_address:category",
+        "confidence": "medium",
+        "confidence_rationale": "The retained evidence is credible but only identifies activity at building level.",
+        "potential_impact_risk": "The registered address may be associated with a company service provider.",
+        "recommended_action_or_rfi": {
+          "type": "rfi",
+          "text": "Provide evidence of the company's operating address and explain its use of the registered address."
+        }
+      }
+    ],
     "evidence_index": [
       {
         "id": "evidence:csp_address_assessment:1",
         "tool": "csp_address_assessment",
         "description": "Pre-generated CSP address evidence for the demo case.",
-        "urls": ["https://example.test/example-house-directory"]
+        "urls": [
+          "https://example.test/example-house-directory"
+        ]
       }
     ]
   },

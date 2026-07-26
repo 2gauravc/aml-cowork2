@@ -73,8 +73,8 @@ def get_company_org_chart_by_name(
     Use this when the user needs to understand the ownership chain, such as who
     owns the direct shareholder, who has significant control behind a corporate
     owner, or how directors and shareholders relate across the structure. For a
-    shorter compliance/member list with addresses, registry properties, and AML
-    summary details, use get_company_members_by_name instead.
+    shorter member list with addresses and registry properties, use
+    get_company_members_by_name instead.
 
     Args:
         company_name (str): The company name to search for in the registry.
@@ -179,8 +179,6 @@ def _clean_org_chart_node(node: dict[str, Any]) -> dict[str, Any]:
             "is_general_partner": node.get("isGeneralPartner"),
         },
         "kyc": {
-            "is_unresolved_aml": node.get("isUnresolvedAML"),
-            "is_updated_aml": node.get("isUpdatedAML"),
             "validation": node.get("validation"),
         },
         "officers": _clean_child_nodes(node.get("officers")),

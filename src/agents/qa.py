@@ -18,13 +18,14 @@ def answer_cdd_question(
     cdd: dict[str, Any],
     evidence: list[dict[str, Any]],
     risk_flags: list[dict[str, Any]],
+    findings: list[dict[str, Any]] | None = None,
 ) -> str:
     """Answer a follow-up question using CDD first, then richer evidence."""
-    deterministic = _deterministic_answer(question, cdd, evidence, risk_flags)
+    deterministic = _deterministic_answer(question, cdd, evidence, risk_flags, findings or [])
     if deterministic:
         return deterministic
 
-    snippets = retrieve_evidence_snippets(question, cdd, evidence, risk_flags)
+    snippets = retrieve_evidence_snippets(question, cdd, evidence, risk_flags, findings or [])
     if not _openai_qa_enabled():
         return _fallback_answer(question, snippets)
 
@@ -38,10 +39,8 @@ def answer_cdd_question(
                 SystemMessage(
                     content=(
                         "You are a CDD analyst assistant. Answer only from the CDD "
-                        "JSON, risk flags, and evidence snippets provided. If the "
-                        "answer is not present, say what is missing. Do not treat "
-                        "AML flags as proof of wrongdoing; describe them as review "
-                        "items."
+                        "JSON, neutral findings, risk flags, and evidence snippets provided. If the "
+                        "answer is not present, say what is missing."
                     )
                 ),
                 HumanMessage(
@@ -62,6 +61,7 @@ def retrieve_evidence_snippets(
     cdd: dict[str, Any],
     evidence: list[dict[str, Any]],
     risk_flags: list[dict[str, Any]],
+    findings: list[dict[str, Any]] | None = None,
     *,
     limit: int = 6,
 ) -> list[dict[str, Any]]:
@@ -77,6 +77,11 @@ def retrieve_evidence_snippets(
             "source": "risk_flags",
             "description": "Risk flags from graph state",
             "data": _trim(risk_flags),
+        },
+        {
+            "source": "findings",
+            "description": "Neutral, evidence-referenced findings; currently includes adverse-news screening findings.",
+            "data": _trim(findings or []),
         },
     ]
     for item in evidence:
@@ -103,9 +108,27 @@ def _deterministic_answer(
     cdd: dict[str, Any],
     evidence: list[dict[str, Any]],
     risk_flags: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
 ) -> str | None:
     q = question.casefold()
     ownership = cdd.get("ownership_and_control", {})
+
+    if any(term in q for term in ("adverse news", "adverse-news", "finding", "rfi", "recommended action", "severity")):
+        relevant = _relevant_findings(question, findings)
+        if not relevant:
+            return "There are no matching neutral findings stored in the current CDD state."
+        rows = []
+        for finding in relevant:
+            subject = (finding.get("subject") or {}).get("name") or "the screened entity"
+            severity = ((finding.get("severity") or {}).get("level") or "unrated").title()
+            confidence = ((finding.get("confidence") or {}).get("level") or "unrated").title()
+            row = f"{finding.get('category', 'Finding').replace('_', ' ').title()} for {subject} — {severity} severity, {confidence} confidence: {finding.get('summary', 'No summary recorded.')}"
+            if "rfi" in q or "recommended action" in q:
+                requests = (finding.get("recommended_action_rfi") or {}).get("rfi") or []
+                if requests:
+                    row += f" Recommended RFI: {requests[0].get('request')}"
+            rows.append(row)
+        return " ".join(rows)
 
     if "ubo" in q or "beneficial owner" in q:
         ubos = ownership.get("ubos", [])
@@ -150,7 +173,7 @@ def _deterministic_answer(
         return "Current review items: " + "; ".join(rows)
 
     name = _possible_person_name(question)
-    if name and ("nationality" in q or "address" in q or "aml" in q):
+    if name and ("nationality" in q or "address" in q):
         member = _find_member(name, evidence)
         if member:
             parts = [f"{member.get('name')} is listed as {member.get('role')}."]
@@ -158,11 +181,17 @@ def _deterministic_answer(
                 parts.append(f"Nationality: {member.get('nationality')}.")
             if "address" in q and member.get("address"):
                 parts.append(f"Address: {member['address'].get('full_address')}.")
-            if "aml" in q and member.get("kyc"):
-                parts.append(f"AML details: {json.dumps(member.get('kyc'))}.")
             return " ".join(parts)
 
     return None
+
+
+def _relevant_findings(question: str, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    tokens = _tokens(question)
+    adverse_request = "adverse" in tokens or "news" in tokens
+    candidates = [finding for finding in findings if not adverse_request or finding.get("category") == "adverse_news"]
+    named = [finding for finding in candidates if _possible_person_name(question) and _possible_person_name(question).casefold() in str((finding.get("subject") or {}).get("name") or "").casefold()]
+    return named or candidates
 
 
 def _fallback_answer(question: str, snippets: list[dict[str, Any]]) -> str:

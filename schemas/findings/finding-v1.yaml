@@ -1,0 +1,147 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: finding/v1
+title: Generic CDD finding
+description: Canonical, category-neutral finding contract for CDD tools and Case Assessment.
+type: object
+additionalProperties: true
+x-extension-policy: Category-specific overlays are top-level properties and are validated by their category schema.
+x-runtime-owned-fields:
+  - finding_id
+  - schema_version
+  - category
+  - subject
+  - source
+  - relevant_evidence_ids
+required:
+  - finding_id
+  - schema_version
+  - category
+  - title
+  - summary
+  - subject
+  - confidence
+  - severity
+  - potential_impact_risk
+  - recommended_action_rfi
+  - source
+  - relevant_evidence_ids
+properties:
+  finding_id:
+    type: string
+    minLength: 1
+  schema_version:
+    const: finding/v1
+  category:
+    type: string
+    minLength: 1
+  title:
+    type: string
+    minLength: 1
+  summary:
+    type: string
+    minLength: 1
+  subject:
+    type: object
+    additionalProperties: false
+    required:
+      - entity_type
+      - name
+    properties:
+      entity_id:
+        type:
+          - string
+          - 'null'
+      entity_type:
+        type: string
+        minLength: 1
+      name:
+        type: string
+        minLength: 1
+  confidence:
+    type: object
+    additionalProperties: false
+    required:
+      - level
+      - rationale
+      - limitations
+    properties:
+      level:
+        enum: [low, medium, high]
+      rationale:
+        type: string
+        minLength: 1
+      limitations:
+        type: array
+        items:
+          type: string
+  severity:
+    type: object
+    additionalProperties: false
+    required:
+      - level
+      - rationale
+    properties:
+      level:
+        enum: [low, medium, high, critical]
+      rationale:
+        type: string
+        minLength: 1
+  potential_impact_risk:
+    type: string
+    minLength: 1
+  recommended_action_rfi:
+    type: object
+    additionalProperties: false
+    required:
+      - internal_actions
+      - rfi
+    properties:
+      internal_actions:
+        type: array
+        items:
+          type: string
+      rfi:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required:
+            - request
+            - reason
+            - priority
+          properties:
+            request:
+              type: string
+              minLength: 1
+            reason:
+              type: string
+              minLength: 1
+            priority:
+              enum: [low, medium, high]
+  source:
+    type: object
+    additionalProperties: false
+    required:
+      - producer_type
+      - producer_name
+      - run_id
+      - created_at
+    properties:
+      producer_type:
+        enum: [tool, case_assessment]
+      producer_name:
+        type: string
+        minLength: 1
+      run_id:
+        type:
+          - string
+          - 'null'
+      created_at:
+        type: string
+        format: date-time
+  relevant_evidence_ids:
+    type: array
+    minItems: 1
+    items:
+      type: string
+      minLength: 1
