@@ -16,7 +16,11 @@ class CDDGraphStructureTests(unittest.TestCase):
         self.assertIn(("extract_idv_documents", "digital_footprint_assessment"), edges)
         self.assertIn(("digital_footprint_assessment", "adverse_news_screening"), edges)
         self.assertIn(("adverse_news_screening", "evaluate_risk_flags"), edges)
-        self.assertIn(("evaluate_risk_flags", "finalize_cdd"), edges)
+        self.assertIn(("evaluate_risk_flags", "assess_cdd_completeness"), edges)
+        self.assertIn(("assess_cdd_completeness", "finalize_cdd"), edges)
+
+    def test_graph_builds_with_pipeline_progress_enabled(self) -> None:
+        build_cdd_graph(progress_callback=lambda progress: None)
 
 
 if __name__ == "__main__":

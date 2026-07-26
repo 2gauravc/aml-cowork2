@@ -102,6 +102,7 @@ function App() {
   const risks = useMemo(() => riskFlags(riskFlagRecords), [riskFlagRecords]);
   const capital = capitalDisplay(profile);
   const fieldSources = profile.source || {};
+  const principalBusinessActivity = latestAssessment(cddState, "digital_footprint")?.digital_business_profile?.business_activity || "";
   const cddMetadata = {
     customer: profile.name || customerName || "-",
     date: formatDateTime(cdd?.completed_at || cdd?.started_at),
@@ -397,6 +398,24 @@ function App() {
         body: JSON.stringify({ session_id: sessionId }),
       });
       applyResponse(await readJsonResponse(response, "Case Assessment refresh failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
+  async function runCDDCompleteness() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/cdd-completeness/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "CDD Completeness check failed"));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -881,7 +900,7 @@ function App() {
             </div>
           </section>
 
-          <Section title="About the Customer">
+          <Section title="Customer Business Profile">
             <div className="grid">
               <Field label="Name" value={profile.name || customerName} source={fieldSources.name} />
               <Field
@@ -908,6 +927,7 @@ function App() {
                 value={profile.registered_address?.full_address}
                 source={fieldSources.registered_address}
               />
+              <Field className="field-full-width" label="Principal Business Activity" value={principalBusinessActivity} source={{ source: "Digital Footprint", field: "digital_business_profile.business_activity" }} />
             </div>
           </Section>
 
@@ -1022,6 +1042,7 @@ function App() {
               />
             ) : activeWorkspace === "case-review" ? (
               <CaseReview
+                cddState={cddState}
                 summary={caseAssessmentSummary}
                 decision={caseReviewDecision}
                 decisionDraft={reviewDecisionDraft}
@@ -1029,6 +1050,7 @@ function App() {
                 loading={caseReviewLoading}
                 hasCdd={Boolean(cdd)}
                 onRefresh={refreshCaseReview}
+                onRunCompleteness={runCDDCompleteness}
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
@@ -1176,6 +1198,7 @@ function Section({ title, children }) {
 }
 
 function CaseReview({
+  cddState,
   summary,
   decision,
   decisionDraft,
@@ -1183,6 +1206,7 @@ function CaseReview({
   loading,
   hasCdd,
   onRefresh,
+  onRunCompleteness,
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
@@ -1199,6 +1223,8 @@ function CaseReview({
   const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
   return (
     <>
+      <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
+
       <Section title="Case Assessment">
         <div className="case-assessment-header">
           <div>
@@ -1291,6 +1317,28 @@ function CaseReview({
         </div>
       </Section>
     </>
+  );
+}
+
+function CDDCompleteness({ assessments, findings, loading, demoMode, onRun }) {
+  if (!assessments.length) {
+    return <Section title="CDD Completeness"><p className="empty">No completeness assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run CDD Completeness Check"}</button></Section>;
+  }
+  return (
+    <Section title="CDD Completeness">
+      <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run CDD Completeness Check"}</button>
+      <div className="review-list">
+        {assessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+          const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
+          return <div className="review-item" key={assessment.assessment_id}>
+            <strong>{assessment.title}</strong>
+            <p>{assessment.summary}</p>
+            {assessment.detail?.missing_items?.length ? <small>{`Missing: ${assessment.detail.missing_items.join(", ")}`}</small> : null}
+            {finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>Complete — no finding raised.</small>}
+          </div>;
+        })}
+      </div>
+    </Section>
   );
 }
 
@@ -1664,10 +1712,10 @@ function DocumentManagement({
   );
 }
 
-function Field({ label, value, source }) {
+function Field({ label, value, source, className = "" }) {
   const sourceText = sourceTooltip(source);
   return (
-    <div className="field">
+    <div className={`field ${className}`.trim()}>
       <div className="label-row">
         <div className="label">{label}</div>
         {sourceText && (

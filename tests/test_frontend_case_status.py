@@ -21,6 +21,8 @@ def test_case_assessment_workspace_uses_the_renamed_summary_field() -> None:
     assert "Case Assessment" in app
     assert "data.case_assessment_summary" in app
     assert "data.case_review_summary" not in app
+    assert '<CaseReview\n                cddState={cddState}' in app
+    assert 'function CDDCompleteness({ assessments, findings, loading, demoMode, onRun })' in app
 
 
 def test_risk_ui_has_no_aml_presentation() -> None:

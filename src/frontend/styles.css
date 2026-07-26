@@ -294,6 +294,10 @@ button:disabled {
   position: relative;
 }
 
+.field-full-width {
+  grid-column: 1 / -1;
+}
+
 .label-row {
   align-items: center;
   display: flex;

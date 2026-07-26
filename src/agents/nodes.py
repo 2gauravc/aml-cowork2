@@ -31,6 +31,7 @@ from src.tools.case_review import (
 from src.tools.risk_severity_policy import interpret_risk_severity_policy
 from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen_adverse_news
 from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint
+from src.tools.cdd_completeness import CDDCompletenessError, evaluate_cdd_completeness
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -979,6 +980,62 @@ def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
         ],
         "risk_flags": result.get("risk_flags", []),
     }
+
+
+def assess_cdd_completeness(state: CDDState) -> dict[str, Any]:
+    """Run all SKILL-configured completeness checks and raise findings only for gaps."""
+    evaluated_at = datetime.now(UTC).isoformat()
+    run_id = f"run:cdd-completeness:{uuid4().hex}"
+    try:
+        result = evaluate_cdd_completeness(state)
+        evidence_id = f"evidence:cdd-completeness:{uuid4().hex}"
+        evidence = _evidence(
+            tool="cdd_completeness",
+            description="Evaluated configured CDD completeness checks",
+            source="CDD Completeness",
+            data={"checks": result["assessments"], "skill_path": result["definition"]["path"]},
+            relevance_tags=["cdd_completeness", "policy"],
+        )
+        evidence["evidence_id"] = evidence_id
+        assessments, findings = [], []
+        profile = ((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {}
+        for check in result["assessments"]:
+            assessment_id = f"assessment:cdd-completeness:{check['check_id']}:{uuid4().hex}"
+            assessment = {
+                "assessment_id": assessment_id,
+                "assessment_type": "cdd_completeness",
+                "schema_version": result["definition"]["assessment"]["schema"],
+                "tool": "cdd_completeness",
+                "run_id": run_id,
+                "created_at": evaluated_at,
+                "definition": {"skill_path": result["definition"]["path"], "check_id": check["check_id"], "display_order": check["display_order"]},
+                **check,
+                "source_evidence_ids": [evidence_id],
+            }
+            assessments.append(assessment)
+            if check["outcome"] == "not_triggered":
+                continue
+            finding = {
+                "finding_id": f"finding:cdd-completeness:{check['check_id']}:{uuid4().hex}",
+                "schema_version": "finding/v1",
+                "category": "cdd_completeness",
+                "check_id": check["check_id"],
+                "assessment_id": assessment_id,
+                "title": check["title"],
+                "summary": check["summary"],
+                "subject": {"entity_id": str(profile.get("registration_number") or "") or None, "entity_type": "company", "name": profile.get("name") or "Customer"},
+                "confidence": {"level": "high", "rationale": "Derived from retained CDD state.", "limitations": []},
+                "severity": {"level": check["gap_severity"], "rationale": "Configured by the CDD Completeness skill."},
+                "potential_impact_risk": "CDD may be incomplete until the identified gap is resolved.",
+                "recommended_action_rfi": {"internal_actions": [check["action"]], "rfi": []},
+                "source": {"producer_type": "tool", "producer_name": "cdd_completeness", "run_id": run_id, "created_at": evaluated_at},
+                "relevant_evidence_ids": [evidence_id],
+            }
+            _validate_finding(finding)
+            findings.append(finding)
+        return {"evidence": [evidence], "assessments": assessments, "findings": findings}
+    except CDDCompletenessError as exc:
+        return {"evidence": [], "findings": [], "assessments": [{"assessment_id": f"assessment:cdd-completeness:{uuid4().hex}", "assessment_type": "cdd_completeness", "schema_version": "cdd_completeness_assessment/v1", "tool": "cdd_completeness", "run_id": run_id, "created_at": evaluated_at, "outcome": "unavailable", "summary": "CDD Completeness assessment could not be completed.", "limitations": [str(exc)]}]}
 
 
 def finalize_cdd(state: CDDState) -> dict[str, Any]:
