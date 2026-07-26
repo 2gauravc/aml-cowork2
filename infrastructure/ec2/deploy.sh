@@ -8,6 +8,7 @@ template_file="${project_root}/infrastructure/cloudformation/ec2-demo.yml"
 
 stack_name="aml-cowork2-demo"
 secret_arn=""
+kyc_client_id=""
 region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 s3_bucket="onbo-bkt"
 s3_prefix=""
@@ -21,6 +22,7 @@ Usage:
 
 Required:
   --secret-arn ARN             Existing Secrets Manager JSON secret ARN.
+  --kyc-client-id ID           Non-secret KYC OAuth client ID.
 
 Options:
   --region REGION              AWS Region (or set AWS_REGION/AWS_DEFAULT_REGION).
@@ -36,6 +38,7 @@ USAGE
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --secret-arn) secret_arn="${2:?--secret-arn requires a value}"; shift 2 ;;
+    --kyc-client-id) kyc_client_id="${2:?--kyc-client-id requires a value}"; shift 2 ;;
     --region) region="${2:?--region requires a value}"; shift 2 ;;
     --stack-name) stack_name="${2:?--stack-name requires a value}"; shift 2 ;;
     --s3-bucket) s3_bucket="${2:?--s3-bucket requires a value}"; shift 2 ;;
@@ -49,6 +52,11 @@ done
 
 if [[ -z "${secret_arn}" ]]; then
   echo "--secret-arn is required." >&2
+  usage >&2
+  exit 2
+fi
+if [[ -z "${kyc_client_id}" ]]; then
+  echo "--kyc-client-id is required." >&2
   usage >&2
   exit 2
 fi
@@ -67,6 +75,7 @@ aws cloudformation validate-template --region "${region}" --template-body "file:
 
 parameters=(
   "ApplicationSecretArn=${secret_arn}"
+  "KycClientId=${kyc_client_id}"
   "S3BucketName=${s3_bucket}"
   "S3Prefix=${s3_prefix}"
   "RepositoryBranch=${repository_branch}"

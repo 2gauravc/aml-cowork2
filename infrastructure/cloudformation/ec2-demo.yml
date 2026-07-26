@@ -17,6 +17,9 @@ Parameters:
   ApplicationSecretArn:
     Type: String
     Description: ARN of the existing Secrets Manager JSON secret containing live application configuration.
+  KycClientId:
+    Type: String
+    Description: Non-secret KYC OAuth client ID supplied to the application at bootstrap.
   S3BucketName:
     Type: String
     Default: onbo-bkt
@@ -192,7 +195,7 @@ Resources:
           for attempt in $(seq 1 30); do
             if curl --fail --location --retry 3 "$bootstrap_url" --output /tmp/aml-cowork2-user-data.sh; then
               chmod +x /tmp/aml-cowork2-user-data.sh
-              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${ApplicationSecretArn}" "${S3BucketName}" "${S3Prefix}" "${AWS::Region}"
+              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${ApplicationSecretArn}" "${KycClientId}" "${S3BucketName}" "${S3Prefix}" "${AWS::Region}"
               exit 0
             fi
             sleep 10
