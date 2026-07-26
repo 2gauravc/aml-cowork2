@@ -455,6 +455,15 @@ function App() {
     }
   }
 
+  async function runShellCompanyRisk() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true); setError(null);
+    try {
+      const response = await fetch("/api/shell-company-risk/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) });
+      applyResponse(await readJsonResponse(response, "Shell Company Risk check failed"));
+    } catch (err) { setError(err.message); } finally { setCaseReviewLoading(false); }
+  }
+
   async function saveCaseReviewDecision() {
     if (!sessionId || !cdd) return;
     setCaseReviewLoading(true);
@@ -1074,6 +1083,7 @@ function App() {
                 onRunCompleteness={runCDDCompleteness}
                 onRunEvidenceQuality={runEvidenceQuality}
                 onRunOtherRiskFactors={runOtherRiskFactors}
+                onRunShellCompanyRisk={runShellCompanyRisk}
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
@@ -1232,6 +1242,7 @@ function CaseReview({
   onRunCompleteness,
   onRunEvidenceQuality,
   onRunOtherRiskFactors,
+  onRunShellCompanyRisk,
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
@@ -1250,6 +1261,7 @@ function CaseReview({
     <>
       <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
       <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
+      <ShellCompanyRisk assessments={assessmentsByType(cddState, "shell_company_risk")} findings={(cddState?.findings || []).filter((finding) => finding.category === "shell_company_risk")} riskFlags={(cddState?.risk_flags || []).filter((flag) => flag.category === "csp_address")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunShellCompanyRisk} />
       <OtherRiskFactors assessments={assessmentsByType(cddState, "other_risk_factors")} findings={(cddState?.findings || []).filter((finding) => finding.category === "other_risk_factors")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunOtherRiskFactors} />
 
       <Section title="Case Assessment">
@@ -1428,6 +1440,16 @@ function OtherRiskFactors({ assessments, findings, evidence, loading, demoMode, 
       })}</div>;
     })}</div>
   </Section>;
+}
+
+function ShellCompanyRisk({ assessments, findings, riskFlags, evidence, loading, demoMode, onRun }) {
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  const cspEvidence = evidence.filter((item) => item.tool === "csp_address_assessment");
+  if (!assessments.length && !riskFlags.length) return <Section title="Shell Company Risk"><p className="empty">No Shell Company Risk assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Shell Company Risk Check"}</button></Section>;
+  return <Section title="Shell Company Risk"><button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Shell Company Risk Check"}</button><div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
+    const group = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section); if (!group.length) return null;
+    return <div className="evidence-quality-section" key={section}><h3>{EVIDENCE_SECTION_LABELS[section]}</h3>{group.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => { const finding = findings.find((item) => item.assessment_id === assessment.assessment_id); const reviewed = (assessment.selected_evidence || []).map((item) => evidenceById[item.evidence_id] || item); return <div className="review-item" key={assessment.assessment_id}><strong>{assessment.title}</strong><p>{assessment.summary}</p>{reviewed.length ? <EvidenceReview evidence={reviewed} /> : null}{finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}</div>; })}</div>;
+  })}<div className="evidence-quality-section"><h3>Screening</h3><strong>CSP Address</strong>{riskFlags.length ? riskFlags.map((flag) => <div className="review-item" key={flag.finding_id}><p>{flag.description || "CSP assessment recorded."}</p><small>{`Outcome: ${flag.evaluation || "inconclusive"} · severity: ${flag.severity || "not recorded"}. This is the existing CSP record; no duplicate Shell Company Risk finding was created.`}</small></div>) : <p className="empty">No upstream CSP assessment is available.</p>}{cspEvidence.length ? <EvidenceReview evidence={cspEvidence} /> : null}</div></div></Section>;
 }
 
 const EVIDENCE_SECTION_ORDER = ["customer_business_profile", "ownership_and_control", "identity_verification", "screening"];

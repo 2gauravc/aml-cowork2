@@ -127,6 +127,15 @@ def test_other_risk_factors_checker_is_grouped_by_cdd_section() -> None:
     assert 'Matched evidence: ${indicator.evidence_id}' in app
 
 
+def test_shell_company_risk_checker_surfaces_existing_csp_record_without_duplication() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+    assert 'function ShellCompanyRisk' in app
+    assert 'assessmentsByType(cddState, "shell_company_risk")' in app
+    assert 'fetch("/api/shell-company-risk/run"' in app
+    assert 'flag.category === "csp_address"' in app
+    assert 'no duplicate Shell Company Risk finding was created' in app
+
+
 def test_awaiting_documents_has_cdd_callout_and_documents_navigation() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
