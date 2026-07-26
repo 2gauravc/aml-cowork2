@@ -27,7 +27,6 @@ function App() {
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
   const [cddState, setCddState] = useState(null);
-  const [riskFlagRecords, setRiskFlagRecords] = useState([]);
   const [caseAssessmentSummary, setCaseAssessmentSummary] = useState(null);
   const [caseReviewDecision, setCaseReviewDecision] = useState(null);
   const [reviewDecisionDraft, setReviewDecisionDraft] = useState("request_information");
@@ -99,7 +98,6 @@ function App() {
   const profile = cdd?.company_business_profile?.customer_static || {};
   const ownership = cdd?.ownership_and_control || {};
   const idv = cdd?.individual_identity_verification || {};
-  const risks = useMemo(() => riskFlags(riskFlagRecords), [riskFlagRecords]);
   const capital = capitalDisplay(profile);
   const fieldSources = profile.source || {};
   const principalBusinessActivity = latestAssessment(cddState, "digital_footprint")?.digital_business_profile?.business_activity || "";
@@ -242,7 +240,6 @@ function App() {
     setMessages(data.messages || []);
     setCdd(data.cdd || null);
     setCddState(data.cdd_state || null);
-    setRiskFlagRecords(data.risk_flags || []);
     setCaseStatus(data.case_status || { cdd_generation: "not_started" });
     setCaseAssessmentSummary(data.case_assessment_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
@@ -270,7 +267,6 @@ function App() {
     cddRunEpochRef.current += 1;
     setCdd(null);
     setCddState(null);
-    setRiskFlagRecords([]);
     setCaseStatus({ cdd_generation: "in_progress" });
     setCaseAssessmentSummary(null);
     setCaseReviewDecision(null);
@@ -995,24 +991,6 @@ function App() {
           <AdverseNewsScreening cddState={cddState} onOpenTool={loadAdverseNewsFromCdd} />
 
           <DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />
-
-          <Section title="Findings">
-            {risks.length ? (
-              <div className="risk-list">
-                {risks.map((risk, index) => (
-                  <div className="risk" key={`${risk.category || "risk"}-${index}`}>
-                    <div className="risk-content">
-                      <strong>{`${riskCategoryLabel(risk.category)}${risk.subject?.name ? ` — ${risk.subject.name}` : ""}`}</strong>
-                      <span>{`Evaluation: ${statusLabel(risk.evaluation)}. Severity: ${statusLabel(risk.severity)}. ${risk.description || ""}`}</span>
-                    </div>
-                    <RiskEvidenceTooltip risk={risk} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="empty">No open risk flags in the current CDD object.</p>
-            )}
-          </Section>
 
           {showJson && cddState && (
             <Section title="CDDState JSON">
@@ -1977,10 +1955,6 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function riskFlags(records) {
-  return Array.isArray(records) ? records : [];
-}
-
 function riskPresentation(risk) {
   const assessment = risk.evidence?.assessment || {};
   const evaluation = String(assessment.is_csp || risk.description?.match(/Evaluation:\s*(Yes|No|Inconclusive)/i)?.[1] || "Inconclusive");
@@ -2007,45 +1981,6 @@ function riskPresentation(risk) {
   };
   const outcome = evaluation.toLowerCase();
   return { title: presentation.title, evaluation, summary: presentation[outcome] || presentation.inconclusive };
-}
-
-function riskCategoryLabel(category) {
-  return {
-    ownership: "Ownership Risk",
-    csp_address: "CSP Risk",
-  }[category] || "Risk Finding";
-}
-
-function RiskEvidenceTooltip({ risk }) {
-  const evidence = risk.evidence || {};
-  const sources = evidence.sources || [];
-  const review = risk.case_review || null;
-  const detail = risk.description || "No detailed explanation is available.";
-  return (
-    <span className="source-tip risk-evidence-tip" tabIndex="0" aria-label="View risk evidence">
-      i
-      <span className="source-tooltip risk-evidence-tooltip" role="tooltip">
-        <strong>{`${riskCategoryLabel(risk.category)} — ${statusLabel(risk.evaluation)}`}</strong>
-        {risk.subject?.name && <span>{`Subject: ${risk.subject.name}`}</span>}
-        <span>{`Severity: ${statusLabel(risk.severity)}`}</span>
-        <span>{detail}</span>
-        {review ? (
-          <>
-            <span>{`Confidence: ${statusLabel(review.confidence)}. ${review.confidence_rationale}`}</span>
-            <span>{`Potential impact: ${review.potential_impact_risk}`}</span>
-            {review.recommended_action_or_rfi?.type !== "none" && (
-              <span>{`${review.recommended_action_or_rfi?.type === "rfi" ? "RFI" : "Recommended action"}: ${review.recommended_action_or_rfi?.text}`}</span>
-            )}
-          </>
-        ) : <span>Case Assessment pending.</span>}
-        {sources.map((source, index) => (
-          <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
-            {source.title || source.url || "Source"}
-          </a>
-        ))}
-      </span>
-    </span>
-  );
 }
 
 function AdverseNewsScreening({ cddState, onOpenTool }) {

@@ -738,11 +738,6 @@ th {
   font-weight: 700;
 }
 
-.risk-list {
-  display: grid;
-  gap: 8px;
-}
-
 .risk {
   align-items: flex-start;
   border-left: 4px solid var(--warn);
@@ -761,29 +756,6 @@ th {
 
 .risk-content strong {
   color: #7c2d12;
-}
-
-.risk-evidence-tooltip {
-  display: none;
-  flex-direction: column;
-  gap: 7px;
-  left: auto;
-  max-height: min(520px, calc(100vh - 120px));
-  max-width: none;
-  min-width: 0;
-  overflow: auto;
-  right: 0;
-  width: min(420px, calc(100vw - 48px));
-}
-
-.risk-evidence-tip:hover .risk-evidence-tooltip,
-.risk-evidence-tip:focus .risk-evidence-tooltip {
-  display: flex;
-}
-
-.risk-evidence-tooltip a {
-  color: #bfdbfe;
-  text-decoration: underline;
 }
 
 .adverse-news-summary,
