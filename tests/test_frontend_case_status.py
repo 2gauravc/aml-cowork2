@@ -136,6 +136,15 @@ def test_shell_company_risk_checker_surfaces_existing_csp_record_without_duplica
     assert 'no duplicate Shell Company Risk finding was created' in app
 
 
+def test_risk_flags_is_the_top_cdd_checker_card_with_rating_and_findings() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+    assert 'function RiskFlags' in app
+    assert 'assessmentsByType(cddState, "risk_rating")' in app
+    assert 'fetch("/api/risk-rating/run"' in app
+    assert app.index('<RiskFlags') < app.index('<CDDCompleteness')
+    assert 'Confidence: ${statusLabel(finding.confidence?.level)}' in app
+
+
 def test_awaiting_documents_has_cdd_callout_and_documents_navigation() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 

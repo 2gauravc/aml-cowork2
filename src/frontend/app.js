@@ -464,6 +464,15 @@ function App() {
     } catch (err) { setError(err.message); } finally { setCaseReviewLoading(false); }
   }
 
+  async function runRiskRating() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true); setError(null);
+    try {
+      const response = await fetch("/api/risk-rating/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) });
+      applyResponse(await readJsonResponse(response, "Risk Rating assessment failed"));
+    } catch (err) { setError(err.message); } finally { setCaseReviewLoading(false); }
+  }
+
   async function saveCaseReviewDecision() {
     if (!sessionId || !cdd) return;
     setCaseReviewLoading(true);
@@ -1084,6 +1093,7 @@ function App() {
                 onRunEvidenceQuality={runEvidenceQuality}
                 onRunOtherRiskFactors={runOtherRiskFactors}
                 onRunShellCompanyRisk={runShellCompanyRisk}
+                onRunRiskRating={runRiskRating}
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
@@ -1243,6 +1253,7 @@ function CaseReview({
   onRunEvidenceQuality,
   onRunOtherRiskFactors,
   onRunShellCompanyRisk,
+  onRunRiskRating,
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
@@ -1259,6 +1270,7 @@ function CaseReview({
   const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
   return (
     <>
+      <RiskFlags findings={cddState?.findings || []} evidence={cddState?.evidence || []} assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
       <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
       <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
       <ShellCompanyRisk assessments={assessmentsByType(cddState, "shell_company_risk")} findings={(cddState?.findings || []).filter((finding) => finding.category === "shell_company_risk")} riskFlags={(cddState?.risk_flags || []).filter((flag) => flag.category === "csp_address")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunShellCompanyRisk} />
@@ -1357,6 +1369,12 @@ function CaseReview({
       </Section>
     </>
   );
+}
+
+function RiskFlags({ findings, evidence, assessments, loading, demoMode, onRun }) {
+  const rating = assessments[assessments.length - 1];
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  return <Section title="Risk Flags"><div className="case-assessment-header"><div><h3>Risk Rating</h3>{rating ? <div className="adverse-news-summary"><strong>{statusLabel(rating.rating)}</strong><span>{rating.summary || "No rationale was recorded."}</span><span>{`Monitoring: ${rating.monitoring_posture || "Not recorded."}`}</span>{rating.matched_criteria?.length ? <span>{`Matched criteria: ${rating.matched_criteria.join("; ")}`}</span> : null}{rating.limitations?.length ? <span>{`Limitations: ${rating.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No Risk Rating assessment is available.</p>}</div><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Assessing…" : (rating ? "Re-run Risk Rating" : "Run Risk Rating")}</button></div><h3>Findings</h3>{findings.length ? <div className="review-list">{findings.map((finding) => <div className="review-item" key={finding.finding_id}><strong>{finding.title || finding.category || "Finding"}</strong><p>{finding.summary || "No summary was recorded."}</p><small>{`Confidence: ${statusLabel(finding.confidence?.level)} · Severity: ${statusLabel(finding.severity?.level)}`}</small>{finding.recommended_action_rfi?.internal_actions?.length ? <p className="risk">{`Recommended action: ${finding.recommended_action_rfi.internal_actions.join(" ")}`}</p> : null}{finding.recommended_action_rfi?.rfi?.length ? <BulletList items={finding.recommended_action_rfi.rfi.map((item) => `${item.request} — ${item.reason} (${item.priority})`)} /> : null}{(finding.relevant_evidence_ids || []).length ? <EvidenceReview evidence={finding.relevant_evidence_ids.map((id) => evidenceById[id] || { evidence_id: id, description: "Referenced evidence is not currently retained." })} /> : null}<small>{`Source: ${finding.source?.producer_name || "Not recorded"}${finding.source?.created_at ? ` · ${formatDateTime(finding.source.created_at)}` : ""}`}</small></div>)}</div> : <p className="empty">No canonical findings are currently recorded.</p>}</Section>;
 }
 
 function CDDCompleteness({ assessments, findings, loading, demoMode, onRun }) {

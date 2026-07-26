@@ -21,7 +21,7 @@ from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import PIPELINE_NODE_LABELS, resume_cdd_agent_state, run_cdd_agent_state
-from src.agents.nodes import adverse_news_screening, assess_cdd_completeness, assess_evidence_quality, assess_other_risk_factors, assess_shell_company_risk, digital_footprint_assessment
+from src.agents.nodes import adverse_news_screening, assess_cdd_completeness, assess_evidence_quality, assess_other_risk_factors, assess_risk_rating, assess_shell_company_risk, digital_footprint_assessment
 from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
@@ -154,6 +154,10 @@ class OtherRiskFactorsRequest(BaseModel):
 
 
 class ShellCompanyRiskRequest(BaseModel):
+    session_id: str
+
+
+class RiskRatingRequest(BaseModel):
     session_id: str
 
 
@@ -491,6 +495,18 @@ async def run_shell_company_risk(request: ShellCompanyRiskRequest) -> dict[str, 
     _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id"); _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id"); _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     sync_case_status(state)
     return _response(session, status="shell_company_risk_completed")
+
+
+@app.post("/api/risk-rating/run")
+async def run_risk_rating(request: RiskRatingRequest) -> dict[str, Any]:
+    session = SESSIONS.get(request.session_id); state = _active_cdd_state(session)
+    if not state or not state.get("cdd"): raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"): return _response(session, status="demo_read_only")
+    result = await asyncio.to_thread(assess_risk_rating, state)
+    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "risk_rating"]
+    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    sync_case_status(state)
+    return _response(session, status="risk_rating_completed")
 
 
 @app.post("/api/case-review/decision")
@@ -1053,7 +1069,7 @@ async def _resume_if_ready(session: dict[str, Any]) -> None:
         )
         _apply_graph_result(session, result)
         session["pipeline_status"] = "complete"
-        sync_case_status(session)
+        sync_case_status(session, generation="completed")
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)
@@ -1274,7 +1290,7 @@ async def _complete_pipeline_for_session(
             session["pdf_path"] = str(pdf_path)
 
         session["pipeline_status"] = "complete"
-        sync_case_status(graph_state)
+        sync_case_status(graph_state, generation="completed")
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)

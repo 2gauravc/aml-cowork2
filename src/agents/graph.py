@@ -41,6 +41,7 @@ from src.agents.nodes import (  # noqa: E402
     assess_evidence_quality,
     assess_other_risk_factors,
     assess_shell_company_risk,
+    assess_risk_rating,
     extract_idv_documents,
     extract_registry_document,
     fetch_customer_static,
@@ -83,6 +84,7 @@ PIPELINE_NODE_LABELS = {
     "assess_evidence_quality": "Checking evidence quality",
     "assess_other_risk_factors": "Assessing other risk factors",
     "assess_shell_company_risk": "Assessing shell company risk",
+    "assess_risk_rating": "Assessing overall risk rating",
     "finalize_cdd": "Completing CDD",
     "generate_case_review": "Preparing Case Assessment",
 }
@@ -222,6 +224,7 @@ def build_cdd_graph(
     add_node("assess_evidence_quality", assess_evidence_quality)
     add_node("assess_other_risk_factors", assess_other_risk_factors)
     add_node("assess_shell_company_risk", assess_shell_company_risk)
+    add_node("assess_risk_rating", assess_risk_rating)
     add_node("finalize_cdd", finalize_cdd)
     add_node("generate_case_review", generate_case_review)
 
@@ -254,9 +257,10 @@ def build_cdd_graph(
     graph.add_edge("assess_cdd_completeness", "assess_evidence_quality")
     graph.add_edge("assess_evidence_quality", "assess_shell_company_risk")
     graph.add_edge("assess_shell_company_risk", "assess_other_risk_factors")
-    graph.add_edge("assess_other_risk_factors", "finalize_cdd")
-    graph.add_edge("finalize_cdd", "generate_case_review")
-    graph.add_edge("generate_case_review", END)
+    graph.add_edge("assess_other_risk_factors", "assess_risk_rating")
+    graph.add_edge("assess_risk_rating", "generate_case_review")
+    graph.add_edge("generate_case_review", "finalize_cdd")
+    graph.add_edge("finalize_cdd", END)
     return graph.compile(checkpointer=CHECKPOINTER)
 
 

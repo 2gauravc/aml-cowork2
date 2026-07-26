@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -35,10 +36,10 @@ from src.tools.cdd_completeness import CDDCompletenessError, evaluate_cdd_comple
 from src.tools.evidence_quality import EvidenceQualityError, evaluate_evidence_quality
 from src.tools.other_risk_factors import OtherRiskFactorsError, evaluate_other_risk_factors
 from src.tools.shell_company_risk import ShellCompanyRiskError, evaluate_shell_company_risk
+from src.tools.risk_rating import RiskRatingError, evaluate_risk_rating
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
-from src.utils.case_status import build_case_status
 from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
 from src.utils.idv_document_pipeline import IDV_SOURCE_LABELS, generate_idv_documents
 from src.utils.s3_documents import (
@@ -1158,24 +1159,23 @@ def assess_shell_company_risk(state: CDDState) -> dict[str, Any]:
         return {"evidence": [], "findings": [], "assessments": [{"assessment_id": f"assessment:shell-company-risk:{uuid4().hex}", "assessment_type": "shell_company_risk", "schema_version": "shell_company_risk_assessment/v1", "tool": "shell_company_risk", "run_id": run_id, "created_at": evaluated_at, "outcome": "unavailable", "summary": "Shell Company Risk assessment could not be completed.", "limitations": [str(exc)]}]}
 
 
-def finalize_cdd(state: CDDState) -> dict[str, Any]:
-    cdd = deepcopy(state.get("cdd", {}))
-    section_statuses = [
-        cdd.get("ownership_and_control", {}).get("status"),
-        cdd.get("company_business_profile", {}).get("status"),
-        cdd.get("individual_identity_verification", {}).get("status"),
-    ]
-    complete = all(status == "complete" for status in section_statuses)
-    findings_needing_review = [
-        flag for flag in state.get("risk_flags", [])
-        if flag.get("evaluation") in {"yes", "inconclusive"}
-    ]
+def assess_risk_rating(state: CDDState) -> dict[str, Any]:
+    """Create the top-level risk-rating assessment without producing another finding."""
+    evaluated_at = datetime.now(UTC).isoformat(); run_id = f"run:risk-rating:{uuid4().hex}"
+    try:
+        result = evaluate_risk_rating(state); assessment_id = f"assessment:risk-rating:{uuid4().hex}"
+        evidence_ids = [item["evidence_id"] for item in result["inputs"]["evidence"]]
+        assessment = {"assessment_id": assessment_id, "assessment_type": "risk_rating", "schema_version": result["definition"]["assessment"]["schema"], "tool": "risk_rating", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "ratings": result["definition"]["ratings"]}, "rating": result["result"]["rating"], "summary": result["result"]["rationale"], "rationale": result["result"]["rationale"], "matched_criteria": result["result"]["matched_criteria"], "limitations": result["result"]["limitations"], "monitoring_posture": result["result"]["monitoring_posture"], "selected_finding_ids": [item["finding_id"] for item in result["inputs"]["findings"]], "selected_assessment_ids": [item["assessment_id"] for item in result["inputs"]["assessments"]], "selected_evidence_ids": evidence_ids, "source_evidence_ids": evidence_ids, "provenance": {"method": "llm_structured", "model": os.getenv("OPENAI_RISK_RATING_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")}}
+        return {"assessments": [assessment], "findings": [], "evidence": []}
+    except RiskRatingError as exc:
+        return {"assessments": [{"assessment_id": f"assessment:risk-rating:{uuid4().hex}", "assessment_type": "risk_rating", "schema_version": "risk_rating_assessment/v1", "tool": "risk_rating", "run_id": run_id, "created_at": evaluated_at, "rating": "inconclusive", "summary": "Risk Rating assessment could not be completed.", "limitations": [str(exc)], "selected_finding_ids": [], "selected_assessment_ids": [], "selected_evidence_ids": []}], "findings": [], "evidence": []}
 
+
+def finalize_cdd(state: CDDState) -> dict[str, Any]:
+    """Record the completion time after every CDD assessment and reviewer brief is built."""
+    cdd = deepcopy(state.get("cdd", {}))
     cdd["completed_at"] = datetime.now(UTC).isoformat()
-    return {
-        "cdd": cdd,
-        "case_status": build_case_status("completed" if complete else "incomplete"),
-    }
+    return {"cdd": cdd}
 
 
 def generate_case_review(state: CDDState) -> dict[str, Any]:
