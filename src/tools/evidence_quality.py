@@ -66,7 +66,12 @@ def _evaluate_claim(state: dict[str, Any], claim: dict[str, Any], definition: di
         integrity = _dimension("inconclusive", "The evidence includes a generated or synthetic item, so source reliability cannot be confirmed from that item alone.", [item["evidence_id"] for item in synthetic], [item.get("provenance") for item in synthetic if item.get("provenance")])
         adequacy = _adequacy(claim, selected, source_classes)
     elif unknown:
-        integrity = _dimension("inconclusive", "The source of some retained evidence is not recorded, so source reliability cannot be confirmed.", unknown)
+        rationale = (
+            "The extracted identity-document record does not retain explicit document provenance, so it cannot independently confirm the individual’s identity."
+            if claim.get("value_adapter") == "identity_verification"
+            else "The source of some retained evidence is not recorded, so source reliability cannot be confirmed."
+        )
+        integrity = _dimension("inconclusive", rationale, unknown)
         adequacy = _adequacy(claim, selected, source_classes)
     else:
         integrity = _dimension("not_triggered", "The retained evidence is linked to this customer and has a recorded source.")
@@ -140,6 +145,8 @@ def _source_class(item: dict[str, Any], configured: dict[str, Any]) -> tuple[str
     provenance = _synthetic_provenance(item.get("data"))
     if provenance:
         return "generated_or_synthetic", provenance
+    if item.get("tool") == "extract_idv_documents" and not _has_explicit_idv_provenance(item.get("data")):
+        return "unknown", None
     if not item.get("source") or not item.get("tool"):
         return "unknown", None
     return str(configured.get(item.get("tool")) or "unknown"), None
@@ -159,7 +166,28 @@ def _synthetic_provenance(data: Any) -> dict[str, str] | None:
     for path, value in (("synthetic", data.get("synthetic")), ("synthetic_demo", data.get("synthetic_demo")), ("artifact.synthetic", artifact.get("synthetic") if isinstance(artifact, dict) else None)):
         if value is True:
             return {"field": path, "value": "true"}
+    documents = data.get("documents")
+    if isinstance(documents, list):
+        for index, document in enumerate(documents):
+            if not isinstance(document, dict):
+                continue
+            nested = _synthetic_provenance({"artifact": document.get("artifact")})
+            if nested:
+                return {"field": f"documents[{index}].{nested['field']}", "value": nested["value"]}
     return None
+
+
+def _has_explicit_idv_provenance(data: Any) -> bool:
+    """Accept only structured provenance from the extracted document artifact."""
+    if not isinstance(data, dict) or not isinstance(data.get("documents"), list):
+        return False
+    for document in data["documents"]:
+        artifact = document.get("artifact") if isinstance(document, dict) else None
+        if not isinstance(artifact, dict):
+            return False
+        if not any(artifact.get(field) not in (None, "") for field in ("provenance", "source_type", "synthetic")):
+            return False
+    return bool(data["documents"])
 
 
 def _adequacy(claim: dict[str, Any], selected: list[dict[str, Any]], source_classes: set[str]) -> dict[str, Any]:

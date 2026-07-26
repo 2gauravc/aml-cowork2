@@ -63,6 +63,9 @@ def generate_idv_document(
     return {
         "document_type": document["document_type"],
         "source": IDV_SOURCE_LABELS.get(document["document_type"], "Identity Document"),
+        "source_type": "generated_demo",
+        "provenance": "synthetic_demo",
+        "synthetic": True,
         "person_name": document["full_name"],
         "case_common_id": individual.get("case_common_id"),
         "html_path": str(html_path),

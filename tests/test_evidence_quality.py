@@ -18,7 +18,7 @@ def _state() -> dict:
             {"evidence_id": "org", "source": "KYC API", "tool": "get_company_org_chart_by_case_id", "description": "Org", "data": {"case_id": 42, "ubos": ["Alex Example"]}},
             {"evidence_id": "members", "source": "KYC API", "tool": "get_company_members_by_case_id", "description": "Members", "data": {"case_id": 42}},
             {"evidence_id": "idv-policy", "source": "Policy", "tool": "establish_idv_requirements", "description": "IDV policy", "data": {"name": "Alex Example"}},
-            {"evidence_id": "idv", "source": "Extraction", "tool": "extract_idv_documents", "description": "IDV", "data": {"name": "Alex Example"}},
+            {"evidence_id": "idv", "source": "Extraction", "tool": "extract_idv_documents", "description": "IDV", "data": {"documents": [{"artifact": {"source_type": "customer_provided", "provenance": "customer_provided"}, "extract": {"full_name": "Alex Example"}}]}},
             {"evidence_id": "footprint", "source": "Tavily", "tool": "digital_footprint_assessment", "description": "Example Ltd Engineering services", "data": {"name": "Example Ltd", "business_activity": "Engineering services"}},
         ],
     }
@@ -108,3 +108,23 @@ def test_missing_operating_presence_requires_plausibility_corroboration() -> Non
     assessment = next(item for item in result["assessments"] if item["claim_id"] == "business_activity_and_operating_presence")
     assert assessment["dimensions"]["plausibility"]["outcome"] == "inconclusive"
     assert any(item["assessment_id"] == assessment["assessment_id"] for item in result["findings"])
+
+
+def test_generated_idv_document_is_not_confirmed_as_reliable() -> None:
+    state = _state()
+    idv = next(item for item in state["evidence"] if item["evidence_id"] == "idv")
+    idv["data"]["documents"][0]["artifact"] = {"source_type": "generated_demo", "provenance": "synthetic_demo", "synthetic": True}
+    result = assess_evidence_quality(state)
+    assessment = next(item for item in result["assessments"] if item["claim_id"] == "identity_verification")
+    assert assessment["dimensions"]["veracity_source_integrity"]["outcome"] == "inconclusive"
+    assert any(item["assessment_id"] == assessment["assessment_id"] for item in result["findings"])
+
+
+def test_legacy_idv_extraction_without_provenance_is_inconclusive() -> None:
+    state = _state()
+    idv = next(item for item in state["evidence"] if item["evidence_id"] == "idv")
+    idv["data"] = {"documents": [{"artifact": {"source": "S3 document cache"}}]}
+    result = assess_evidence_quality(state)
+    assessment = next(item for item in result["assessments"] if item["claim_id"] == "identity_verification")
+    assert assessment["dimensions"]["veracity_source_integrity"]["outcome"] == "inconclusive"
+    assert "identity-document record" in assessment["dimensions"]["veracity_source_integrity"]["rationale"]

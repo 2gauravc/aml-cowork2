@@ -544,6 +544,9 @@ def generate_idv_documents_node(state: CDDState) -> dict[str, Any]:
         artifact["s3_url"] = document["url"]
         artifact["storage"] = document["storage"]
         document["collected_at"] = artifact["generated_at"]
+        document["source_type"] = artifact.get("source_type")
+        document["provenance"] = artifact.get("provenance")
+        document["synthetic"] = artifact.get("synthetic")
         documents.append(document)
 
     update = {
@@ -614,6 +617,7 @@ def extract_idv_documents(state: CDDState) -> dict[str, Any]:
                 "gap": {"status": "resolved", "reason": ""},
                 "storage": artifact.get("storage") or document.get("storage") or {},
                 "url": artifact.get("s3_url") or document.get("url"),
+                "acquisition": {"source": artifact.get("source"), "artifact": artifact},
                 "processing": {
                     "classification": item.get("classification"),
                     "extract": item.get("extract"),
@@ -875,6 +879,9 @@ def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:
                 "s3_url": document.get("url"),
                 "storage": document.get("storage"),
                 "source": "S3 document cache",
+                "source_type": document.get("source_type"),
+                "provenance": document.get("provenance"),
+                "synthetic": document.get("synthetic"),
             }
         if not artifact.get("pdf_path"):
             continue
@@ -914,6 +921,9 @@ def _cached_artifact(
         "person_name": individual.get("name"),
         "case_common_id": individual.get("case_common_id"),
         "source": "S3 document cache",
+        "source_type": cached.get("source_type"),
+        "provenance": cached.get("provenance"),
+        "synthetic": cached.get("synthetic"),
         "s3_url": cached.get("url"),
         "storage": cached.get("storage"),
     }
@@ -943,6 +953,9 @@ def _document_record(
         "url": artifact.get("s3_url"),
         "name": artifact.get("name") or Path(str(artifact.get("pdf_path") or "")).name or None,
         "source": artifact.get("source"),
+        "source_type": artifact.get("source_type"),
+        "provenance": artifact.get("provenance"),
+        "synthetic": artifact.get("synthetic"),
         "collected_at": artifact.get("generated_at"),
     }
 
@@ -1217,6 +1230,9 @@ def _reused_artifact(
         "name": document.get("name"),
         "document_type": document_type,
         "source": source,
+        "source_type": document.get("source_type"),
+        "provenance": document.get("provenance"),
+        "synthetic": document.get("synthetic"),
         "person_name": person_name,
         "pdf_path": download_document_from_s3(document),
         "generated_at": str(
