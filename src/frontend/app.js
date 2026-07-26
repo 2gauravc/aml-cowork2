@@ -419,6 +419,24 @@ function App() {
     }
   }
 
+  async function runEvidenceQuality() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/evidence-quality/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Evidence Quality check failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
   async function saveCaseReviewDecision() {
     if (!sessionId || !cdd) return;
     setCaseReviewLoading(true);
@@ -1029,6 +1047,7 @@ function App() {
                 hasCdd={Boolean(cdd)}
                 onRefresh={refreshCaseReview}
                 onRunCompleteness={runCDDCompleteness}
+                onRunEvidenceQuality={runEvidenceQuality}
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
@@ -1185,6 +1204,7 @@ function CaseReview({
   hasCdd,
   onRefresh,
   onRunCompleteness,
+  onRunEvidenceQuality,
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
@@ -1202,6 +1222,7 @@ function CaseReview({
   return (
     <>
       <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
+      <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
 
       <Section title="Case Assessment">
         <div className="case-assessment-header">
@@ -1318,6 +1339,90 @@ function CDDCompleteness({ assessments, findings, loading, demoMode, onRun }) {
       </div>
     </Section>
   );
+}
+
+function EvidenceQuality({ assessments, findings, evidence, loading, demoMode, onRun }) {
+  if (!assessments.length) {
+    return <Section title="Evidence Quality"><p className="empty">No Evidence Quality assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Evidence Quality Check"}</button></Section>;
+  }
+  return (
+    <Section title="Evidence Quality">
+      <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Evidence Quality Check"}</button>
+      <div className="review-list">
+        {assessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+          const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
+          const integrity = assessment.dimensions?.veracity_source_integrity || {};
+          const adequacy = assessment.dimensions?.adequacy || {};
+          const sources = assessment.selected_evidence || [];
+          const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+          return <div className="review-item" key={assessment.assessment_id}>
+            <strong>{assessment.title}</strong>
+            <p>{assessment.summary}</p>
+            <div className="evidence-quality-dimensions">
+              <div className="evidence-quality-dimension">
+                <div><span className="evidence-quality-tag">{evidenceQualityDimensionLabel(assessment.definition, "veracity_source_integrity")}</span><span className="evidence-quality-outcome">{evidenceQualityOutcomeLabel(integrity.outcome)}</span></div>
+                <small>{integrity.rationale || "No explanation was recorded."}</small>
+              </div>
+              <div className="evidence-quality-dimension">
+                <div><span className="evidence-quality-tag">{evidenceQualityDimensionLabel(assessment.definition, "adequacy")}</span><span className="evidence-quality-outcome">{evidenceQualityOutcomeLabel(adequacy.outcome)}</span></div>
+                <small>{adequacy.rationale || "No explanation was recorded."}</small>
+              </div>
+            </div>
+            {sources.length ? <EvidenceReview evidence={sources.map((item) => evidenceById[item.evidence_id] || item)} /> : null}
+            {finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}
+          </div>;
+        })}
+      </div>
+    </Section>
+  );
+}
+
+const EVIDENCE_SECTION_ORDER = ["customer_business_profile", "ownership_and_control", "identity_verification", "screening"];
+const EVIDENCE_SECTION_LABELS = {
+  customer_business_profile: "Customer Business Profile",
+  ownership_and_control: "Ownership & Control",
+  identity_verification: "ID&V",
+  screening: "Screening",
+};
+
+function evidenceSection(item) {
+  if (item.cdd_section) return item.cdd_section;
+  if (["get_customer_static_by_case_id", "create_company_case", "generate_registry_document", "extract_registry_document"].includes(item.tool)) return "customer_business_profile";
+  if (["get_company_org_chart_by_case_id", "get_company_members_by_case_id"].includes(item.tool)) return "ownership_and_control";
+  if (["establish_idv_requirements", "generate_idv_documents", "extract_idv_documents"].includes(item.tool)) return "identity_verification";
+  return "screening";
+}
+
+function EvidenceReview({ evidence }) {
+  const groups = EVIDENCE_SECTION_ORDER.map((section) => [section, evidence.filter((item) => evidenceSection(item) === section)]).filter(([, items]) => items.length);
+  return <details className="evidence-review"><summary>{`Evidence reviewed (${evidence.length})`}</summary>{groups.map(([section, items]) => <div className="evidence-review-group" key={section}><h4>{EVIDENCE_SECTION_LABELS[section]}</h4>{items.map((item) => <EvidenceReviewItem item={item} key={item.evidence_id} />)}</div>)}</details>;
+}
+
+function EvidenceReviewItem({ item }) {
+  const url = item.source_url || item.url || item.data?.url || item.storage?.url;
+  const retained = item.data || item;
+  return <div className="evidence-review-item">
+    <strong>{item.source || "Source not recorded"}</strong>
+    <span>{item.description || item.evidence_area || "Retained evidence"}</span>
+    <small>{[item.evidence_area, item.collected_at ? `Collected ${formatDateTime(item.collected_at)}` : null].filter(Boolean).join(" · ")}</small>
+    <div>{url ? <a href={url} target="_blank" rel="noreferrer">View source</a> : <small>No external source link retained.</small>}</div>
+    <details><summary>Retained evidence details</summary><pre className="evidence-record">{JSON.stringify(retained, null, 2)}</pre><small>{`Audit reference: ${item.evidence_id}`}</small></details>
+  </div>;
+}
+
+function evidenceQualityDimensionLabel(definition, key) {
+  return (definition?.dimensions || []).find((dimension) => dimension.key === key)?.label || key;
+}
+
+function evidenceQualityOutcomeLabel(outcome) {
+  return {
+    not_triggered: "Confirmed from available evidence",
+    gap: "More evidence needed",
+    unavailable: "Unable to confirm from available evidence",
+    invalid: "Unable to confirm from available evidence",
+    inconclusive: "Unable to confirm from available evidence",
+    not_applicable: "Not assessed",
+  }[outcome] || "Unable to confirm from available evidence";
 }
 
 function BulletList({ items, empty }) {

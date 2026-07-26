@@ -13,7 +13,7 @@ from langgraph.types import interrupt
 
 from src.agents.businesslogic import build_ownership_tables
 from src.agents.red_flags_graph import run_red_flags_graph
-from src.agents.state import CDDState
+from src.agents.state import CDDState, classify_evidence_item
 from src.tools.cdd_enrichment import (
     apply_document_extract_to_cdd,
     missing_about_customer_fields,
@@ -32,6 +32,7 @@ from src.tools.risk_severity_policy import interpret_risk_severity_policy
 from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen_adverse_news
 from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint
 from src.tools.cdd_completeness import CDDCompletenessError, evaluate_cdd_completeness
+from src.tools.evidence_quality import EvidenceQualityError, evaluate_evidence_quality
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -673,7 +674,7 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             result["assessment"], result["entities"], result["queries"], list(source_ids.values()),
             run_id, result["evaluated_at"], bool(findings),
         )
-        return {"evidence": source_evidence, "findings": findings, "assessments": [assessment]}
+        return {"evidence": [classify_evidence_item(item) for item in source_evidence], "findings": findings, "assessments": [assessment]}
     except AdverseNewsError as exc:
         evaluated_at = datetime.now(UTC).isoformat()
         return {
@@ -725,7 +726,7 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
             finding.update({"finding_id":f"finding:digital-footprint:{uuid4().hex}","schema_version":"finding/v1","category":"digital_footprint","subject":{"entity_id":result["company_inputs"].get("registration_number"),"entity_type":"company","name":result["company_inputs"]["company_name"]},"source":{"producer_type":"tool","producer_name":"digital_footprint_assessment","run_id":run_id,"created_at":result["evaluated_at"]},"relevant_evidence_ids":[ids[x] for x in refs],"digital_footprint":overlay})
             _validate_finding(finding)
             findings.append(finding)
-        return {"evidence":evidence,"assessments":[assessment],"findings":findings}
+        return {"evidence":[classify_evidence_item(item) for item in evidence],"assessments":[assessment],"findings":findings}
     except Exception as exc:
         return {"evidence": [_evidence(tool="digital_footprint_assessment",description="Digital-footprint assessment could not be completed.",source="Digital Footprint",data={"reason":str(exc)},relevance_tags=["digital_footprint"])], "assessments":[{"assessment_id":f"assessment:digital-footprint:{uuid4().hex}","assessment_type":"digital_footprint","schema_version":"digital_footprint_assessment/v1","tool":"digital_footprint_assessment","run_id":None,"created_at":datetime.now(UTC).isoformat(),"outcome":"unavailable","limitations":[str(exc)],"company_inputs":{},"queries":[],"source_evidence_ids":[]}], "findings":[]}
 
@@ -747,13 +748,13 @@ def _digital_footprint_inputs(state: CDDState) -> dict[str, Any]:
                 if registered_address.get(key)
             )
         )
-    return {
+    return classify_evidence_item({
         "company_name": static.get("name"),
         "jurisdiction": static.get("jurisdiction"),
         "registration_number": static.get("registration_number") or static.get("registrationNumber"),
         "known_domain": static.get("website") or static.get("website_url") or static.get("domain"),
         "registered_address": registered_address,
-    }
+    })
 
 
 def _assemble_adverse_news_assessment(
@@ -969,7 +970,7 @@ def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
     )
     return {
         "evidence": [
-            *result.get("evidence", []),
+            *[classify_evidence_item(item) for item in result.get("evidence", [])],
             _evidence(
                 tool="interpret_risk_severity_policy",
                 description="Interpreted and applied the risk-severity policy",
@@ -1036,6 +1037,63 @@ def assess_cdd_completeness(state: CDDState) -> dict[str, Any]:
         return {"evidence": [evidence], "assessments": assessments, "findings": findings}
     except CDDCompletenessError as exc:
         return {"evidence": [], "findings": [], "assessments": [{"assessment_id": f"assessment:cdd-completeness:{uuid4().hex}", "assessment_type": "cdd_completeness", "schema_version": "cdd_completeness_assessment/v1", "tool": "cdd_completeness", "run_id": run_id, "created_at": evaluated_at, "outcome": "unavailable", "summary": "CDD Completeness assessment could not be completed.", "limitations": [str(exc)]}]}
+
+
+def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
+    """Evaluate SKILL-defined CDD claims against deterministically selected evidence."""
+    evaluated_at = datetime.now(UTC).isoformat()
+    run_id = f"run:evidence-quality:{uuid4().hex}"
+    try:
+        result = evaluate_evidence_quality(state)
+        evidence_id = f"evidence:evidence-quality:{uuid4().hex}"
+        evidence = _evidence(
+            tool="evidence_quality",
+            description="Evaluated configured CDD claims for source integrity and adequacy",
+            source="Evidence Quality",
+            data={"claims": result["assessments"], "skill_path": result["definition"]["path"]},
+            relevance_tags=["evidence_quality", "policy"],
+        )
+        evidence["evidence_id"] = evidence_id
+        assessments, findings = [], []
+        for check in result["assessments"]:
+            assessment_id = f"assessment:evidence-quality:{check['claim_id']}:{uuid4().hex}"
+            assessment = {
+                "assessment_id": assessment_id,
+                "assessment_type": "evidence_quality",
+                "schema_version": result["definition"]["assessment"]["schema"],
+                "tool": "evidence_quality",
+                "run_id": run_id,
+                "created_at": evaluated_at,
+                "definition": {"skill_path": result["definition"]["path"], "claim_id": check["claim_id"], "display_order": check["display_order"], "dimensions": result["definition"]["dimensions"]},
+                "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in check["selected_evidence"]]],
+                **check,
+            }
+            assessments.append(assessment)
+            if check["outcome"] in {"not_triggered", "not_applicable"}:
+                continue
+            subject = check["claim"]["subject"]
+            relevant_ids = [evidence_id, *[item["evidence_id"] for item in check["selected_evidence"]]]
+            finding = {
+                "finding_id": f"finding:evidence-quality:{check['claim_id']}:{uuid4().hex}",
+                "schema_version": "finding/v1",
+                "category": "evidence_quality",
+                "assessment_id": assessment_id,
+                "title": check["title"],
+                "summary": check["summary"],
+                "subject": subject,
+                "confidence": {"level": "high", "rationale": "Derived from the configured deterministic evidence selection rules.", "limitations": [check["dimensions"]["veracity_source_integrity"]["rationale"], check["dimensions"]["adequacy"]["rationale"]]},
+                "severity": {"level": check["severity"], "rationale": "Configured by the Evidence Quality skill."},
+                "potential_impact_risk": "The CDD claim may not be sufficiently supported until the identified evidence-quality concern is resolved.",
+                "recommended_action_rfi": {"internal_actions": [check["action"]], "rfi": []},
+                "source": {"producer_type": "tool", "producer_name": "evidence_quality", "run_id": run_id, "created_at": evaluated_at},
+                "relevant_evidence_ids": relevant_ids,
+                "evidence_quality": {"claim_id": check["claim_id"], "dimensions": check["dimensions"], "excluded_evidence": check["excluded_evidence"]},
+            }
+            _validate_finding(finding)
+            findings.append(finding)
+        return {"evidence": [evidence], "assessments": assessments, "findings": findings}
+    except EvidenceQualityError as exc:
+        return {"evidence": [], "findings": [], "assessments": [{"assessment_id": f"assessment:evidence-quality:{uuid4().hex}", "assessment_type": "evidence_quality", "schema_version": "evidence_quality_assessment/v1", "tool": "evidence_quality", "run_id": run_id, "created_at": evaluated_at, "outcome": "unavailable", "summary": "Evidence Quality assessment could not be completed.", "limitations": [str(exc)]}]}
 
 
 def finalize_cdd(state: CDDState) -> dict[str, Any]:

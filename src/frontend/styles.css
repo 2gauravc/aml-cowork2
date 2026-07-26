@@ -993,6 +993,68 @@ th {
   margin: 6px 0;
 }
 
+.evidence-quality-dimensions {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.evidence-quality-dimension {
+  display: grid;
+  gap: 5px;
+}
+
+.evidence-quality-tag,
+.evidence-quality-outcome {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 3px 8px;
+}
+
+.evidence-quality-tag {
+  background: #e0e7ff;
+  color: #3730a3;
+  margin-right: 6px;
+}
+
+.evidence-quality-outcome {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.evidence-review {
+  margin-top: 10px;
+}
+
+.evidence-review-group {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.evidence-review-group h4 {
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+}
+
+.evidence-review-item {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+}
+
+.evidence-record {
+  background: #f8fafc;
+  font-size: 0.75rem;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
 .review-bullets {
   display: grid;
   gap: 8px;

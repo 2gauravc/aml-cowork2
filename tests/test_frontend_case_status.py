@@ -14,6 +14,12 @@ def test_cdd_metadata_uses_case_status_from_api_response() -> None:
     assert '<span>Risk Flags</span>' not in app
     assert "generationStatusLabel" in app
     assert "cddStatusLabel" not in app
+    assert "Evidence Quality" in app
+    assert "/api/evidence-quality/run" in app
+    assert "evidenceQualityDimensionLabel(assessment.definition" in app
+    assert "evidence-quality-tag" in app
+    assert "Customer Business Profile" in app
+    assert "EvidenceReview" in app
 
 
 def test_case_assessment_workspace_uses_the_renamed_summary_field() -> None:

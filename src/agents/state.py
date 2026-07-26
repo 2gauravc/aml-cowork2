@@ -154,6 +154,36 @@ class EvidenceItem(TypedDict, total=False):
     source_url: str
     publisher: str
     published_at: str
+    cdd_section: Literal["customer_business_profile", "ownership_and_control", "identity_verification", "screening"]
+    evidence_area: str
+    related_sections: list[str]
+
+
+_EVIDENCE_CLASSIFICATIONS = {
+    "create_company_case": ("customer_business_profile", "case and registry match"),
+    "get_customer_static_by_case_id": ("customer_business_profile", "legal existence and registration"),
+    "generate_registry_document": ("customer_business_profile", "registry document"),
+    "extract_registry_document": ("customer_business_profile", "registry document"),
+    "get_company_org_chart_by_case_id": ("ownership_and_control", "ownership chart and UBOs"),
+    "get_company_members_by_case_id": ("ownership_and_control", "members and controllers"),
+    "establish_idv_requirements": ("identity_verification", "ID&V requirements"),
+    "generate_idv_documents": ("identity_verification", "identity documents"),
+    "extract_idv_documents": ("identity_verification", "identity-document validation"),
+    "digital_footprint_assessment": ("screening", "Digital Footprint"),
+    "adverse_news_screening": ("screening", "Adverse News"),
+    "csp_address_assessment": ("screening", "CSP address screening"),
+}
+
+
+def classify_evidence_item(item: EvidenceItem) -> EvidenceItem:
+    """Add CDD organisation metadata without changing the canonical evidence payload."""
+    if item.get("cdd_section"):
+        return item
+    section, area = _EVIDENCE_CLASSIFICATIONS.get(
+        str(item.get("tool") or ""),
+        ("screening", "Other screening or assessment"),
+    )
+    return {**item, "cdd_section": section, "evidence_area": area, "related_sections": item.get("related_sections") or []}
 
 
 class Finding(TypedDict, total=False):
