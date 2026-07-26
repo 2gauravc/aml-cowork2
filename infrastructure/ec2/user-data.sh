@@ -4,10 +4,9 @@ set -euo pipefail
 repository_url="$1"
 repository_branch="$2"
 application_secret_arn="$3"
-kyc_client_id="$4"
-s3_bucket_name="$5"
-s3_prefix="$6"
-aws_region="$7"
+s3_bucket_name="$4"
+s3_prefix="$5"
+aws_region="$6"
 
 app_dir="/opt/aml-cowork2"
 compose_plugin_version="v2.29.7"
@@ -18,10 +17,6 @@ trap 'status=$?; echo "AML Case Review bootstrap failed (exit ${status}). See ${
 
 if [[ -z "${application_secret_arn}" ]]; then
   echo "ApplicationSecretArn is required."
-  exit 1
-fi
-if [[ -z "${kyc_client_id}" ]]; then
-  echo "KycClientId is required."
   exit 1
 fi
 
@@ -60,8 +55,7 @@ python3 - \
   ".env" \
   "${aws_region}" \
   "${s3_bucket_name}" \
-  "${s3_prefix}" \
-  "${kyc_client_id}" <<'PY'
+  "${s3_prefix}" <<'PY'
 import json
 import re
 import sys
@@ -73,7 +67,6 @@ output_path = Path(sys.argv[3])
 region = sys.argv[4]
 bucket = sys.argv[5]
 prefix = sys.argv[6]
-kyc_client_id = sys.argv[7]
 
 with secret_path.open(encoding="utf-8") as stream:
     secret = json.load(stream)
@@ -98,7 +91,7 @@ for key, value in secret.items():
     if "\n" in str(value) or "\r" in str(value):
         raise SystemExit(f"Application secret value for {key} must not contain a newline.")
 
-required_keys = {"KYCCLIENTSECRET", "OPENAI_API_KEY", "TAVILY_API_KEY"}
+required_keys = {"KYCCLIENTID", "KYCCLIENTSECRET", "OPENAI_API_KEY", "TAVILY_API_KEY"}
 missing_keys = sorted(key for key in required_keys if not str(secret.get(key, "")).strip())
 if missing_keys:
     raise SystemExit("Application secret is missing required values: " + ", ".join(missing_keys))
@@ -107,7 +100,6 @@ runtime_values = {
     **{key: str(value) for key, value in secret.items()},
     "DEMO_MODE": "false",
     "AWS_REGION": region,
-    "KYCCLIENTID": kyc_client_id,
 }
 if bucket:
     runtime_values["S3_DOCUMENT_BUCKET"] = bucket

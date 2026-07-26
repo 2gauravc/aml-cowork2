@@ -163,22 +163,20 @@ production or sensitive customer traffic.
 1. Create one Secrets Manager JSON secret from
    [`infrastructure/ec2/secrets.example.json`](infrastructure/ec2/secrets.example.json).
    Replace every placeholder and retain the secret ARN. The secret contains
-   only `KYCCLIENTSECRET`, `OPENAI_API_KEY`, and `TAVILY_API_KEY`. Do not add
-   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN`; the
-   EC2 instance role supplies temporary AWS credentials.
+   `KYCCLIENTID`, `KYCCLIENTSECRET`, `OPENAI_API_KEY`, and `TAVILY_API_KEY`.
+   Do not add `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or
+   `AWS_SESSION_TOKEN`; the EC2 instance role supplies temporary AWS credentials.
 2. Ensure the deployer has permission to create the CloudFormation, EC2, IAM,
    and networking resources, then run:
 
    ```bash
    ./infrastructure/ec2/deploy.sh \
      --region us-east-1 \
-     --secret-arn arn:aws:secretsmanager:us-east-1:123456789012:secret:aml-cowork2-demo-xxxxx \
-     --kyc-client-id your-kyc-client-id
+     --secret-arn arn:aws:secretsmanager:us-east-1:123456789012:secret:aml-cowork2-demo-xxxxx
    ```
 
    `KYCBASEURL` and OpenAI model selections remain normal versioned
-   configuration in `.env.example`; `--kyc-client-id` supplies the remaining
-   non-secret OAuth identifier. Use `--s3-bucket`, `--s3-prefix`, or
+   configuration in `.env.example`. Use `--s3-bucket`, `--s3-prefix`, or
    `--secret-kms-key-arn` when those defaults do not apply. The script validates
    the template and secret metadata, deploys the stack, waits for the
    application health check, and prints the HTTP Elastic-IP URL and a Session
