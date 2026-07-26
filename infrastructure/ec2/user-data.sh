@@ -21,8 +21,21 @@ if [[ -z "${application_secret_arn}" ]]; then
 fi
 
 dnf update -y
-dnf install -y awscli2 docker git curl jq
+dnf install -y docker git curl jq unzip
 systemctl enable --now docker
+
+# Amazon Linux 2023 AMIs normally include AWS CLI v2. Install the official v2
+# bundle only if this particular image does not, rather than relying on a
+# distro package name that is not present in every AL2023 repository.
+if ! command -v aws > /dev/null; then
+  aws_cli_dir="$(mktemp -d)"
+  curl --fail --location --retry 5 \
+    "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
+    --output "${aws_cli_dir}/awscliv2.zip"
+  unzip -q "${aws_cli_dir}/awscliv2.zip" -d "${aws_cli_dir}"
+  "${aws_cli_dir}/aws/install" --update
+  rm -rf "${aws_cli_dir}"
+fi
 
 mkdir -p /usr/local/lib/docker/cli-plugins
 curl --fail --location --retry 5 \
