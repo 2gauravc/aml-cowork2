@@ -12,7 +12,7 @@ region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 s3_bucket="onbo-bkt"
 s3_prefix=""
 secret_kms_key_arn=""
-repository_branch="deploy/ec2-demo"
+repository_branch="main"
 
 usage() {
   cat <<'USAGE'
@@ -28,7 +28,7 @@ Options:
   --s3-bucket NAME             Document bucket (default: onbo-bkt).
   --s3-prefix PREFIX           Optional document bucket prefix.
   --secret-kms-key-arn ARN     Customer-managed KMS key for the secret, if applicable.
-  --repository-branch BRANCH   Branch cloned by EC2 (default: deploy/ec2-demo).
+  --repository-branch BRANCH   Branch cloned by EC2 (default: main).
   -h, --help                   Show this help.
 USAGE
 }

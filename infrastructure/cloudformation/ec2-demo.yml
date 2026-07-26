@@ -12,7 +12,7 @@ Parameters:
     Description: Raw GitHub repository URL used to download the bootstrap script.
   RepositoryBranch:
     Type: String
-    Default: deploy/ec2-demo
+    Default: main
     Description: Branch containing the deployment assets.
   ApplicationSecretArn:
     Type: String
