@@ -21,7 +21,7 @@ from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
 from src.agents.graph import PIPELINE_NODE_LABELS, resume_cdd_agent_state, run_cdd_agent_state
-from src.agents.nodes import adverse_news_screening, assess_cdd_completeness, assess_evidence_quality, digital_footprint_assessment
+from src.agents.nodes import adverse_news_screening, assess_cdd_completeness, assess_evidence_quality, assess_other_risk_factors, digital_footprint_assessment
 from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
@@ -146,6 +146,10 @@ class CDDCompletenessRequest(BaseModel):
 
 
 class EvidenceQualityRequest(BaseModel):
+    session_id: str
+
+
+class OtherRiskFactorsRequest(BaseModel):
     session_id: str
 
 
@@ -449,6 +453,26 @@ async def run_evidence_quality(request: EvidenceQualityRequest) -> dict[str, Any
     _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     sync_case_status(state)
     return _response(session, status="evidence_quality_completed")
+
+
+@app.post("/api/other-risk-factors/run")
+async def run_other_risk_factors(request: OtherRiskFactorsRequest) -> dict[str, Any]:
+    """Run Other Risk Factors checks against the retained CDD state."""
+    session = SESSIONS.get(request.session_id)
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
+    result = await asyncio.to_thread(assess_other_risk_factors, state)
+    prior_ids = {item.get("assessment_id") for item in state.get("assessments", []) if item.get("assessment_type") == "other_risk_factors"}
+    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "other_risk_factors"]
+    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_ids]
+    _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
+    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
+    sync_case_status(state)
+    return _response(session, status="other_risk_factors_completed")
 
 
 @app.post("/api/case-review/decision")

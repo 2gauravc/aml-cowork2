@@ -33,6 +33,7 @@ from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen
 from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint
 from src.tools.cdd_completeness import CDDCompletenessError, evaluate_cdd_completeness
 from src.tools.evidence_quality import EvidenceQualityError, evaluate_evidence_quality
+from src.tools.other_risk_factors import OtherRiskFactorsError, evaluate_other_risk_factors
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -1107,6 +1108,32 @@ def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
         return {"evidence": [evidence], "assessments": assessments, "findings": findings}
     except EvidenceQualityError as exc:
         return {"evidence": [], "findings": [], "assessments": [{"assessment_id": f"assessment:evidence-quality:{uuid4().hex}", "assessment_type": "evidence_quality", "schema_version": "evidence_quality_assessment/v1", "tool": "evidence_quality", "run_id": run_id, "created_at": evaluated_at, "outcome": "unavailable", "summary": "Evidence Quality assessment could not be completed.", "limitations": [str(exc)]}]}
+
+
+def assess_other_risk_factors(state: CDDState) -> dict[str, Any]:
+    """Evaluate SKILL-defined other AML/CFT risk factors without duplicating upstream tools."""
+    evaluated_at = datetime.now(UTC).isoformat()
+    run_id = f"run:other-risk-factors:{uuid4().hex}"
+    try:
+        result = evaluate_other_risk_factors(state)
+        evidence_id = f"evidence:other-risk-factors:{uuid4().hex}"
+        evidence = _evidence(tool="other_risk_factors", description="Evaluated configured Other Risk Factors", source="Other Risk Factors", data={"factors": result["assessments"], "skill_path": result["definition"]["path"]}, relevance_tags=["other_risk_factors", "policy"])
+        evidence["evidence_id"] = evidence_id
+        profile = (((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {})
+        subject = {"entity_id": str(profile.get("registration_number") or "") or None, "entity_type": "company", "name": profile.get("name") or (state.get("metadata") or {}).get("customer", {}).get("name") or "Customer"}
+        assessments, findings = [], []
+        for factor in result["assessments"]:
+            assessment_id = f"assessment:other-risk-factors:{factor['factor_id']}:{uuid4().hex}"
+            assessment = {"assessment_id": assessment_id, "assessment_type": "other_risk_factors", "schema_version": result["definition"]["assessment"]["schema"], "tool": "other_risk_factors", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "method": factor["method"], "display_order": factor["display_order"]}, "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in factor["selected_evidence"]]], "upstream_assessment_ids": factor["upstream_assessment_ids"], "upstream_finding_ids": factor["upstream_finding_ids"], **factor}
+            assessments.append(assessment)
+            if factor["outcome"] not in {"triggered", "inconclusive"}:
+                continue
+            finding = {"finding_id": f"finding:other-risk-factors:{factor['factor_id']}:{uuid4().hex}", "schema_version": "finding/v1", "category": "other_risk_factors", "assessment_id": assessment_id, "check_id": factor["factor_id"], "title": factor["title"], "summary": factor["summary"], "subject": subject, "confidence": {"level": "high", "rationale": "Derived from retained CDD records and the configured Other Risk Factors skill.", "limitations": ["This assessment does not replace entity-specific adverse-news or digital-footprint screening."]}, "severity": {"level": factor["severity"], "rationale": "Configured by the Other Risk Factors skill."}, "potential_impact_risk": "The identified factor may require further review or enhanced due diligence before a case decision.", "recommended_action_rfi": {"internal_actions": [factor["action"]], "rfi": []}, "source": {"producer_type": "tool", "producer_name": "other_risk_factors", "run_id": run_id, "created_at": evaluated_at}, "relevant_evidence_ids": assessment["source_evidence_ids"], "other_risk_factors": {"factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "detail": factor["detail"], "upstream_assessment_ids": factor["upstream_assessment_ids"], "upstream_finding_ids": factor["upstream_finding_ids"]}}
+            _validate_finding(finding)
+            findings.append(finding)
+        return {"evidence": [evidence], "assessments": assessments, "findings": findings}
+    except OtherRiskFactorsError as exc:
+        return {"evidence": [], "findings": [], "assessments": [{"assessment_id": f"assessment:other-risk-factors:{uuid4().hex}", "assessment_type": "other_risk_factors", "schema_version": "other_risk_factors_assessment/v1", "tool": "other_risk_factors", "run_id": run_id, "created_at": evaluated_at, "outcome": "unavailable", "summary": "Other Risk Factors assessment could not be completed.", "limitations": [str(exc)]}]}
 
 
 def finalize_cdd(state: CDDState) -> dict[str, Any]:

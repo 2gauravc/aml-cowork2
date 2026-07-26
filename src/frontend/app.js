@@ -437,6 +437,24 @@ function App() {
     }
   }
 
+  async function runOtherRiskFactors() {
+    if (!sessionId || !cdd) return;
+    setCaseReviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/other-risk-factors/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Other Risk Factors check failed"));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCaseReviewLoading(false);
+    }
+  }
+
   async function saveCaseReviewDecision() {
     if (!sessionId || !cdd) return;
     setCaseReviewLoading(true);
@@ -1055,6 +1073,7 @@ function App() {
                 onRefresh={refreshCaseReview}
                 onRunCompleteness={runCDDCompleteness}
                 onRunEvidenceQuality={runEvidenceQuality}
+                onRunOtherRiskFactors={runOtherRiskFactors}
                 onDecisionChange={setReviewDecisionDraft}
                 onNoteChange={setReviewNote}
                 onSaveDecision={saveCaseReviewDecision}
@@ -1212,6 +1231,7 @@ function CaseReview({
   onRefresh,
   onRunCompleteness,
   onRunEvidenceQuality,
+  onRunOtherRiskFactors,
   onDecisionChange,
   onNoteChange,
   onSaveDecision,
@@ -1230,6 +1250,7 @@ function CaseReview({
     <>
       <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
       <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
+      <OtherRiskFactors assessments={assessmentsByType(cddState, "other_risk_factors")} findings={(cddState?.findings || []).filter((finding) => finding.category === "other_risk_factors")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunOtherRiskFactors} />
 
       <Section title="Case Assessment">
         <div className="case-assessment-header">
@@ -1386,6 +1407,27 @@ function EvidenceQuality({ assessments, findings, evidence, loading, demoMode, o
       </div>
     </Section>
   );
+}
+
+function OtherRiskFactors({ assessments, findings, evidence, loading, demoMode, onRun }) {
+  if (!assessments.length) {
+    return <Section title="Other Risk Factors"><p className="empty">No Other Risk Factors assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Other Risk Factors Check"}</button></Section>;
+  }
+  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  return <Section title="Other Risk Factors">
+    <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Other Risk Factors Check"}</button>
+    <div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
+      const group = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section);
+      if (!group.length) return null;
+      return <div className="evidence-quality-section" key={section}><h3>{EVIDENCE_SECTION_LABELS[section]}</h3>{group.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
+        const finding = findings.find((item) => item.assessment_id === assessment.assessment_id);
+        const reviewed = (assessment.selected_evidence || []).map((item) => evidenceById[item.evidence_id] || item);
+        const upstreamCount = (assessment.upstream_assessment_ids || []).length + (assessment.upstream_finding_ids || []).length;
+        const indicators = assessment.detail?.matched_indicators || [];
+        return <div className="review-item" key={assessment.assessment_id}><strong>{assessment.title}</strong><p>{assessment.summary}</p>{indicators.map((indicator, index) => <small key={`${indicator.evidence_id}-${indicator.field_path}-${index}`}>{`Matched evidence: ${indicator.evidence_id} · ${indicator.field_path} · ${indicator.value}`}</small>)}{upstreamCount ? <small>{`Related retained screening records: ${upstreamCount}.`}</small> : null}{reviewed.length ? <EvidenceReview evidence={reviewed} /> : null}{finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}</div>;
+      })}</div>;
+    })}</div>
+  </Section>;
 }
 
 const EVIDENCE_SECTION_ORDER = ["customer_business_profile", "ownership_and_control", "identity_verification", "screening"];

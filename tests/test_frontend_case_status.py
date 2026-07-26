@@ -118,6 +118,15 @@ def test_document_management_displays_generation_errors() -> None:
     assert "Unable to refresh document status" in app
 
 
+def test_other_risk_factors_checker_is_grouped_by_cdd_section() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+    assert 'function OtherRiskFactors' in app
+    assert 'assessmentsByType(cddState, "other_risk_factors")' in app
+    assert 'fetch("/api/other-risk-factors/run"' in app
+    assert 'EVIDENCE_SECTION_ORDER.map((section)' in app
+    assert 'Matched evidence: ${indicator.evidence_id}' in app
+
+
 def test_awaiting_documents_has_cdd_callout_and_documents_navigation() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
