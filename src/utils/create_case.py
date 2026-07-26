@@ -20,7 +20,7 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
-from src.utils.kyc_cache import get_cache_value, set_cache_value
+from src.utils.kyc_cache import CacheSubject, company_cache_subject, get_cache_value, set_cache_value
 
 
 load_dotenv()
@@ -115,12 +115,13 @@ def create_company_case(
         raise ValueError("company_name is required")
     if not jurisdiction:
         raise ValueError("jurisdiction is required")
-
     if client is None:
         if not client_id or not client_secret:
             raise ValueError("KYCCLIENTID and KYCCLIENTSECRET are required")
         client = KycClient(base_url, client_id, client_secret)
 
+    # A query name may be incomplete or a typo. Keep this local lookup so that
+    # S3 objects are keyed only by the resolved registry company below.
     cached_result = get_cache_value("company-case", [jurisdiction, company_name])
     if cached_result is not None:
         return cached_result
@@ -135,6 +136,15 @@ def create_company_case(
     raw_name = selected_match.get("rawname")
     if not raw_name:
         raise ValueError("Top registry result did not include rawname")
+    cache_subject = company_cache_subject(jurisdiction, raw_name)
+
+    cached_result = get_cache_value(
+        "company-case",
+        [jurisdiction, company_name],
+        subject=cache_subject,
+    )
+    if cached_result is not None:
+        return cached_result
 
     create_resp = client.request(
         "POST",
@@ -170,6 +180,7 @@ def create_company_case(
         polling = _poll_until_ready(
             client,
             case_id,
+            cache_subject=cache_subject,
             attempts=poll_attempts,
             interval_seconds=poll_interval_seconds,
         )
@@ -178,6 +189,14 @@ def create_company_case(
         result["ready"] = result["status_id"] == READY_STATUS_ID
 
     result = _drop_empty(result)
+    set_cache_value(
+        "company-case",
+        [jurisdiction, company_name],
+        result,
+        subject=cache_subject,
+    )
+    # Preserve the original query locally, including a possible abbreviation or
+    # typo, without creating a second S3 company object.
     return set_cache_value("company-case", [jurisdiction, company_name], result)
 
 
@@ -188,6 +207,9 @@ def search_companies(
     client: KycClient,
 ) -> list[dict[str, Any]]:
     """Search the registry for possible company matches."""
+    # Search terms do not necessarily identify a registered company. Keep them
+    # in the local cache only; resolved company data is persisted in S3 by
+    # create_company_case and the subsequent detail/member fetches.
     cached_body = get_cache_value("company-search", [jurisdiction, company_name])
     if cached_body is not None:
         return cached_body.get("companySearch", {}).get("results", [])
@@ -207,6 +229,7 @@ def _poll_until_ready(
     client: KycClient,
     case_id: int | str,
     *,
+    cache_subject: CacheSubject,
     attempts: int,
     interval_seconds: int,
 ) -> dict[str, Any]:
@@ -215,7 +238,7 @@ def _poll_until_ready(
     polls_completed = 0
 
     for poll_number in range(1, attempts + 1):
-        body = get_company_detail(case_id, client=client)
+        body = get_company_detail(case_id, client=client, cache_subject=cache_subject)
         status_id = _status_id(body)
         polls_completed = poll_number
 
@@ -237,9 +260,14 @@ def _poll_until_ready(
     }
 
 
-def get_company_detail(case_id: int | str, *, client: KycClient) -> dict[str, Any]:
+def get_company_detail(
+    case_id: int | str,
+    *,
+    client: KycClient,
+    cache_subject: CacheSubject | None = None,
+) -> dict[str, Any]:
     """Return raw company detail JSON, reading the persistent cache first."""
-    cached_body = get_cache_value("company-detail", [case_id])
+    cached_body = get_cache_value("company-detail", [case_id], subject=cache_subject)
     if cached_body is not None:
         return cached_body
 
@@ -247,7 +275,7 @@ def get_company_detail(case_id: int | str, *, client: KycClient) -> dict[str, An
     resp.raise_for_status()
     body = resp.json()
     if _status_id(body) == READY_STATUS_ID:
-        set_cache_value("company-detail", [case_id], body)
+        set_cache_value("company-detail", [case_id], body, subject=cache_subject)
     return body
 
 

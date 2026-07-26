@@ -225,6 +225,28 @@ long-lived AWS access keys. Set `S3_DOCUMENT_BUCKET_URL`,
 `S3_DOCUMENT_BUCKET`, or `AWS_S3_BUCKET_URL` to override the default document
 bucket configuration.
 
+The KYC API cache is local by default at `outputs/cache/kyc_api_cache.json`.
+Set `KYC_CACHE_S3_BUCKET=onbo-bkt` and `KYC_CACHE_S3_PREFIX=kyc-cache` to make
+it persistent. Each company/jurisdiction is stored independently at a path
+such as `kyc-cache/SG/sc-engineering-private-limited.json`; the app retains a
+local fallback if S3 is unavailable. To copy an existing local cache without
+deleting it, first review the migration and then run it:
+
+```bash
+python -m src.utils.kyc_cache migrate-local-to-s3 \
+  --source outputs/cache/kyc_api_cache.json \
+  --bucket onbo-bkt \
+  --prefix kyc-cache \
+  --region us-east-1 \
+  --dry-run
+
+python -m src.utils.kyc_cache migrate-local-to-s3 \
+  --source outputs/cache/kyc_api_cache.json \
+  --bucket onbo-bkt \
+  --prefix kyc-cache \
+  --region us-east-1
+```
+
 ### Start the web app
 
 ```bash
@@ -258,15 +280,16 @@ production or sensitive customer traffic.
 
    `KYCBASEURL` and OpenAI model selections remain normal versioned
    configuration in `.env.example`; the application derives its KYC token
-   endpoint from `KYCBASEURL`. Use `--s3-bucket`, `--s3-prefix`, or
-   `--secret-kms-key-arn` when those defaults do not apply. The script validates
-   the template and secret metadata, deploys the stack, waits for the
-   application health check, and prints the HTTP Elastic-IP URL and a Session
-   Manager command.
+   endpoint from `KYCBASEURL`. The deployment enables the persistent KYC cache
+   in `onbo-bkt/kyc-cache/` by default. Use `--s3-bucket`, `--s3-prefix`,
+   `--kyc-cache-bucket`, `--kyc-cache-prefix`, or `--secret-kms-key-arn` when
+   those defaults do not apply. The script validates the template and secret
+   metadata, deploys the stack, waits for the application health check, and
+   prints the HTTP Elastic-IP URL and a Session Manager command.
 
-The stack creates a least-privilege EC2 instance profile: scoped document S3
-access, read access to only the specified application secret, and Systems
-Manager access. Bootstrap reads the secret with that role and writes a
+The stack creates a least-privilege EC2 instance profile: scoped document and
+KYC-cache S3 access, read access to only the specified application secret, and
+Systems Manager access. Bootstrap reads the secret with that role and writes a
 root-owned runtime `.env`; it never needs static AWS credentials.
 
 ### Demo workflow

@@ -49,6 +49,7 @@ from src.utils.s3_documents import (
     s3_upload_skip_reason,
     upload_document_to_s3,
 )
+from src.utils.kyc_cache import CacheSubject, company_cache_subject
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -128,7 +129,11 @@ def create_or_reuse_case(state: CDDState) -> dict[str, Any]:
 
 def fetch_customer_static(state: CDDState) -> dict[str, Any]:
     case_id = _case_id(state)
-    result = _fetch_customer_static(case_id, client=_client())
+    result = _fetch_customer_static(
+        case_id,
+        client=_client(),
+        cache_subject=_cache_subject_from_state(state),
+    )
     return {
         "evidence": [
             _evidence(
@@ -150,7 +155,11 @@ def fetch_customer_static(state: CDDState) -> dict[str, Any]:
 
 def fetch_org_chart(state: CDDState) -> dict[str, Any]:
     case_id = _case_id(state)
-    result = _fetch_company_org_chart(case_id, client=_client())
+    result = _fetch_company_org_chart(
+        case_id,
+        client=_client(),
+        cache_subject=_cache_subject_from_state(state),
+    )
     return {
         "evidence": [
             _evidence(
@@ -172,7 +181,11 @@ def fetch_org_chart(state: CDDState) -> dict[str, Any]:
 
 def fetch_members(state: CDDState) -> dict[str, Any]:
     case_id = _case_id(state)
-    result = _fetch_company_members(case_id, client=_client())
+    result = _fetch_company_members(
+        case_id,
+        client=_client(),
+        cache_subject=_cache_subject_from_state(state),
+    )
     return {
         "evidence": [
             _evidence(
@@ -1206,6 +1219,18 @@ def _case_id(state: CDDState) -> int | str:
     if case_id is None:
         raise ValueError("metadata.kyc_case.case_id is required")
     return case_id
+
+
+def _cache_subject_from_state(state: CDDState) -> CacheSubject | None:
+    customer = state.get("metadata", {}).get("customer", {})
+    kyc_case = state.get("metadata", {}).get("kyc_case", {})
+    name = customer.get("name")
+    jurisdiction = customer.get("jurisdiction")
+    selected_match = kyc_case.get("selected_registry_match") or {}
+    resolved_name = selected_match.get("rawname") or name
+    if not isinstance(resolved_name, str) or not isinstance(jurisdiction, str):
+        return None
+    return company_cache_subject(jurisdiction, resolved_name)
 
 
 def _evidence(

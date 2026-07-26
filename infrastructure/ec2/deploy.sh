@@ -11,6 +11,8 @@ secret_arn=""
 region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 s3_bucket="onbo-bkt"
 s3_prefix=""
+kyc_cache_bucket="onbo-bkt"
+kyc_cache_prefix="kyc-cache"
 secret_kms_key_arn=""
 repository_branch="main"
 
@@ -27,6 +29,8 @@ Options:
   --stack-name NAME            CloudFormation stack name (default: aml-cowork2-demo).
   --s3-bucket NAME             Document bucket (default: onbo-bkt).
   --s3-prefix PREFIX           Optional document bucket prefix.
+  --kyc-cache-bucket NAME      KYC cache bucket (default: onbo-bkt).
+  --kyc-cache-prefix PREFIX    KYC cache prefix (default: kyc-cache).
   --secret-kms-key-arn ARN     Customer-managed KMS key for the secret, if applicable.
   --repository-branch BRANCH   Branch cloned by EC2 (default: main).
   -h, --help                   Show this help.
@@ -40,6 +44,8 @@ while [[ $# -gt 0 ]]; do
     --stack-name) stack_name="${2:?--stack-name requires a value}"; shift 2 ;;
     --s3-bucket) s3_bucket="${2:?--s3-bucket requires a value}"; shift 2 ;;
     --s3-prefix) s3_prefix="${2:?--s3-prefix requires a value}"; shift 2 ;;
+    --kyc-cache-bucket) kyc_cache_bucket="${2:?--kyc-cache-bucket requires a value}"; shift 2 ;;
+    --kyc-cache-prefix) kyc_cache_prefix="${2:?--kyc-cache-prefix requires a value}"; shift 2 ;;
     --secret-kms-key-arn) secret_kms_key_arn="${2:?--secret-kms-key-arn requires a value}"; shift 2 ;;
     --repository-branch) repository_branch="${2:?--repository-branch requires a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -69,6 +75,8 @@ parameters=(
   "ApplicationSecretArn=${secret_arn}"
   "S3BucketName=${s3_bucket}"
   "S3Prefix=${s3_prefix}"
+  "KycCacheBucketName=${kyc_cache_bucket}"
+  "KycCachePrefix=${kyc_cache_prefix}"
   "RepositoryBranch=${repository_branch}"
 )
 if [[ -n "${secret_kms_key_arn}" ]]; then

@@ -55,7 +55,7 @@ from src.agents.nodes import (  # noqa: E402
 )
 from src.agents.state import CDDState, new_cdd_state  # noqa: E402
 from src.utils.langgraph_debug import maybe_debug_node  # noqa: E402
-from src.utils.kyc_cache import get_cache_value  # noqa: E402
+from src.utils.kyc_cache import company_cache_subject, get_cache_source  # noqa: E402
 from src.utils.pdf import render_cdd_pdf  # noqa: E402
 
 
@@ -94,8 +94,8 @@ def _case_id_from_state(state: dict[str, Any]) -> int | str | None:
     return (state.get("metadata") or {}).get("kyc_case", {}).get("case_id")
 
 
-def _cache_used_by_node(node_name: str, state: dict[str, Any]) -> bool:
-    """Return whether the current fetch node will read an already-cached API result."""
+def _cache_source_by_node(node_name: str, state: dict[str, Any]) -> str | None:
+    """Return the cache backend for the current API-fetch node, if any."""
     cache_names = {
         "fetch_customer_static": "company-detail",
         "fetch_org_chart": "company-org-chart",
@@ -103,7 +103,20 @@ def _cache_used_by_node(node_name: str, state: dict[str, Any]) -> bool:
     }
     cache_name = cache_names.get(node_name)
     case_id = _case_id_from_state(state)
-    return bool(cache_name and case_id is not None and get_cache_value(cache_name, [case_id]) is not None)
+    customer = (state.get("metadata") or {}).get("customer") or {}
+    kyc_case = (state.get("metadata") or {}).get("kyc_case") or {}
+    name = customer.get("name")
+    jurisdiction = customer.get("jurisdiction")
+    selected_match = kyc_case.get("selected_registry_match") or {}
+    resolved_name = selected_match.get("rawname") or name
+    subject = (
+        company_cache_subject(jurisdiction, resolved_name)
+        if isinstance(resolved_name, str) and isinstance(jurisdiction, str)
+        else None
+    )
+    if not cache_name or case_id is None:
+        return None
+    return get_cache_source(cache_name, [case_id], subject=subject)
 
 
 def _progress_node(
@@ -120,14 +133,15 @@ def _progress_node(
 
     def wrapped(state: dict[str, Any]) -> dict[str, Any]:
         started = time.monotonic()
-        using_cache = _cache_used_by_node(node_name, state)
+        cache_source = _cache_source_by_node(node_name, state)
         progress_callback(
             {
                 "node": node_name,
                 "node_number": node_number,
                 "total_nodes": len(PIPELINE_NODE_LABELS),
                 "message": PIPELINE_NODE_LABELS[node_name],
-                "using_cache": using_cache,
+                "using_cache": cache_source is not None,
+                "cache_source": cache_source,
                 "status": "running",
                 "started_at": datetime.now(UTC).isoformat(),
             }
@@ -142,7 +156,8 @@ def _progress_node(
                         "node_number": node_number,
                         "total_nodes": len(PIPELINE_NODE_LABELS),
                         "message": document_message,
-                        "using_cache": False,
+                    "using_cache": False,
+                    "cache_source": None,
                         "status": "running",
                         "started_at": datetime.now(UTC).isoformat(),
                     }
@@ -155,7 +170,8 @@ def _progress_node(
                     "node_number": node_number,
                     "total_nodes": len(PIPELINE_NODE_LABELS),
                     "message": PIPELINE_NODE_LABELS[node_name],
-                    "using_cache": using_cache,
+                    "using_cache": cache_source is not None,
+                    "cache_source": cache_source,
                     "status": "error",
                     "error": str(exc),
                 }

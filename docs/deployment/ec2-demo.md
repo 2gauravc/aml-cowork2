@@ -14,8 +14,10 @@ are held in process memory.
 - One existing Secrets Manager JSON secret containing `KYCCLIENTID`,
   `KYCCLIENTSECRET`, `OPENAI_API_KEY`, `TAVILY_API_KEY`, and `BRAVE_API_KEY`.
   Start with [`infrastructure/ec2/secrets.example.json`](../../infrastructure/ec2/secrets.example.json).
-- An existing S3 bucket for generated documents, if document storage is
-  required. The EC2 role is scoped to the configured bucket and prefix.
+- An existing S3 bucket for generated documents and the persistent KYC cache.
+  The deployment defaults both to `onbo-bkt`; KYC cache objects are kept under
+  `kyc-cache/`, one object per company and jurisdiction. The EC2 role is scoped
+  to the configured document and cache prefixes.
 
 Do not put AWS access keys in the application secret. The EC2 instance role
 provides temporary credentials for S3, Secrets Manager, and Systems Manager.
@@ -43,10 +45,14 @@ use it with production or sensitive customer traffic.
 
 Bootstrap downloads the selected repository branch, fetches the application
 secret through the EC2 role, and creates `/opt/aml-cowork2/.env` with
-`DEMO_MODE=false`, the configured S3 location, and restrictive permissions.
-Normal, non-secret configuration remains in `.env.example`, including
+`DEMO_MODE=false`, the configured document and KYC-cache S3 locations, and
+restrictive permissions. Normal, non-secret configuration remains in `.env.example`, including
 `KYCBASEURL` and optional OpenAI model overrides. The application derives the
 KYC token endpoint from `KYCBASEURL`.
+
+Use `--kyc-cache-bucket` or `--kyc-cache-prefix` with `deploy.sh` to override
+the default cache location. The application falls back to its local JSON cache
+if S3 is temporarily unavailable.
 
 No SSH ingress is opened. Use Systems Manager for host access:
 
@@ -57,7 +63,8 @@ aws ssm start-session --region us-east-1 --target <instance-id>
 ## Smoke test
 
 1. Open the printed `http://<elastic-ip>` URL and confirm the CDD tab loads.
-2. Run a live CDD case and confirm documents use the configured S3 location.
+2. Run a live CDD case and confirm documents and the company-specific KYC cache
+   use their configured S3 locations.
 3. In the SSM session, run `cd /opt/aml-cowork2 && docker compose ps` to
    confirm both services are healthy.
 
@@ -80,6 +87,23 @@ curl --fail http://127.0.0.1/
 
 This does not change the existing runtime `.env`. Do not edit it to add static
 AWS credentials.
+
+## One-time local cache migration
+
+To seed the persistent cache from an existing developer machine, run the
+following locally with an AWS profile that can write to the cache prefix. The
+source cache is not deleted.
+
+```bash
+python -m src.utils.kyc_cache migrate-local-to-s3 \
+  --source outputs/cache/kyc_api_cache.json \
+  --bucket onbo-bkt \
+  --prefix kyc-cache \
+  --region us-east-1 \
+  --dry-run
+```
+
+If the reported count is expected, repeat the command without `--dry-run`.
 
 ## Teardown
 

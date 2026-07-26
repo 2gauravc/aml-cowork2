@@ -32,7 +32,7 @@ from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
-from src.utils.kyc_cache import get_cache_value
+from src.utils.kyc_cache import company_cache_subject, get_cache_source
 from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
 from src.utils.case_status import sync_case_status
@@ -1178,6 +1178,7 @@ async def _run_pipeline_for_session(
         "total_nodes": len(PIPELINE_NODE_LABELS),
         "message": "Collecting Inputs",
         "using_cache": False,
+        "cache_source": None,
         "status": "queued",
     }
     session["messages"].append(
@@ -1221,19 +1222,28 @@ def _registry_fetch_message(
     jurisdiction: str | None,
     case_id: str | None = None,
 ) -> str:
+    subject = (
+        company_cache_subject(jurisdiction, customer_name)
+        if jurisdiction
+        else None
+    )
     if case_id:
-        source = (
-            "reading from cache"
-            if get_cache_value("company-detail", [case_id]) is not None
-            else "calling API"
-        )
+        cache_source = get_cache_source("company-detail", [case_id], subject=subject)
     else:
-        source = (
-            "reading from cache"
+        cache_source = (
+            get_cache_source(
+                "company-case",
+                [jurisdiction, customer_name],
+                subject=subject,
+            )
             if jurisdiction
-            and get_cache_value("company-case", [jurisdiction, customer_name]) is not None
-            else "calling API"
+            else None
         )
+    source = (
+        f"reading from {'S3' if cache_source == 's3' else 'local'} cache"
+        if cache_source
+        else "calling API"
+    )
     return f"Fetching registry information... {source}"
 
 

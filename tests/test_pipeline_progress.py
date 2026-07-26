@@ -26,7 +26,7 @@ class PipelineProgressTests(unittest.TestCase):
         )
         state = {"metadata": {"kyc_case": {"case_id": 42}}}
 
-        with patch("src.agents.graph.get_cache_value", return_value={"cached": True}):
+        with patch("src.agents.graph.get_cache_source", return_value="s3"):
             self.assertEqual(wrapped(state), {"evidence": []})
 
         self.assertEqual(len(updates), 1)
@@ -34,6 +34,7 @@ class PipelineProgressTests(unittest.TestCase):
         self.assertEqual(updates[0]["node_number"], 4)
         self.assertEqual(updates[0]["total_nodes"], 23)
         self.assertTrue(updates[0]["using_cache"])
+        self.assertEqual(updates[0]["cache_source"], "s3")
         self.assertEqual(updates[0]["status"], "running")
 
     def test_final_pipeline_step_uses_case_assessment_label(self):

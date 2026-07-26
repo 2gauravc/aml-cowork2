@@ -25,6 +25,14 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional object prefix within the document bucket.
+  KycCacheBucketName:
+    Type: String
+    Default: onbo-bkt
+    Description: Existing bucket used for persistent KYC API cache objects.
+  KycCachePrefix:
+    Type: String
+    Default: kyc-cache
+    Description: Prefix used for persistent KYC API cache objects.
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
@@ -36,6 +44,7 @@ Parameters:
 
 Conditions:
   HasS3Access: !Not [!Equals [!Ref S3BucketName, '']]
+  HasKycCacheAccess: !Not [!Equals [!Ref KycCacheBucketName, '']]
   HasSecretKmsKey: !Not [!Equals [!Ref SecretKmsKeyArn, '']]
 
 Resources:
@@ -145,6 +154,28 @@ Resources:
                     - s3:PutObject
                   Resource: !Sub arn:${AWS::Partition}:s3:::${S3BucketName}/${S3Prefix}*
                 - !Ref AWS::NoValue
+        - PolicyName: OptionalKycCacheBucketAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - !If
+                - HasKycCacheAccess
+                - Effect: Allow
+                  Action: s3:ListBucket
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${KycCacheBucketName}
+                  Condition:
+                    StringLike:
+                      s3:prefix:
+                        - !Sub '${KycCachePrefix}/*'
+                - !Ref AWS::NoValue
+              - !If
+                - HasKycCacheAccess
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${KycCacheBucketName}/${KycCachePrefix}/*
+                - !Ref AWS::NoValue
         - PolicyName: ApplicationSecretAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -192,7 +223,7 @@ Resources:
           for attempt in $(seq 1 30); do
             if curl --fail --location --retry 3 "$bootstrap_url" --output /tmp/aml-cowork2-user-data.sh; then
               chmod +x /tmp/aml-cowork2-user-data.sh
-              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${ApplicationSecretArn}" "${S3BucketName}" "${S3Prefix}" "${AWS::Region}"
+              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${ApplicationSecretArn}" "${S3BucketName}" "${S3Prefix}" "${AWS::Region}" "${KycCacheBucketName}" "${KycCachePrefix}"
               exit 0
             fi
             sleep 10

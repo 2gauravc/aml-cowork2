@@ -7,6 +7,8 @@ application_secret_arn="$3"
 s3_bucket_name="$4"
 s3_prefix="$5"
 aws_region="$6"
+kyc_cache_bucket_name="$7"
+kyc_cache_prefix="$8"
 
 app_dir="/opt/aml-cowork2"
 compose_plugin_version="v2.29.7"
@@ -70,7 +72,9 @@ python3 - \
   ".env" \
   "${aws_region}" \
   "${s3_bucket_name}" \
-  "${s3_prefix}" <<'PY'
+  "${s3_prefix}" \
+  "${kyc_cache_bucket_name}" \
+  "${kyc_cache_prefix}" <<'PY'
 import json
 import re
 import sys
@@ -127,6 +131,9 @@ if bucket:
     runtime_values["S3_DOCUMENT_BUCKET_URL"] = f"https://{bucket}.s3.{region}.amazonaws.com"
 if prefix:
     runtime_values["S3_DOCUMENT_PREFIX"] = prefix.strip("/")
+if sys.argv[7]:
+    runtime_values["KYC_CACHE_S3_BUCKET"] = sys.argv[7]
+    runtime_values["KYC_CACHE_S3_PREFIX"] = sys.argv[8].strip("/") or "kyc-cache"
 
 existing_lines = example_path.read_text(encoding="utf-8").splitlines()
 assignment = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=")

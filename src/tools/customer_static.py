@@ -33,6 +33,7 @@ from src.utils.create_case import (  # noqa: E402
     create_company_case,
     get_company_detail,
 )
+from src.utils.kyc_cache import CacheSubject, company_cache_subject  # noqa: E402
 
 FIELD_ALIASES = {
     "company_type": (
@@ -192,11 +193,12 @@ def _fetch_customer_static(
     case_id: int | str,
     *,
     client: KycClient,
+    cache_subject: CacheSubject | None = None,
 ) -> dict[str, Any]:
     """Internal helper that fetches company detail after a case has been created."""
     try:
         return clean_customer_static_response(
-            get_company_detail(case_id, client=client),
+            get_company_detail(case_id, client=client, cache_subject=cache_subject),
             case_id=case_id,
         )
     except Exception as exc:
@@ -279,7 +281,15 @@ def get_customer_static_by_name(
                 ),
             }
 
-        static = _fetch_customer_static(case_result["case_id"], client=client)
+        resolved_name = (
+            case_result.get("selected_registry_match", {}).get("rawname")
+            or company_name
+        )
+        static = _fetch_customer_static(
+            case_result["case_id"],
+            client=client,
+            cache_subject=company_cache_subject(jurisdiction, resolved_name),
+        )
         if static.get("error"):
             static["case"] = case_result
             return static

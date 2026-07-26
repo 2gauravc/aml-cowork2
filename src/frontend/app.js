@@ -2108,7 +2108,9 @@ function formatPipelineProgress(progress) {
   const position = progress.node_number && progress.total_nodes
     ? `Step ${progress.node_number} of ${progress.total_nodes}: `
     : "";
-  const cache = progress.using_cache ? " (using cache)" : "";
+  const cache = progress.cache_source
+    ? ` (reading from ${progress.cache_source === "s3" ? "S3" : "local"} cache)`
+    : progress.using_cache ? " (using cache)" : "";
   const failure = progress.status === "error" && progress.error
     ? ` — ${progress.error}`
     : "";

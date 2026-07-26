@@ -76,7 +76,7 @@ class KycCacheTests(unittest.TestCase):
     def test_search_companies_uses_cache_before_api(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = os.path.join(tmp, "kyc-cache.json")
-            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path}):
+            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path, "KYC_CACHE_S3_BUCKET": ""}):
                 client = FakeClient([search_response()])
 
                 first = search_companies("Example Limited", "HK", client=client)
@@ -89,7 +89,7 @@ class KycCacheTests(unittest.TestCase):
     def test_get_company_detail_only_caches_ready_cases(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = os.path.join(tmp, "kyc-cache.json")
-            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path}):
+            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path, "KYC_CACHE_S3_BUCKET": ""}):
                 client = FakeClient(
                     [
                         company_response(status_id=1),
@@ -109,7 +109,7 @@ class KycCacheTests(unittest.TestCase):
     def test_create_company_case_uses_cached_case_before_api(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = os.path.join(tmp, "kyc-cache.json")
-            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path}):
+            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path, "KYC_CACHE_S3_BUCKET": ""}):
                 client = FakeClient(
                     [
                         search_response(),
@@ -145,7 +145,7 @@ class KycCacheTests(unittest.TestCase):
     def test_registry_fetch_message_indicates_cache_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = os.path.join(tmp, "kyc-cache.json")
-            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path}):
+            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path, "KYC_CACHE_S3_BUCKET": ""}):
                 set_cache_value(
                     "company-case",
                     ["HK", "Example Limited"],
@@ -157,12 +157,12 @@ class KycCacheTests(unittest.TestCase):
                     jurisdiction="HK",
                 )
 
-        self.assertEqual(message, "Fetching registry information... reading from cache")
+        self.assertEqual(message, "Fetching registry information... reading from local cache")
 
     def test_registry_fetch_message_indicates_api_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = os.path.join(tmp, "kyc-cache.json")
-            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path}):
+            with patch.dict(os.environ, {"KYC_CACHE_PATH": cache_path, "KYC_CACHE_S3_BUCKET": ""}):
                 message = _registry_fetch_message(
                     customer_name="Example Limited",
                     jurisdiction="HK",

@@ -32,23 +32,34 @@ from src.utils.create_case import (  # noqa: E402
     KycClient,
     create_company_case,
 )
-from src.utils.kyc_cache import get_cache_value, set_cache_value  # noqa: E402
+from src.utils.kyc_cache import (  # noqa: E402
+    CacheSubject,
+    company_cache_subject,
+    get_cache_value,
+    set_cache_value,
+)
 
 
 def _fetch_company_members(
     case_id: int | str,
     *,
     client: KycClient,
+    cache_subject: CacheSubject | None = None,
 ) -> dict[str, Any]:
     """Internal helper that fetches members after a case has been created."""
     try:
-        cached_body = get_cache_value("company-members", [case_id])
+        cached_body = get_cache_value("company-members", [case_id], subject=cache_subject)
         if cached_body is not None:
             return clean_members_response(cached_body, case_id=case_id)
 
         resp = client.request("GET", f"/v2/Companies/{case_id}/members")
         resp.raise_for_status()
-        body = set_cache_value("company-members", [case_id], resp.json())
+        body = set_cache_value(
+            "company-members",
+            [case_id],
+            resp.json(),
+            subject=cache_subject,
+        )
         return clean_members_response(body, case_id=case_id)
     except Exception as exc:
         return _error_response(exc, stage="fetch_members", case_id=case_id)
@@ -130,7 +141,15 @@ def get_company_members_by_name(
                 ),
             }
 
-        members = _fetch_company_members(case_result["case_id"], client=client)
+        resolved_name = (
+            case_result.get("selected_registry_match", {}).get("rawname")
+            or company_name
+        )
+        members = _fetch_company_members(
+            case_result["case_id"],
+            client=client,
+            cache_subject=company_cache_subject(jurisdiction, resolved_name),
+        )
         if members.get("error"):
             members["case"] = case_result
             return members
