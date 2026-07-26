@@ -21,8 +21,10 @@ if [[ -z "${application_secret_arn}" ]]; then
 fi
 
 dnf update -y
-dnf install -y docker git curl jq unzip
+dnf install -y docker git jq unzip
 systemctl enable --now docker
+
+command -v curl > /dev/null || { echo "curl is required but was not found on the AMI."; exit 1; }
 
 # Amazon Linux 2023 AMIs normally include AWS CLI v2. Install the official v2
 # bundle only if this particular image does not, rather than relying on a
