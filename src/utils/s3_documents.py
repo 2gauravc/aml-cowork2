@@ -32,8 +32,9 @@ def upload_document_to_s3(
 ) -> dict[str, Any] | None:
     """Upload a generated document to S3 and return case-document metadata.
 
-    Upload is skipped when AWS credentials are not configured. This keeps local
-    runs and unit tests usable while enabling S3 persistence in configured envs.
+    Upload is skipped when no usable AWS credentials are available. This keeps
+    local runs and unit tests usable while allowing boto3 to use EC2 instance
+    role credentials in deployed environments.
     """
     if not _has_aws_credentials():
         return None
@@ -156,7 +157,7 @@ def document_prefix(*, company_name: str | None, jurisdiction: str | None) -> st
     """Return the stable flat-folder prefix used for a company's documents."""
     if not company_name or not jurisdiction:
         return None
-    return f"generated_documents/{jurisdiction.strip().upper()}/{_slug(company_name)}/"
+    return f"{_storage_prefix()}generated_documents/{jurisdiction.strip().upper()}/{_slug(company_name)}/"
 
 
 def reusable_document_name(
@@ -198,16 +199,23 @@ def s3_upload_skip_reason() -> str | None:
     """Return why S3 upload is disabled, if it is disabled."""
     if _has_aws_credentials():
         return None
-    missing = []
-    if not os.getenv("AWS_ACCESS_KEY_ID"):
-        missing.append("AWS_ACCESS_KEY_ID")
-    if not os.getenv("AWS_SECRET_ACCESS_KEY"):
-        missing.append("AWS_SECRET_ACCESS_KEY")
-    return f"missing AWS credential env vars: {', '.join(missing)}"
+    return "no usable AWS credentials were found (instance role, profile, or environment)"
 
 
 def _has_aws_credentials() -> bool:
-    return bool(os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+    """Return whether boto3 can resolve credentials from its standard chain.
+
+    This supports local AWS profiles and EC2 instance profiles without storing
+    long-lived access keys in the application environment.
+    """
+    try:
+        import boto3
+    except ImportError:
+        return False
+    try:
+        return boto3.Session().get_credentials() is not None
+    except Exception:
+        return False
 
 
 def _bucket_url() -> str:
@@ -250,7 +258,13 @@ def _object_key(
     if prefix:
         return f"{prefix}{object_name or document_path.name}"
     case_part = f"case-{case_id}" if case_id not in (None, "") else "unassigned-case"
-    return f"generated_documents/{case_part}/{category}/{document_path.name}"
+    return f"{_storage_prefix()}generated_documents/{case_part}/{category}/{document_path.name}"
+
+
+def _storage_prefix() -> str:
+    """Return an optional S3 object prefix, normalized for path composition."""
+    configured = os.getenv("S3_DOCUMENT_PREFIX", "").strip().strip("/")
+    return f"{configured}/" if configured else ""
 
 
 def _document_type_from_key(key: str) -> str | None:

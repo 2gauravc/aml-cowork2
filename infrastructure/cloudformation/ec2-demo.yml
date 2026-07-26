@@ -2,9 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Single-instance EC2 demo deployment for AML Case Review Workspace.
 
 Parameters:
-  DomainName:
-    Type: String
-    Description: Fully qualified DNS name that will point to the Elastic IP for HTTPS (for example, demo.example.com).
   RepositoryUrl:
     Type: String
     Default: https://github.com/2gauravc/aml-cowork2.git
@@ -15,8 +12,11 @@ Parameters:
     Description: Raw GitHub repository URL used to download the bootstrap script.
   RepositoryBranch:
     Type: String
-    Default: main
+    Default: deploy/ec2-demo
     Description: Branch containing the deployment assets.
+  ApplicationSecretArn:
+    Type: String
+    Description: ARN of the existing Secrets Manager JSON secret containing live application configuration.
   S3BucketName:
     Type: String
     Default: onbo-bkt
@@ -29,9 +29,14 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
     Description: Amazon Linux 2023 AMI SSM parameter.
+  SecretKmsKeyArn:
+    Type: String
+    Default: ''
+    Description: Optional customer-managed KMS key ARN used to encrypt ApplicationSecretArn.
 
 Conditions:
   HasS3Access: !Not [!Equals [!Ref S3BucketName, '']]
+  HasSecretKmsKey: !Not [!Equals [!Ref SecretKmsKeyArn, '']]
 
 Resources:
   DemoVpc:
@@ -93,19 +98,14 @@ Resources:
   DemoSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: HTTPS access for the AML Case Review Workspace demo.
+      GroupDescription: HTTP access for the AML Case Review Workspace demo.
       VpcId: !Ref DemoVpc
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-          Description: HTTP required for Caddy ACME certificate validation and redirect handling.
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-          Description: HTTPS application access.
+          Description: Public HTTP application access. This demo endpoint is not encrypted.
       Tags:
         - Key: Name
           Value: aml-cowork2-demo-sg
@@ -145,6 +145,22 @@ Resources:
                     - s3:PutObject
                   Resource: !Sub arn:${AWS::Partition}:s3:::${S3BucketName}/${S3Prefix}*
                 - !Ref AWS::NoValue
+        - PolicyName: ApplicationSecretAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref ApplicationSecretArn
+              - !If
+                - HasSecretKmsKey
+                - Effect: Allow
+                  Action: kms:Decrypt
+                  Resource: !Ref SecretKmsKeyArn
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub secretsmanager.${AWS::Region}.amazonaws.com
+                - !Ref AWS::NoValue
 
   DemoInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -161,6 +177,10 @@ Resources:
       SubnetId: !Ref DemoPublicSubnet
       SecurityGroupIds:
         - !GetAtt DemoSecurityGroup.GroupId
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
       Tags:
         - Key: Name
           Value: aml-cowork2-demo
@@ -172,7 +192,7 @@ Resources:
           for attempt in $(seq 1 30); do
             if curl --fail --location --retry 3 "$bootstrap_url" --output /tmp/aml-cowork2-user-data.sh; then
               chmod +x /tmp/aml-cowork2-user-data.sh
-              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${DomainName}"
+              /tmp/aml-cowork2-user-data.sh "${RepositoryUrl}" "${RepositoryBranch}" "${ApplicationSecretArn}" "${S3BucketName}" "${S3Prefix}" "${AWS::Region}"
               exit 0
             fi
             sleep 10
@@ -198,11 +218,11 @@ Outputs:
     Description: EC2 instance ID.
     Value: !Ref DemoInstance
   ElasticIp:
-    Description: Elastic IP address. Create an A record for DomainName pointing here.
-    Value: !Ref DemoElasticIp
+    Description: Static public IP address for the HTTP demo.
+    Value: !GetAtt DemoElasticIp.PublicIp
   ApplicationUrl:
-    Description: Application URL after DNS propagation and Caddy certificate issuance.
-    Value: !Sub https://${DomainName}
+    Description: HTTP application URL. This demo endpoint is not encrypted.
+    Value: !Sub http://${DemoElasticIp.PublicIp}
   SessionManagerCommand:
     Description: Start an operator shell without opening SSH.
     Value: !Sub aws ssm start-session --target ${DemoInstance}

@@ -139,9 +139,11 @@ OPENAI_DOCUMENT_MODEL=gpt-5.6
 OPENAI_POLICY_MODEL=gpt-5.6
 ```
 
-Optional S3 document storage requires `AWS_ACCESS_KEY_ID` and
-`AWS_SECRET_ACCESS_KEY`. Set `S3_DOCUMENT_BUCKET_URL` or
-`AWS_S3_BUCKET_URL` to override the default document bucket URL.
+Optional S3 document storage uses boto3's standard credential chain. Use an
+EC2 instance role in AWS, or an AWS profile/environment locally; do not commit
+long-lived AWS access keys. Set `S3_DOCUMENT_BUCKET_URL`,
+`S3_DOCUMENT_BUCKET`, or `AWS_S3_BUCKET_URL` to override the default document
+bucket configuration.
 
 ### Start the web app
 
@@ -151,6 +153,36 @@ python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8000
 
 Open [http://localhost:8000](http://localhost:8000), enter a company and
 jurisdiction, then select **Run Full CDD Pipeline**.
+
+### Deploy the EC2 HTTP demo
+
+The EC2 deployment is intentionally a temporary HTTP demo, served at a stable
+Elastic IP. It has no DNS name or TLS certificate, so do not use it with
+production or sensitive customer traffic.
+
+1. Create one Secrets Manager JSON secret from
+   [`infrastructure/ec2/secrets.example.json`](infrastructure/ec2/secrets.example.json).
+   Replace every placeholder and retain the secret ARN. Do not add
+   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN`; the
+   EC2 instance role supplies temporary AWS credentials.
+2. Ensure the deployer has permission to create the CloudFormation, EC2, IAM,
+   and networking resources, then run:
+
+   ```bash
+   ./infrastructure/ec2/deploy.sh \
+     --region us-east-1 \
+     --secret-arn arn:aws:secretsmanager:us-east-1:123456789012:secret:aml-cowork2-demo-xxxxx
+   ```
+
+   Use `--s3-bucket`, `--s3-prefix`, or `--secret-kms-key-arn` when those
+   defaults do not apply. The script validates the template and secret
+   metadata, deploys the stack, waits for the application health check, and
+   prints the HTTP Elastic-IP URL and a Session Manager command.
+
+The stack creates a least-privilege EC2 instance profile: scoped document S3
+access, read access to only the specified application secret, and Systems
+Manager access. Bootstrap reads the secret with that role and writes a
+root-owned runtime `.env`; it never needs static AWS credentials.
 
 ### Demo workflow
 
@@ -229,7 +261,8 @@ Case Review tabs should populate without sending an external request.
 | --- | --- |
 | The app starts but the demo button is absent | Copy `.env.example` to `.env` and set `DEMO_MODE=true`, then restart the server. |
 | A live workflow reports missing credentials | Set `DEMO_MODE=false` and provide the required KYC, OpenAI, and Tavily variables. S3 credentials are optional. |
-| A document action needs S3 credentials | Use Demo Mode for fixture data, or configure AWS credentials only when using live S3 document storage. |
+| A document action needs S3 credentials | Use Demo Mode for fixture data, or configure an AWS profile locally / an EC2 instance role in AWS. |
+| EC2 deployment finishes but the app is unavailable | Use the printed Session Manager command and inspect `/var/log/aml-cowork2-bootstrap.log`, then run `docker compose ps` in `/opt/aml-cowork2`. |
 | An OpenAI request fails after a model change | Confirm the configured model is available to the account and restart the server after changing `.env`. |
 | Dependencies fail to install | Use Python 3.11+ and install the pinned set with `python -m pip install -r requirements.lock`. |
 

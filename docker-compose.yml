@@ -23,18 +23,11 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    environment:
-      DOMAIN_NAME: ${DOMAIN_NAME}
     ports:
       - "80:80"
-      - "443:443"
     restart: unless-stopped
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
 
 volumes:
   app_outputs:
-  caddy_data:
-  caddy_config:
