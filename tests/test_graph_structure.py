@@ -18,7 +18,11 @@ class CDDGraphStructureTests(unittest.TestCase):
         self.assertIn(("adverse_news_screening", "evaluate_risk_flags"), edges)
         self.assertIn(("evaluate_risk_flags", "assess_cdd_completeness"), edges)
         self.assertIn(("assess_cdd_completeness", "assess_evidence_quality"), edges)
-        self.assertIn(("assess_evidence_quality", "finalize_cdd"), edges)
+        self.assertIn(("assess_evidence_quality", "assess_shell_company_risk"), edges)
+        self.assertIn(("assess_shell_company_risk", "assess_other_risk_factors"), edges)
+        self.assertIn(("assess_other_risk_factors", "assess_risk_rating"), edges)
+        self.assertIn(("assess_risk_rating", "generate_case_review"), edges)
+        self.assertIn(("generate_case_review", "finalize_cdd"), edges)
 
     def test_graph_builds_with_pipeline_progress_enabled(self) -> None:
         build_cdd_graph(progress_callback=lambda progress: None)

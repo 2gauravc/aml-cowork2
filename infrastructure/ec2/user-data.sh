@@ -106,7 +106,13 @@ for key, value in secret.items():
     if "\n" in str(value) or "\r" in str(value):
         raise SystemExit(f"Application secret value for {key} must not contain a newline.")
 
-required_keys = {"KYCCLIENTID", "KYCCLIENTSECRET", "OPENAI_API_KEY", "TAVILY_API_KEY"}
+required_keys = {
+    "KYCCLIENTID",
+    "KYCCLIENTSECRET",
+    "OPENAI_API_KEY",
+    "TAVILY_API_KEY",
+    "BRAVE_API_KEY",
+}
 missing_keys = sorted(key for key in required_keys if not str(secret.get(key, "")).strip())
 if missing_keys:
     raise SystemExit("Application secret is missing required values: " + ", ".join(missing_keys))

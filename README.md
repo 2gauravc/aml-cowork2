@@ -204,6 +204,7 @@ KYCCLIENTID=your_client_id
 KYCCLIENTSECRET=your_client_secret
 OPENAI_API_KEY=your_openai_api_key
 TAVILY_API_KEY=tvly-your_tavily_key
+BRAVE_API_KEY=your_brave_api_key
 
 # All OpenAI workflows default to GPT-5.6. These are optional overrides.
 OPENAI_MODEL=gpt-5.6
@@ -211,6 +212,11 @@ OPENAI_CSP_MODEL=gpt-5.6
 OPENAI_CASE_REVIEW_MODEL=gpt-5.6
 OPENAI_DOCUMENT_MODEL=gpt-5.6
 OPENAI_POLICY_MODEL=gpt-5.6
+OPENAI_ADVERSE_NEWS_MODEL=gpt-5.6
+OPENAI_DIGITAL_FOOTPRINT_MODEL=gpt-5.6
+OPENAI_OTHER_RISK_FACTORS_MODEL=gpt-5.6
+OPENAI_SHELL_COMPANY_RISK_MODEL=gpt-5.6
+OPENAI_RISK_RATING_MODEL=gpt-5.6
 ```
 
 Optional S3 document storage uses boto3's standard credential chain. Use an
@@ -237,7 +243,8 @@ production or sensitive customer traffic.
 1. Create one Secrets Manager JSON secret from
    [`infrastructure/ec2/secrets.example.json`](infrastructure/ec2/secrets.example.json).
    Replace every placeholder and retain the secret ARN. The secret contains
-   `KYCCLIENTID`, `KYCCLIENTSECRET`, `OPENAI_API_KEY`, and `TAVILY_API_KEY`.
+   `KYCCLIENTID`, `KYCCLIENTSECRET`, `OPENAI_API_KEY`, `TAVILY_API_KEY`, and
+   `BRAVE_API_KEY`.
    Do not add `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or
    `AWS_SESSION_TOKEN`; the EC2 instance role supplies temporary AWS credentials.
 2. Ensure the deployer has permission to create the CloudFormation, EC2, IAM,
@@ -250,7 +257,8 @@ production or sensitive customer traffic.
    ```
 
    `KYCBASEURL` and OpenAI model selections remain normal versioned
-   configuration in `.env.example`. Use `--s3-bucket`, `--s3-prefix`, or
+   configuration in `.env.example`; the application derives its KYC token
+   endpoint from `KYCBASEURL`. Use `--s3-bucket`, `--s3-prefix`, or
    `--secret-kms-key-arn` when those defaults do not apply. The script validates
    the template and secret metadata, deploys the stack, waits for the
    application health check, and prints the HTTP Elastic-IP URL and a Session
@@ -340,7 +348,7 @@ Case Assessment tabs should populate without sending an external request.
 | Problem | What to check |
 | --- | --- |
 | The app starts but the demo button is absent | Copy `.env.example` to `.env` and set `DEMO_MODE=true`, then restart the server. |
-| A live workflow reports missing credentials | Set `DEMO_MODE=false` and provide the required KYC, OpenAI, and Tavily variables. S3 credentials are optional. |
+| A live workflow reports missing credentials | Set `DEMO_MODE=false` and provide the required KYC, OpenAI, Tavily, and Brave variables. S3 credentials are optional. |
 | A document action needs S3 credentials | Use Demo Mode for fixture data, or configure an AWS profile locally / an EC2 instance role in AWS. |
 | EC2 deployment finishes but the app is unavailable | Use the printed Session Manager command and inspect `/var/log/aml-cowork2-bootstrap.log`, then run `docker compose ps` in `/opt/aml-cowork2`. |
 | An OpenAI request fails after a model change | Confirm the configured model is available to the account and restart the server after changing `.env`. |
