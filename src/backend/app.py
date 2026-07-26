@@ -593,7 +593,13 @@ async def upload_case_document(
         },
         "processing": {"classification": classification, "match": _match_summary(requirement, classification, preview)},
     })
-    await _resume_if_ready(session)
+    try:
+        await _resume_if_ready(session)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document was received, but processing could not continue: {session.get('pipeline_error') or exc}",
+        ) from exc
     return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
 
@@ -612,20 +618,33 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
             continue
         if requirement.get("status") != "required":
             continue
-        artifact = await asyncio.to_thread(
-            generate_idv_document,
-            {
-                **(requirement.get("subject") or {}),
-                "selected_document_type": requirement["document_type"],
-            },
-            output_dir=DOCUMENT_STAGING_DIR / request.session_id,
-        )
+        try:
+            artifact = await asyncio.to_thread(
+                generate_idv_document,
+                {
+                    **(requirement.get("subject") or {}),
+                    "selected_document_type": requirement["document_type"],
+                },
+                output_dir=DOCUMENT_STAGING_DIR / request.session_id,
+            )
+        except Exception as exc:
+            subject_name = (requirement.get("subject") or {}).get("name") or "the required individual"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unable to generate {requirement['document_type']} for {subject_name}: {exc}",
+            ) from exc
         requirement.update({
             "status": "received",
             "gap": {"status": "resolved", "reason": ""},
             "acquisition": {"source": "generated", "artifact": artifact},
         })
-    await _resume_if_ready(session)
+    try:
+        await _resume_if_ready(session)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document was generated, but processing could not continue: {session.get('pipeline_error') or exc}",
+        ) from exc
     return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
 
@@ -636,7 +655,13 @@ async def process_case_documents(request: DocumentActionRequest) -> dict[str, An
         raise HTTPException(status_code=404, detail="CDD session not found")
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
-    await _resume_if_ready(session)
+    try:
+        await _resume_if_ready(session)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document processing could not continue: {session.get('pipeline_error') or exc}",
+        ) from exc
     return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
 
 
@@ -785,7 +810,7 @@ def _response(
         "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
         "pdf_url": pdf_url,
-        "error": error,
+        "error": error if error is not None else session.get("pipeline_error"),
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
         "demo_mode": bool(session.get("demo_mode")) or _demo_mode_enabled(),
@@ -973,6 +998,7 @@ async def _resume_if_ready(session: dict[str, Any]) -> None:
     if not thread_id:
         return
     session["pipeline_status"] = "running"
+    session.pop("pipeline_error", None)
     sync_case_status(session, generation="in_progress")
     def publish_progress(progress: dict[str, Any]) -> None:
         session["pipeline_progress"] = progress

@@ -108,6 +108,16 @@ def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> No
     assert "const runEpoch = cddRunEpochRef.current;" in app
 
 
+def test_document_management_displays_generation_errors() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert "error={error}" in app
+    assert "function DocumentManagement" in app
+    assert "{error && <p className=\"risk\">{error}</p>}" in app
+    assert 'fetch(`/api/session/${sessionId}`)' in app
+    assert "Unable to refresh document status" in app
+
+
 def test_awaiting_documents_has_cdd_callout_and_documents_navigation() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 

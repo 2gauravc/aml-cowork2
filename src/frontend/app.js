@@ -551,6 +551,12 @@ function App() {
     } catch (err) {
       setError(err.message);
       setGenerationStatus("Document generation failed.");
+      try {
+        const response = await fetch(`/api/session/${sessionId}`);
+        applyResponse(await readJsonResponse(response, "Unable to refresh document status"));
+      } catch (refreshError) {
+        setError(`${err.message} Unable to refresh document status: ${refreshError.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -1027,6 +1033,7 @@ function App() {
                 requirements={documentRequirements}
                 links={documentLinks}
                 loading={loading}
+                error={error}
                 generationStatus={generationStatus}
                 onGenerate={generateMissingDocuments}
                 onProcess={() => documentAction("/api/documents/process")}
@@ -1723,6 +1730,7 @@ function DocumentManagement({
   onGenerate,
   onProcess,
   loading,
+  error,
   generationStatus,
   demoMode,
 }) {
@@ -1791,6 +1799,7 @@ function DocumentManagement({
         </table>
       ) : <p className="empty">Run the CDD pipeline to determine required documents.</p>}
       {generationStatus && <p className="empty">{generationStatus}</p>}
+      {error && <p className="risk">{error}</p>}
     </Section>
   );
 }
