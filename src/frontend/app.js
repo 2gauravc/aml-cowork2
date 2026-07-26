@@ -1242,32 +1242,23 @@ function Section({ title, children }) {
 
 function CaseReview({
   cddState,
-  summary,
-  decision,
-  decisionDraft,
-  note,
   loading,
   hasCdd,
-  onRefresh,
   onRunCompleteness,
   onRunEvidenceQuality,
   onRunOtherRiskFactors,
   onRunShellCompanyRisk,
   onRunRiskRating,
-  onDecisionChange,
-  onNoteChange,
-  onSaveDecision,
   demoMode,
 }) {
   if (!hasCdd) {
     return (
-      <Section title="Case Assessment">
-        <p className="empty">Run a CDD case to generate an evidence-grounded reviewer brief.</p>
+      <Section title="CDD Checker">
+        <p className="empty">Run a CDD case to populate the checker.</p>
       </Section>
     );
   }
 
-  const evidenceById = Object.fromEntries((summary?.evidence_index || []).map((item) => [item.id, item]));
   return (
     <>
       <RiskFlags findings={cddState?.findings || []} evidence={cddState?.evidence || []} assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
@@ -1275,98 +1266,6 @@ function CaseReview({
       <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
       <ShellCompanyRisk assessments={assessmentsByType(cddState, "shell_company_risk")} findings={(cddState?.findings || []).filter((finding) => finding.category === "shell_company_risk")} riskFlags={(cddState?.risk_flags || []).filter((flag) => flag.category === "csp_address")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunShellCompanyRisk} />
       <OtherRiskFactors assessments={assessmentsByType(cddState, "other_risk_factors")} findings={(cddState?.findings || []).filter((finding) => finding.category === "other_risk_factors")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunOtherRiskFactors} />
-
-      <Section title="Case Assessment">
-        <div className="case-assessment-header">
-          <div>
-            <p className="review-disclaimer">Decision support only. A human reviewer remains responsible for the case decision.</p>
-          </div>
-          <button disabled={loading || demoMode} onClick={onRefresh}>
-            {demoMode ? "Fixture summary" : (loading ? "Refreshing…" : summary ? "Refresh summary" : "Generate summary")}
-          </button>
-        </div>
-        {!summary ? (
-          <p className="empty">No case assessment has been generated yet.</p>
-        ) : (
-          <>
-            {summary.status === "unavailable" && <p className="risk">The generated assessment is unavailable. The recorded CDD evidence remains available for review.</p>}
-            <h3>Executive summary</h3>
-            <p>{summary.executive_summary}</p>
-          </>
-        )}
-      </Section>
-
-      {summary && (
-        <>
-          <Section title="Key Evidence">
-            {summary.key_evidence?.length ? (
-              <div className="review-list">
-                {summary.key_evidence.map((item, index) => (
-                  <div className="review-item" key={`${item.category}-${index}`}>
-                    <strong>{item.category}</strong>
-                    <p>{item.finding}</p>
-                    {item.source_refs?.length > 0 && (
-                      <small>
-                        Evidence: {item.source_refs.map((sourceRef, sourceIndex) => {
-                          const evidenceItem = evidenceById[sourceRef];
-                          const url = evidenceItem?.urls?.[0];
-                          return (
-                            <React.Fragment key={sourceRef}>
-                              {sourceIndex > 0 && ", "}
-                              {url ? <a href={url} target="_blank" rel="noreferrer">{sourceRef}</a> : sourceRef}
-                            </React.Fragment>
-                          );
-                        })}
-                      </small>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : <p className="empty">No evidence summary was generated.</p>}
-          </Section>
-
-          <Section title="Uncertainty & Limitations">
-            <BulletList items={summary.limitations} empty="No material limitations were recorded." />
-          </Section>
-
-          <Section title="Recommended Analyst Actions">
-            <BulletList items={summary.recommended_actions} empty="No additional analyst actions were recommended." />
-          </Section>
-
-          <Section title="Request for Information">
-            {summary.requests_for_information?.length ? (
-              <div className="review-list">
-                {summary.requests_for_information.map((item, index) => (
-                  <div className="review-item" key={`${item.request}-${index}`}>
-                    <strong>{item.request}</strong>
-                    <p>{item.reason}</p>
-                    <small>{`Addresses: ${item.risk_or_gap} · Priority: ${item.priority}`}</small>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="empty">No customer information is currently requested.</p>}
-          </Section>
-        </>
-      )}
-
-      <Section title="Reviewer Decision">
-        <div className="review-decision">
-          <label>
-            Decision
-            <select value={decisionDraft} onChange={(event) => onDecisionChange(event.target.value)}>
-              <option value="approve">Approve</option>
-              <option value="request_information">Request information</option>
-              <option value="escalate">Escalate</option>
-            </select>
-          </label>
-          <label>
-            Reviewer note
-            <textarea value={note} onChange={(event) => onNoteChange(event.target.value)} placeholder="Optional rationale or follow-up note" />
-          </label>
-          <button disabled={loading} onClick={onSaveDecision}>Record decision</button>
-          {decision && <p className="review-recorded">Recorded: {decisionLabel(decision.decision)}{decision.recorded_at ? ` on ${formatDateTime(decision.recorded_at)}` : ""}</p>}
-        </div>
-      </Section>
     </>
   );
 }
