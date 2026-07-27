@@ -79,6 +79,19 @@ def test_unknown_provenance_evidence_creates_a_source_integrity_finding() -> Non
     assert assessment["dimensions"]["veracity_source_integrity"]["outcome"] == "inconclusive"
 
 
+def test_complete_ownership_without_ubos_is_still_assessed() -> None:
+    state = _state()
+    state["cdd"]["ownership_and_control"]["ubos"] = []
+
+    result = assess_evidence_quality(state)
+    assessment = next(item for item in result["assessments"] if item["claim_id"] == "ownership_and_control")
+
+    assert assessment["claim"]["applicable"] is True
+    assert assessment["outcome"] == "not_triggered"
+    assert assessment["dimensions"]["veracity_source_integrity"]["outcome"] == "not_triggered"
+    assert {item["evidence_id"] for item in assessment["selected_evidence"]} == {"org", "members"}
+
+
 def test_material_business_activity_conflict_creates_consistency_finding() -> None:
     state = _state()
     profile = state["cdd"]["company_business_profile"]["customer_static"]

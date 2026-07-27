@@ -104,7 +104,11 @@ def _claim_value(state: dict[str, Any], adapter: str) -> tuple[dict[str, Any], d
     if adapter == "ownership_and_control":
         ownership = cdd.get("ownership_and_control") or {}
         value = {"case_id": (metadata.get("kyc_case") or {}).get("case_id"), "status": ownership.get("status"), "ubos": ownership.get("ubos") or []}
-        return value, subject, bool(value["ubos"])
+        # An ownership structure remains a claim to assess when it has been
+        # evaluated but no individual UBO was identified.  CDD Completeness
+        # reports that separate gap; Evidence Quality must still evaluate the
+        # retained org-chart and members evidence.
+        return value, subject, value["status"] in {"complete", "incomplete"}
     if adapter == "identity_verification":
         idv = cdd.get("individual_identity_verification") or {}
         value = {"required_individuals": idv.get("required_individuals") or [], "validated_document_count": sum(1 for document in state.get("documents") or [] if _valid_idv_document(document))}
