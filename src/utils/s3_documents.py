@@ -26,6 +26,9 @@ def upload_document_to_s3(
     case_id: int | str | None = None,
     person_name: str | None = None,
     source: str | None = None,
+    source_type: str | None = None,
+    provenance: str | None = None,
+    synthetic: bool | None = None,
     company_name: str | None = None,
     jurisdiction: str | None = None,
     object_name: str | None = None,
@@ -57,11 +60,19 @@ def upload_document_to_s3(
     except ImportError as exc:
         raise RuntimeError("boto3 is required to upload generated documents to S3") from exc
 
+    metadata = _provenance_metadata(
+        source_type=source_type,
+        provenance=provenance,
+        synthetic=synthetic,
+    )
+    extra_args: dict[str, Any] = {"ContentType": content_type}
+    if metadata:
+        extra_args["Metadata"] = metadata
     boto3.client("s3", region_name=_region_name(bucket_url)).upload_file(
         str(document_path),
         bucket_name,
         key,
-        ExtraArgs={"ContentType": content_type},
+        ExtraArgs=extra_args,
     )
 
     url = f"{bucket_url.rstrip('/')}/{quote(key)}"
@@ -71,6 +82,9 @@ def upload_document_to_s3(
         "url": url,
         "path": str(document_path),
         "source": source,
+        "source_type": source_type,
+        "provenance": provenance,
+        "synthetic": synthetic,
         "person_name": person_name,
         "storage": {
             "provider": "s3",
@@ -98,7 +112,8 @@ def find_documents_in_s3(
 
     bucket_url = _bucket_url()
     bucket_name = _bucket_name(bucket_url)
-    response = boto3.client("s3", region_name=_region_name(bucket_url)).list_objects_v2(
+    client = boto3.client("s3", region_name=_region_name(bucket_url))
+    response = client.list_objects_v2(
         Bucket=bucket_name,
         Prefix=prefix,
     )
@@ -108,6 +123,7 @@ def find_documents_in_s3(
         document_type = _document_type_from_key(key)
         if not document_type:
             continue
+        provenance = _object_provenance(client, bucket_name, key)
         url = f"{bucket_url.rstrip('/')}/{quote(key)}"
         documents.append(
             {
@@ -121,9 +137,44 @@ def find_documents_in_s3(
                     "url": url,
                 },
                 "last_modified": item.get("LastModified"),
+                **provenance,
             }
         )
     return documents
+
+
+def _object_provenance(client: Any, bucket_name: str, key: str) -> dict[str, Any]:
+    """Return explicitly retained provenance metadata for a cached object.
+
+    Metadata is optional for legacy objects, so a missing header must remain
+    unknown rather than being inferred from the filename or storage location.
+    """
+    try:
+        metadata = client.head_object(Bucket=bucket_name, Key=key).get("Metadata") or {}
+    except Exception:
+        return {}
+    synthetic = metadata.get("synthetic")
+    return {
+        "source_type": metadata.get("source_type") or None,
+        "provenance": metadata.get("provenance") or None,
+        "synthetic": synthetic.casefold() == "true" if isinstance(synthetic, str) else None,
+    }
+
+
+def _provenance_metadata(
+    *, source_type: str | None, provenance: str | None, synthetic: bool | None
+) -> dict[str, str]:
+    metadata = {
+        key: value
+        for key, value in {
+            "source_type": source_type,
+            "provenance": provenance,
+        }.items()
+        if isinstance(value, str) and value.strip()
+    }
+    if synthetic is not None:
+        metadata["synthetic"] = str(synthetic).lower()
+    return metadata
 
 
 def download_document_from_s3(
