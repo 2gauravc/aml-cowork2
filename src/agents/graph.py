@@ -48,7 +48,6 @@ from src.agents.nodes import (  # noqa: E402
     fetch_members,
     fetch_org_chart,
     finalize_cdd,
-    generate_case_review,
     generate_idv_documents_node,
     generate_registry_document_node,
     has_required_inputs,
@@ -76,17 +75,17 @@ PIPELINE_NODE_LABELS = {
     "build_ownership_and_control": "Populating CDD — Ownership & Control",
     "establish_idv_requirements": "Establishing ID&V requirements",
     "locate_available_documents": "Locating documents",
+    "process_available_documents": "Processing available documents",
     "extract_idv_documents": "Extracting from ID&V documents",
     "digital_footprint_assessment": "Assessing digital footprint",
     "adverse_news_screening": "Screening adverse news",
     "evaluate_risk_flags": "Evaluating red flags",
     "assess_cdd_completeness": "Checking CDD completeness",
     "assess_evidence_quality": "Checking evidence quality",
-    "assess_other_risk_factors": "Assessing other risk factors",
     "assess_shell_company_risk": "Assessing shell company risk",
+    "assess_other_risk_factors": "Assessing other risk factors",
     "assess_risk_rating": "Assessing overall risk rating",
     "finalize_cdd": "Completing CDD",
-    "generate_case_review": "Preparing Case Assessment",
 }
 
 
@@ -229,7 +228,7 @@ def build_cdd_graph(
     add_node("build_ownership_and_control", build_ownership_and_control)
     add_node("establish_idv_requirements", establish_idv_requirements)
     add_node("locate_available_documents", locate_available_documents)
-    graph.add_node("process_available_documents", process_available_documents)
+    add_node("process_available_documents", process_available_documents)
     # The interrupt node is an internal pause point, not a visible pipeline step.
     graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
@@ -242,7 +241,6 @@ def build_cdd_graph(
     add_node("assess_shell_company_risk", assess_shell_company_risk)
     add_node("assess_risk_rating", assess_risk_rating)
     add_node("finalize_cdd", finalize_cdd)
-    add_node("generate_case_review", generate_case_review)
 
     graph.set_entry_point("collect_required_inputs")
     graph.add_conditional_edges(
@@ -274,8 +272,7 @@ def build_cdd_graph(
     graph.add_edge("assess_evidence_quality", "assess_shell_company_risk")
     graph.add_edge("assess_shell_company_risk", "assess_other_risk_factors")
     graph.add_edge("assess_other_risk_factors", "assess_risk_rating")
-    graph.add_edge("assess_risk_rating", "generate_case_review")
-    graph.add_edge("generate_case_review", "finalize_cdd")
+    graph.add_edge("assess_risk_rating", "finalize_cdd")
     graph.add_edge("finalize_cdd", END)
     return graph.compile(checkpointer=CHECKPOINTER)
 

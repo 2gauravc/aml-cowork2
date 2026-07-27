@@ -37,11 +37,20 @@ class PipelineProgressTests(unittest.TestCase):
         self.assertEqual(updates[0]["cache_source"], "s3")
         self.assertEqual(updates[0]["status"], "running")
 
-    def test_final_pipeline_step_uses_case_assessment_label(self):
+    def test_final_pipeline_step_counts_cdd_finalization(self):
+        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_shell_company_risk") + 1, 20)
+        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_other_risk_factors") + 1, 21)
+        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_risk_rating") + 1, 22)
         self.assertEqual(
-            PIPELINE_NODE_LABELS["generate_case_review"],
-            "Preparing Case Assessment",
+            PIPELINE_NODE_LABELS["finalize_cdd"],
+            "Completing CDD",
         )
+        updates = []
+        wrapped = _progress_node("finalize_cdd", lambda state: state, updates.append)
+
+        self.assertEqual(wrapped({}), {})
+        self.assertEqual(updates[0]["node_number"], 23)
+        self.assertEqual(updates[0]["total_nodes"], 23)
 
     def test_failed_node_reports_error_before_reraising(self):
         updates = []
