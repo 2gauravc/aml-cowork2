@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 import json
+import logging
 import os
 import re
 import uuid
@@ -36,6 +37,7 @@ from src.utils.kyc_cache import company_cache_subject, get_cache_source
 from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
 from src.utils.case_status import sync_case_status
+from src.utils.cdd_state_store import CDDStateStoreError, get_completed_state, save_completed_state
 from src.utils.s3_documents import (
     download_document_from_s3,
     find_documents_in_s3,
@@ -66,6 +68,7 @@ DEMO_CASE_PATH = PROJECT_ROOT / "demo_data" / "case_review_demo.json"
 app = FastAPI(title="WBL Bank CDD Chatbot")
 SESSIONS: dict[str, dict[str, Any]] = {}
 STANDALONE_IDV_DOCUMENTS: dict[str, dict[str, Path]] = {}
+LOGGER = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -88,6 +91,12 @@ class PipelineRequest(BaseModel):
     account_location: Literal["SG", "HK", "GB"]
     case_id: str | None = None
     generate_pdf: bool = False
+
+
+class CDDStateLookupRequest(BaseModel):
+    customer_name: str = Field(min_length=1, max_length=250)
+    jurisdiction: str = Field(min_length=2, max_length=8)
+    session_id: str | None = None
 
 
 class DocumentPresignRequest(BaseModel):
@@ -541,6 +550,53 @@ async def run_pipeline(
     )
 
 
+@app.post("/api/cdd-states/availability")
+async def completed_cdd_state_availability(request: CDDStateLookupRequest) -> dict[str, Any]:
+    try:
+        snapshot = await asyncio.to_thread(
+            get_completed_state,
+            customer_name=request.customer_name,
+            jurisdiction=request.jurisdiction,
+        )
+    except CDDStateStoreError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if not snapshot:
+        return {"available": False}
+    return {
+        "available": True,
+        "saved_at": snapshot.get("saved_at"),
+        "identity": snapshot.get("identity"),
+    }
+
+
+@app.post("/api/cdd-states/load")
+async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, Any]:
+    try:
+        snapshot = await asyncio.to_thread(
+            get_completed_state,
+            customer_name=request.customer_name,
+            jurisdiction=request.jurisdiction,
+        )
+    except CDDStateStoreError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="No completed CDD state was found")
+    session = _session(request.session_id)
+    graph_state = snapshot["graph_state"]
+    _normalise_document_state(graph_state)
+    sync_case_status(graph_state, generation="completed")
+    session["graph_state"] = graph_state
+    identity = snapshot["identity"]
+    session["customer_name"] = identity.get("customer_name") or request.customer_name
+    session["jurisdiction"] = identity.get("jurisdiction") or _clean_jurisdiction(request.jurisdiction)
+    session["case_id"] = identity.get("case_id")
+    session["pipeline_status"] = "complete"
+    session["pipeline_progress"] = None
+    session["saved_cdd_state"] = {"saved_at": snapshot.get("saved_at"), "identity": identity}
+    session["messages"].append({"role": "assistant", "content": "Loaded the saved completed CDD state."})
+    return _response(session, status="complete")
+
+
 @app.post("/api/pdf")
 async def generate_pdf(request: PdfRequest) -> dict[str, Any]:
     session = SESSIONS.get(request.session_id)
@@ -770,6 +826,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "document_results",
         "case_review_summary",
         "case_review_decision",
+        "saved_cdd_state",
         "pdf_path",
         "pipeline_error",
     ):
@@ -872,6 +929,7 @@ def _response(
         "pipeline_status": session.get("pipeline_status"),
         "pipeline_progress": session.get("pipeline_progress"),
         "demo_mode": bool(session.get("demo_mode")) or _demo_mode_enabled(),
+        "saved_cdd_state": session.get("saved_cdd_state"),
     }
 
 
@@ -1301,6 +1359,18 @@ async def _complete_pipeline_for_session(
 
         session["pipeline_status"] = "complete"
         sync_case_status(graph_state, generation="completed")
+        try:
+            saved = await asyncio.to_thread(
+                save_completed_state,
+                graph_state,
+                customer_name=customer_name,
+                jurisdiction=jurisdiction or "",
+                case_id=case_id,
+            )
+            if saved:
+                session["saved_cdd_state"] = saved
+        except CDDStateStoreError as exc:
+            LOGGER.warning("Completed CDD state was not persisted: %s", exc)
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)

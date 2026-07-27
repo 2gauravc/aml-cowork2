@@ -83,6 +83,7 @@ function App() {
   const [pipelineLoading, setPipelineLoading] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState(null);
   const [pipelineStatus, setPipelineStatus] = useState(null);
+  const [savedStatePrompt, setSavedStatePrompt] = useState(null);
   const [showJson, setShowJson] = useState(false);
   const [jsonCopyStatus, setJsonCopyStatus] = useState("");
   const [error, setError] = useState(null);
@@ -315,6 +316,27 @@ function App() {
 
   async function runPipeline({ generatePdf = false } = {}) {
     if (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation)) return;
+    if (!demoMode) {
+      try {
+        const response = await fetch("/api/cdd-states/availability", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customer_name: customerName.trim(), jurisdiction: jurisdiction.trim(), session_id: sessionId }),
+        });
+        const saved = await readJsonResponse(response, "Saved CDD state lookup failed");
+        if (saved.available) {
+          setSavedStatePrompt(saved);
+          return;
+        }
+      } catch (err) {
+        setError(err.message);
+        return;
+      }
+    }
+    await startPipeline({ generatePdf });
+  }
+
+  async function startPipeline({ generatePdf = false } = {}) {
     setPipelineLoading(true);
     setError(null);
     try {
@@ -341,6 +363,24 @@ function App() {
         ...current,
         { role: "assistant", content: `Something went wrong: ${err.message}` },
       ]);
+    } finally {
+      setPipelineLoading(false);
+    }
+  }
+
+  async function loadSavedCddState() {
+    setPipelineLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/cdd-states/load", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_name: customerName.trim(), jurisdiction: jurisdiction.trim(), session_id: sessionId }),
+      });
+      applyResponse(await readJsonResponse(response, "Saved CDD state could not be loaded"));
+      setSavedStatePrompt(null);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setPipelineLoading(false);
     }
@@ -913,6 +953,13 @@ function App() {
               {demoMode && <button className="secondary" disabled={pipelineLoading} onClick={loadDemoCase}>Load Demo Case</button>}
             </div>
             {pipelineLoading && <p className="empty">{pipelineStatusText}</p>}
+            {savedStatePrompt && (
+              <div className="saved-state-prompt" role="alertdialog" aria-label="Saved CDD state available">
+                <p>{`A completed CDD state was saved for ${savedStatePrompt.identity?.customer_name || customerName} (${savedStatePrompt.identity?.jurisdiction || jurisdiction})${savedStatePrompt.saved_at ? ` on ${formatDateTime(savedStatePrompt.saved_at)}` : ""}.`}</p>
+                <button disabled={pipelineLoading} onClick={loadSavedCddState}>Load saved CDD</button>
+                <button className="secondary" disabled={pipelineLoading} onClick={() => { setSavedStatePrompt(null); startPipeline(); }}>Start new CDD run</button>
+              </div>
+            )}
           </Section>
 
           {cddPausedForDocuments && (

@@ -110,6 +110,15 @@ def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> No
     assert "const runEpoch = cddRunEpochRef.current;" in app
 
 
+def test_saved_completed_state_can_be_loaded_before_a_new_run() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert 'fetch("/api/cdd-states/availability"' in app
+    assert 'fetch("/api/cdd-states/load"' in app
+    assert "Load saved CDD" in app
+    assert "Start new CDD run" in app
+
+
 def test_document_management_displays_generation_errors() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
