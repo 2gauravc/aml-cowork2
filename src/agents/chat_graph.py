@@ -768,7 +768,7 @@ def _generate_pdf_tool(*, session: dict[str, Any]) -> dict[str, Any]:
     state = session.get("graph_state") or {}
     if not state.get("cdd"):
         return {"error": {"message": "Run the full CDD pipeline before generating a PDF."}}
-    pdf_path = render_cdd_pdf(state["cdd"])
+    pdf_path = render_cdd_pdf(state)
     session["pdf_path"] = str(pdf_path)
     return {"pdf_path": str(pdf_path), "message": "PDF generated and ready to download."}
 

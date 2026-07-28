@@ -2,272 +2,58 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>WBL Bank CDD</title>
+  <title>CDD Report</title>
   <style>
-    @page {
-      size: A4;
-      margin: 22mm 16mm 18mm 16mm;
-      @frame footer {
-        -pdf-frame-content: footer;
-        bottom: 8mm;
-        margin-left: 16mm;
-        margin-right: 16mm;
-        height: 8mm;
-      }
-    }
-
-    body {
-      color: #172033;
-      font-family: Helvetica, Arial, sans-serif;
-      font-size: 10px;
-      line-height: 1.35;
-    }
-
-    h1 {
-      color: #10213f;
-      font-size: 24px;
-      margin: 0 0 4px 0;
-    }
-
-    h2 {
-      border-bottom: 1px solid #ccd5e3;
-      color: #10213f;
-      font-size: 14px;
-      margin: 18px 0 8px 0;
-      padding-bottom: 4px;
-    }
-
-    h3 {
-      color: #24385f;
-      font-size: 11px;
-      margin: 12px 0 6px 0;
-    }
-
-    table {
-      border-collapse: collapse;
-      margin-bottom: 10px;
-      width: 100%;
-    }
-
-    th {
-      background: #eaf0f8;
-      border: 1px solid #c8d2e1;
-      color: #10213f;
-      font-size: 9px;
-      padding: 5px;
-      text-align: left;
-    }
-
-    td {
-      border: 1px solid #d9e0ea;
-      padding: 5px;
-      vertical-align: top;
-    }
-
-    .header {
-      background: #10213f;
-      color: white;
-      padding: 18px;
-    }
-
-    .header h1 {
-      color: white;
-    }
-
-    .subtitle {
-      color: #d9e5f5;
-      font-size: 11px;
-    }
-
-    .summary-grid td {
-      width: 25%;
-    }
-
-    .label {
-      color: #5f6f86;
-      font-size: 8px;
-      text-transform: uppercase;
-    }
-
-    .value {
-      font-size: 11px;
-      font-weight: bold;
-      margin-top: 2px;
-    }
-
-    .status {
-      background: #f4f7fb;
-      border: 1px solid #ccd5e3;
-      margin: 12px 0;
-      padding: 8px;
-    }
-
-    .status strong {
-      color: #10213f;
-    }
-
-    .muted {
-      color: #66758d;
-    }
-
-    .empty {
-      color: #66758d;
-      font-style: italic;
-    }
-
-    #footer {
-      color: #66758d;
-      font-size: 8px;
-      text-align: right;
-    }
+    @page { size: A4; margin: 18mm 14mm 16mm 14mm; @frame footer { -pdf-frame-content: footer; bottom: 6mm; margin-left: 14mm; margin-right: 14mm; height: 6mm; } }
+    body { color: #172033; font-family: Helvetica, Arial, sans-serif; font-size: 9px; line-height: 1.35; }
+    h1 { color: white; font-size: 22px; margin: 0 0 3px 0; } h2 { border-bottom: 1px solid #ccd5e3; color: #10213f; font-size: 14px; margin: 18px 0 8px; padding-bottom: 4px; } h3 { color: #24385f; font-size: 11px; margin: 12px 0 6px; }
+    table { border-collapse: collapse; margin: 0 0 9px; width: 100%; } th { background: #eaf0f8; border: 1px solid #c8d2e1; color: #10213f; font-size: 8px; padding: 4px; text-align: left; } td { border: 1px solid #d9e0ea; padding: 4px; vertical-align: top; }
+    .header { background: #10213f; color: white; padding: 15px; } .subtitle { color: #d9e5f5; font-size: 10px; } .label { color: #5f6f86; font-size: 8px; text-transform: uppercase; } .value { font-size: 10px; font-weight: bold; } .status { background: #f4f7fb; border: 1px solid #ccd5e3; margin: 10px 0; padding: 7px; } .card { background: #f8fafc; border: 1px solid #d9e0ea; margin: 6px 0 10px; padding: 7px; } .empty { color: #66758d; font-style: italic; } .page-break { page-break-before: always; } .json { font-family: Courier, monospace; font-size: 6px; line-height: 1.15; white-space: pre-wrap; word-wrap: break-word; } #footer { color: #66758d; font-size: 7px; text-align: right; }
   </style>
 </head>
 <body>
-  {% set profile = cdd.get("company_business_profile", {}) %}
-  {% set static = profile.get("customer_static", {}) %}
-  {% set ownership = cdd.get("ownership_and_control", {}) %}
+  {% macro summary_card(title, summary) -%}<div class="card">{% if title %}<strong>{{ title }}</strong>{% endif %}<p>{{ summary|blank }}</p></div>{%- endmacro %}
+  {% set profile = cdd.get('company_business_profile', {}) %}
+  {% set customer = profile.get('customer_static', {}) %}
+  {% set ownership = cdd.get('ownership_and_control', {}) %}
+  {% set idv = cdd.get('individual_identity_verification', {}) %}
+  <div class="header"><h1>CDD Report</h1><div class="subtitle">Customer Due Diligence Report</div></div>
 
-  <div class="header">
-    <h1>WBL Bank CDD</h1>
-    <div class="subtitle">Customer Due Diligence Report</div>
-  </div>
+  <h2>CDD Metadata</h2>
+  <table><tbody><tr><td><div class="label">Customer</div><div class="value">{{ customer.get('name')|blank }}</div></td><td><div class="label">CDD Date</div><div class="value">{{ (cdd.get('completed_at') or cdd.get('started_at'))|date }}</div></td><td><div class="label">CDD Generation</div><div class="value">{{ state.get('case_status', {}).get('cdd_generation')|blank }}</div></td></tr></tbody></table>
 
-  <div class="status">
-    <strong>Customer:</strong> {{ static.get("name")|blank }}<br>
-    <strong>CDD status:</strong> {{ cdd.get("status")|blank }}<br>
-    <strong>Generated:</strong> {{ generated_at|date }}
-  </div>
-
-  <h2>Company Business Profile</h2>
-  <table class="summary-grid">
-    <tr>
-      <td>
-        <div class="label">Company Type</div>
-        <div class="value">{{ static.get("company_type")|blank }}</div>
-      </td>
-      <td>
-        <div class="label">Registration Number</div>
-        <div class="value">{{ static.get("registration_number")|blank }}</div>
-      </td>
-      <td>
-        <div class="label">Company Status</div>
-        <div class="value">{{ static.get("company_status")|blank }}</div>
-      </td>
-      <td>
-        <div class="label">Jurisdiction</div>
-        <div class="value">{{ static.get("jurisdiction")|blank }}</div>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <div class="label">Activity Type</div>
-        <div class="value">{{ static.get("activity_type")|blank }}</div>
-      </td>
-      <td>
-        <div class="label">Registration Date</div>
-        <div class="value">{{ static.get("registration_date")|blank }}</div>
-      </td>
-      <td>
-        <div class="label">Incorporation Date</div>
-        <div class="value">{{ static.get("incorporation_date")|blank }}</div>
-      </td>
-      <td>
-        <div class="label">Paid-up Capital</div>
-        <div class="value">{{ static.get("display_capital", {}).get("value")|blank }}</div>
-      </td>
-    </tr>
-  </table>
-
-  {% set address = static.get("registered_address", {}) %}
-  <h3>Registered Address</h3>
-  <p>{{ address.get("full_address")|blank }}</p>
-
-  <h3>Additional Registry Properties</h3>
-  {% if static.get("registry_properties") %}
-  <table>
-    <tr>
-      <th>Field</th>
-      <th>Value</th>
-    </tr>
-    {% for key, value in static.get("registry_properties", {}).items() %}
-    <tr>
-      <td>{{ key }}</td>
-      <td>{{ value|blank }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p class="empty">No registry properties available.</p>
-  {% endif %}
+  <h2>Customer Business Profile</h2>
+  <table><tbody>
+    <tr><td><div class="label">Name</div><div class="value">{{ customer.get('name')|blank }}</div></td><td><div class="label">Jurisdiction</div><div class="value">{{ customer.get('jurisdiction')|blank }}</div></td></tr>
+    <tr><td><div class="label">Status</div><div class="value">{{ customer.get('company_status')|blank }}</div></td><td><div class="label">Registration No</div><div class="value">{{ customer.get('registration_number')|blank }}</div></td></tr>
+    <tr><td><div class="label">Company Type</div><div class="value">{{ customer.get('company_type')|blank }}</div></td><td><div class="label">Capital</div><div class="value">{{ customer.get('display_capital', {}).get('value') or customer.get('paid_up_capital')|blank }}</div></td></tr>
+    <tr><td><div class="label">Activity</div><div class="value">{{ customer.get('activity_type')|blank }}</div></td><td><div class="label">Incorporation</div><div class="value">{{ customer.get('incorporation_date')|blank }}</div></td></tr>
+    <tr><td colspan="2"><div class="label">Address</div><div class="value">{{ customer.get('registered_address', {}).get('full_address')|blank }}</div></td></tr>
+  </tbody></table>
 
   <h2>Ownership &amp; Control</h2>
-  <div class="status">
-    <strong>Section status:</strong> {{ ownership.get("status")|blank }}
-  </div>
+  <h3>UBOs</h3><table><thead><tr><th>Name</th><th>Effective %</th></tr></thead><tbody>{% for row in ownership.get('ubos', []) %}<tr><td>{{ row.get('name')|blank }}</td><td>{{ row.get('effective_shareholding_percent')|percent }}</td></tr>{% else %}<tr><td colspan="2" class="empty">None identified.</td></tr>{% endfor %}</tbody></table>
+  <h3>Shareholders &gt; 10%</h3><table><thead><tr><th>Name</th><th>Type</th><th>Effective %</th></tr></thead><tbody>{% for row in ownership.get('shareholders_over_10_percent', []) %}<tr><td>{{ row.get('name')|blank }}</td><td>{{ row.get('type')|blank }}</td><td>{{ row.get('effective_shareholding_percent')|percent }}</td></tr>{% else %}<tr><td colspan="3" class="empty">None identified.</td></tr>{% endfor %}</tbody></table>
+  <h3>Related Parties</h3><table><thead><tr><th>Name</th><th>Role</th><th>Related Entity</th><th>Reason</th></tr></thead><tbody>{% for row in ownership.get('related_parties', []) %}<tr><td>{{ row.get('name')|blank }}</td><td>{{ row.get('role')|blank }}</td><td>{{ row.get('related_entity')|blank }}</td><td>{{ row.get('reason')|blank }}</td></tr>{% else %}<tr><td colspan="4" class="empty">None identified.</td></tr>{% endfor %}</tbody></table>
 
-  <h3>UBOs</h3>
-  {% if ownership.get("ubos") %}
-  <table>
-    <tr>
-      <th>Name</th>
-      <th>Effective Shareholding</th>
-    </tr>
-    {% for row in ownership.get("ubos", []) %}
-    <tr>
-      <td>{{ row.get("name")|blank }}</td>
-      <td>{{ row.get("effective_shareholding_percent")|percent }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p class="empty">None identified.</p>
-  {% endif %}
+  <h2>ID&amp;V</h2>
+  <table><thead><tr><th>Name</th><th>Role(s)</th><th>Required</th><th>Document</th><th>Document No</th><th>Nationality</th><th>DOB</th><th>Expiry</th><th>Status</th></tr></thead><tbody>{% for row in idv.get('required_individuals', []) %}<tr><td>{{ row.get('name')|blank }}</td><td>{{ row.get('roles', [])|join(', ')|blank }}</td><td>{{ row.get('required_documents', [])|join(', ')|blank }}</td><td>{{ row.get('document', {}).get('document_type') or row.get('selected_document_type')|blank }}</td><td>{{ row.get('document', {}).get('document_number')|blank }}</td><td>{{ row.get('document', {}).get('nationality')|blank }}</td><td>{{ row.get('document', {}).get('date_of_birth')|blank }}</td><td>{{ row.get('document', {}).get('expiry_date')|blank }}</td><td>{{ row.get('status')|blank }}</td></tr>{% else %}<tr><td colspan="9" class="empty">No ID&amp;V requirements established.</td></tr>{% endfor %}</tbody></table>
 
-  <h3>Shareholders &gt; 10%</h3>
-  {% if ownership.get("shareholders_over_10_percent") %}
-  <table>
-    <tr>
-      <th>Name</th>
-      <th>Type</th>
-      <th>Effective Shareholding</th>
-    </tr>
-    {% for row in ownership.get("shareholders_over_10_percent", []) %}
-    <tr>
-      <td>{{ row.get("name")|blank }}</td>
-      <td>{{ row.get("type")|blank }}</td>
-      <td>{{ row.get("effective_shareholding_percent")|percent }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p class="empty">None identified.</p>
-  {% endif %}
+  <h2>Adverse News Screening</h2>
+  {% set adverse_assessments = state.get('assessments', [])|selectattr('assessment_type', 'equalto', 'adverse_news')|list %}{% set adverse_findings = state.get('findings', [])|selectattr('category', 'equalto', 'adverse_news')|list %}
+  {% if adverse_assessments %}{% set assessment = adverse_assessments|last %}<div class="card"><strong>{{ 'Screening completed with findings' if assessment.get('outcome') == 'completed_with_findings' else 'Screening completed' }}</strong><p>{{ assessment.get('summary')|blank }}</p>{% if assessment.get('screened_entities') %}<p><strong>Screened entities:</strong> {% for entity in assessment.get('screened_entities', []) %}{{ entity.get('name')|blank }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}{% if assessment.get('limitations') %}<p class="empty">Limitations: {{ assessment.get('limitations')|join(' ') }}</p>{% endif %}</div>{% else %}<p class="empty">Not run.</p>{% endif %}
+  <h3>Findings</h3>{% for item in adverse_findings %}{{ summary_card(item.get('title'), item.get('summary')) }}{% else %}<p class="empty">No material attributable adverse-news findings were identified.</p>{% endfor %}
 
-  <h3>Related Parties</h3>
-  {% if ownership.get("related_parties") %}
-  <table>
-    <tr>
-      <th>Name</th>
-      <th>Role</th>
-      <th>Related Entity</th>
-      <th>Reason</th>
-    </tr>
-    {% for row in ownership.get("related_parties", []) %}
-    <tr>
-      <td>{{ row.get("name")|blank }}</td>
-      <td>{{ row.get("role")|blank }}</td>
-      <td>{{ row.get("related_entity")|blank }}</td>
-      <td>{{ row.get("reason")|blank }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p class="empty">None identified.</p>
-  {% endif %}
+  <h2>Digital Footprint</h2>
+  {% set digital_assessments = state.get('assessments', [])|selectattr('assessment_type', 'equalto', 'digital_footprint')|list %}
+  {% if digital_assessments %}{% set assessment = digital_assessments|last %}<div class="card"><strong>{{ assessment.get('company_inputs', {}).get('company_name') or 'Company' }}</strong><p>Overall presence and visibility: {{ assessment.get('presence_and_visibility', {}).get('indicator')|blank }}</p><p>{{ assessment.get('presence_and_visibility', {}).get('rationale')|blank }}</p><p>Confidence: {{ assessment.get('confidence', {}).get('level')|blank }}</p>{% if assessment.get('limitations') %}<p class="empty">Limitations: {{ assessment.get('limitations')|join(' ') }}</p>{% endif %}</div>{% else %}<p class="empty">Not run.</p>{% endif %}
 
-  <h2>Risk Flags</h2>
-  <p class="muted">Risk flags are evaluated by the graph and retained in graph state. This CDD template focuses on the final CDD object.</p>
+  <h2>CDD Checker</h2>
+  <h3>Findings</h3>{% for item in state.get('findings', []) %}{{ summary_card('', item.get('summary')) }}{% else %}<p class="empty">No findings recorded.</p>{% endfor %}
+  <h3>CDD Completeness Check</h3>{% for item in state.get('assessments', []) if item.get('assessment_type') == 'cdd_completeness' %}{{ summary_card('', item.get('summary')) }}{% else %}<p class="empty">CDD completeness has not been run.</p>{% endfor %}
+  <h3>Evidence Quality Check</h3>{% for item in state.get('assessments', []) if item.get('assessment_type') == 'evidence_quality' %}{{ summary_card('', item.get('summary')) }}{% else %}<p class="empty">Evidence quality has not been run.</p>{% endfor %}
 
-  <div id="footer">WBL Bank CDD</div>
+  <div class="page-break"></div><h2>Full CDDState JSON</h2><pre class="json">{{ cdd_state_json }}</pre>
+  <div id="footer">CDD Report</div>
 </body>
 </html>

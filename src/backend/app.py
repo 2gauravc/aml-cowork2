@@ -604,7 +604,7 @@ async def generate_pdf(request: PdfRequest) -> dict[str, Any]:
     if not state or not state.get("cdd"):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
 
-    pdf_path = render_cdd_pdf(state["cdd"])
+    pdf_path = render_cdd_pdf(state)
     session["pdf_path"] = str(pdf_path)
     return {"pdf_url": f"/api/pdf/{request.session_id}"}
 
@@ -1180,7 +1180,7 @@ async def _generate_pdf_for_session(session: dict[str, Any]) -> dict[str, Any]:
             }
         )
         return _response(session, status="needs_input")
-    pdf_path = render_cdd_pdf(state["cdd"])
+    pdf_path = render_cdd_pdf(state)
     session["pdf_path"] = str(pdf_path)
     session["messages"].append(
         {"role": "assistant", "content": "PDF generated and ready to download."}
@@ -1356,7 +1356,7 @@ async def _complete_pipeline_for_session(
         )
 
         if generate_pdf:
-            pdf_path = render_cdd_pdf(cdd)
+            pdf_path = render_cdd_pdf(graph_state)
             session["pdf_path"] = str(pdf_path)
 
         session["pipeline_status"] = "complete"

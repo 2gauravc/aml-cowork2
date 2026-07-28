@@ -340,13 +340,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    cdd = run_cdd_agent(
+    state = run_cdd_agent_state(
         customer_name=args.customer_name,
         jurisdiction=args.jurisdiction,
         case_id=args.case_id,
     )
+    cdd = state.get("cdd", {})
     if _as_bool(args.generate_pdf):
-        pdf_path = render_cdd_pdf(cdd)
+        pdf_path = render_cdd_pdf(state)
         print(f"PDF saved to {pdf_path}", file=sys.stderr)
 
     json.dump(cdd, sys.stdout, indent=2, ensure_ascii=False)

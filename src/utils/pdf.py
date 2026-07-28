@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,17 +19,22 @@ DEFAULT_TEMPLATE = "CDD.html"
 
 
 def render_cdd_pdf(
-    cdd: dict[str, Any],
+    state: dict[str, Any],
     *,
     output_dir: Path | str = OUTPUT_DIR,
     template_name: str = DEFAULT_TEMPLATE,
 ) -> Path:
-    """Render the CDD JSON to HTML and convert it to a PDF file."""
+    """Render a complete CDD graph state to HTML and convert it to a PDF file.
+
+    ``state`` may be a legacy CDD object for command-line compatibility.  API
+    and chat callers should pass the full graph state so Checker records and
+    the JSON appendix are retained in the report.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    html = render_cdd_html(cdd, template_name=template_name)
-    pdf_path = output_dir / _pdf_filename(cdd)
+    html = render_cdd_html(state, template_name=template_name)
+    pdf_path = output_dir / _pdf_filename(_report_state(state)["cdd"])
     with open(pdf_path, "wb") as fh:
         status = pisa.CreatePDF(html, dest=fh)
 
@@ -38,11 +44,11 @@ def render_cdd_pdf(
 
 
 def render_cdd_html(
-    cdd: dict[str, Any],
+    state: dict[str, Any],
     *,
     template_name: str = DEFAULT_TEMPLATE,
 ) -> str:
-    """Render CDD JSON to the HTML report template."""
+    """Render a complete CDD graph state to the HTML report template."""
     env = Environment(
         loader=FileSystemLoader(TEMPLATE_DIR),
         autoescape=select_autoescape(("html", "xml")),
@@ -51,7 +57,20 @@ def render_cdd_html(
     env.filters["percent"] = _percent
     env.filters["date"] = _date_only
     template = env.get_template(template_name)
-    return template.render(cdd=cdd, generated_at=datetime.now(UTC).isoformat())
+    report_state = _report_state(state)
+    return template.render(
+        state=report_state,
+        cdd=report_state["cdd"],
+        cdd_state_json=json.dumps(report_state, indent=2, ensure_ascii=False, default=str),
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+def _report_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy CDD-only input into the report's graph-state shape."""
+    if "cdd" in state:
+        return state
+    return {"cdd": state}
 
 
 def _pdf_filename(cdd: dict[str, Any]) -> str:
