@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from io import BytesIO
 import json
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,7 @@ def test_completed_state_round_trips_through_s3() -> None:
         "metadata": {"kyc_case": {"case_id": 42}},
         "cdd": {"completed_at": "2026-07-27T00:00:00+00:00"},
         "evidence": [{"evidence_id": "e-1"}],
+        "source_date": date(2026, 7, 28),
     }
     with patch.dict("os.environ", {"CDD_STATE_S3_BUCKET": "test-bucket"}, clear=False), patch(
         "boto3.client", return_value=client
@@ -28,7 +30,10 @@ def test_completed_state_round_trips_through_s3() -> None:
 
     assert saved["identity"]["case_id"] == "42"
     assert client.put_object.call_args.kwargs["Key"] == "cdd-states/GB/example-ltd/completed.json"
-    assert restored["graph_state"] == state
+    assert restored["graph_state"]["metadata"] == state["metadata"]
+    assert restored["graph_state"]["cdd"] == state["cdd"]
+    assert restored["graph_state"]["evidence"] == state["evidence"]
+    assert restored["graph_state"]["source_date"] == "2026-07-28"
 
 
 def test_state_store_is_disabled_without_an_s3_bucket() -> None:

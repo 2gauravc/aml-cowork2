@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 
@@ -123,6 +123,6 @@ def _json_safe(value: Any) -> Any:
         return [_json_safe(item) for item in value]
     if hasattr(value, "model_dump"):
         return _json_safe(value.model_dump(mode="json"))
-    if isinstance(value, datetime):
+    if isinstance(value, (date, datetime)):
         return value.isoformat()
     return value

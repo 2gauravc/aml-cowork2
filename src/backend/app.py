@@ -827,6 +827,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "case_review_summary",
         "case_review_decision",
         "saved_cdd_state",
+        "state_persistence_error",
         "pdf_path",
         "pipeline_error",
     ):
@@ -930,6 +931,7 @@ def _response(
         "pipeline_progress": session.get("pipeline_progress"),
         "demo_mode": bool(session.get("demo_mode")) or _demo_mode_enabled(),
         "saved_cdd_state": session.get("saved_cdd_state"),
+        "state_persistence_error": session.get("state_persistence_error"),
     }
 
 
@@ -1369,8 +1371,15 @@ async def _complete_pipeline_for_session(
             )
             if saved:
                 session["saved_cdd_state"] = saved
+                session["messages"].append(
+                    {"role": "assistant", "content": "Completed CDD state saved to S3."}
+                )
         except CDDStateStoreError as exc:
-            LOGGER.warning("Completed CDD state was not persisted: %s", exc)
+            LOGGER.exception("Completed CDD state was not persisted")
+            session["state_persistence_error"] = str(exc)
+            session["messages"].append(
+                {"role": "assistant", "content": f"CDD completed, but its S3 state could not be stored: {exc}"}
+            )
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)

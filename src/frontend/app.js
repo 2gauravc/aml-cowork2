@@ -262,6 +262,7 @@ function App() {
     setPipelineStatus(data.pipeline_status || data.status || null);
     if (typeof data.demo_mode === "boolean") setDemoMode(data.demo_mode);
     if (data.error) setError(data.error);
+    if (data.state_persistence_error) setError(`CDD state was not saved: ${data.state_persistence_error}`);
   }
 
   function resetCddRunDisplay() {
