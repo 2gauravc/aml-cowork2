@@ -36,7 +36,7 @@ def test_cdd_maker_uses_collapsed_accordion_panels_for_case_sections() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
     styles = (Path(__file__).parents[1] / "src" / "frontend" / "styles.css").read_text(encoding="utf-8")
 
-    for title in ("Customer Business Profile", "Ownership & Control", "ID&V", "Adverse News Screening", "Digital Footprint", "Shell Company Risk", "Other Risk Factors", "CDD Completeness", "Evidence Quality", "All Findings"):
+    for title in ("Customer Business Profile", "Ownership & Control", "ID&V", "Adverse News Screening", "Digital Footprint", "Shell Company Risk", "Other Risk Factors", "CDD Completeness", "Evidence Quality", "All Findings", "Risk Rating"):
         assert f'title="{title}" collapsible' in app
     assert '<details className="section collapsible-section">' in app
     assert '.collapsible-section > summary' in styles
