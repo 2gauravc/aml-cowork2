@@ -314,6 +314,18 @@ button:disabled {
   padding: 0 16px 16px;
 }
 
+.risk-rating-rubric {
+  margin-top: 16px;
+}
+
+.risk-rating-rubric h3 {
+  margin-bottom: 8px;
+}
+
+.risk-rating-rubric table {
+  max-width: 560px;
+}
+
 .grid {
   display: grid;
   gap: 12px;

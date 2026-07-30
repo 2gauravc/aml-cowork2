@@ -1,36 +1,30 @@
 ---
 name: risk-rating
-description: Determine an auditable overall CDD risk rating from retained findings, assessments, and evidence. Use for the top Risk Flags section of CDD Checker.
+description: Determine an auditable overall CDD risk rating using deterministic factor scoring.
 assessment:
   schema: risk_rating_assessment/v1
   category: risk_rating
-ratings: [high, standalone_high, moderate, low]
-precedence: [high, standalone_high, moderate, low]
+ratings: [high, moderate, low, inconclusive]
+factor_scores:
+  material_adverse_news: 2
+  high_risk_industry: 2
+  shell_company_risk: 2
+  high_aml_risk_jurisdiction_link: 1
+  high_tax_risk_jurisdiction_link: 1
+thresholds:
+  high: 4
+  moderate: 1
 monitoring_guidance:
   high: Maximum scrutiny and very frequent ongoing monitoring.
-  standalone_high: Frequent ongoing monitoring and enhanced review.
   moderate: Ongoing monitoring proportionate to the retained risk factors.
   low: Standard ongoing monitoring.
-criteria:
-  high:
-    - Prohibitively high-risk industry, for example defence, weapons, or nuclear power.
-    - Retained sanctions-nexus red flag.
-    - Attributable severe adverse news, for example direct money-laundering involvement by the customer or a counterparty.
-    - Another retained fact warrants maximum scrutiny and very frequent monitoring.
-  standalone_high:
-    - High-risk industry in which money laundering is commonly found, for example artwork trading.
-    - Multiple retained shell-company characteristics.
-    - Multiple current risk flags warrant frequent ongoing monitoring.
-  moderate:
-    - A limited number of current risk flags warrant ongoing monitoring.
-    - Retained link to a high-risk country.
-    - Retained PEP involvement.
-  low:
-    - None of the higher-risk criteria are supported by retained information.
+  inconclusive: Complete outstanding required assessments before setting monitoring.
 ---
 
 # Risk Rating
 
-Select current canonical findings, relevant assessment records, legacy CSP risk flags, and linked evidence deterministically before the LLM call. Use only those retained records and this policy. Do not infer sanctions nexus, PEP involvement, adverse news, industry, counterparty, geography, or monitoring needs from absent data.
+Use only current canonical findings and assessment records. Do not call an LLM or infer unrecorded information. Each factor is scored once at most, even when multiple underlying Shell Company Risk criteria are triggered.
 
-Return exactly one rating, matched criteria, an analyst-readable rationale, limitations, and monitoring guidance. Missing sanctions, PEP, or other screening coverage must be recorded as a limitation and recommended follow-up; it must not prevent a rating. Use the highest supported rating criterion; if no higher criterion is supported, use `low`. Do not emit a finding: this is an assessment that summarizes existing records.
+Required assessments are Adverse News Screening, Shell Company Risk, and the three configured Other Risk Factors: High-risk Industry, High AML-risk Jurisdiction Link, and High Tax-risk Jurisdiction Link. If any is missing or unavailable, return `inconclusive`.
+
+Otherwise, add the configured factor scores for triggered factors. A material Adverse News finding is scored once if any current canonical finding has category `adverse_news`. Return `high` at the configured high threshold, `moderate` at the configured moderate threshold, or `low` at zero. Persist the contributing factors, total score, matched criteria, and an analyst-readable explanation of the rule applied. Do not emit a finding: this is an assessment that summarizes existing records.

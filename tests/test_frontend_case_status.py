@@ -162,6 +162,14 @@ def test_cdd_maker_orders_assessment_cards_and_separates_findings_from_risk_rati
     assert 'assessmentsByType(cddState, "risk_rating")' in app
     assert 'fetch("/api/risk-rating/run"' in app
     assert app.index('<ShellCompanyRisk') < app.index('<OtherRiskFactors') < app.index('<CDDCompleteness') < app.index('<EvidenceQuality') < app.index('<Findings') < app.index('<RiskRating')
+    assert 'Risk score: ${rating.total_score}' in app
+    assert 'rating.rule_explanation || rating.summary' in app
+    assert 'Risk Rating Rubric' in app
+    assert 'material_adverse_news: "Material Adverse News finding"' in app
+    assert '<th>Available points</th><th>Score</th>' in app
+    assert '<th colSpan="2">Total score</th>' in app
+    assert '<th colSpan="2">Final rating</th>' in app
+    assert 'Inconclusive: a required assessment is missing or unavailable.' in app
     assert 'Confidence: ${statusLabel(finding.confidence?.level)}' in app
 
 
