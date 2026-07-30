@@ -117,7 +117,7 @@ function App() {
     [documentRequirements],
   );
   const cddPausedForDocuments = pipelineStatus === "awaiting_documents";
-  const chatWorkspaceActive = activeWorkspace === "cdd" || activeWorkspace === "case-review" || (activeWorkspace === "adverse-news" && adverseNewsMode === "cdd") || (activeWorkspace === "digital-footprint" && digitalFootprintMode === "cdd");
+  const chatWorkspaceActive = activeWorkspace === "cdd" || (activeWorkspace === "adverse-news" && adverseNewsMode === "cdd") || (activeWorkspace === "digital-footprint" && digitalFootprintMode === "cdd");
   const activeToolWorkspace = TOOL_WORKSPACES.some((tool) => tool.id === activeWorkspace);
   const documentKeyList = useMemo(
     () => documents.map((document) => documentKey(document)).filter(Boolean).join("|"),
@@ -870,12 +870,6 @@ function App() {
               CDD Maker
             </button>
             <button
-              className={`workspace-tab ${activeWorkspace === "case-review" ? "active" : ""}`}
-              onClick={() => setActiveWorkspace("case-review")}
-            >
-              CDD Checker
-            </button>
-            <button
               className={`workspace-tab ${activeWorkspace === "generation" ? "active" : ""}`}
               onClick={() => setActiveWorkspace("generation")}
             >
@@ -1004,7 +998,7 @@ function App() {
             </div>
           </section>
 
-          <Section title="Customer Business Profile">
+          <Section title="Customer Business Profile" collapsible>
             <div className="grid">
               <Field label="Name" value={profile.name || customerName} source={fieldSources.name} />
               <Field
@@ -1035,7 +1029,7 @@ function App() {
             </div>
           </Section>
 
-          <Section title="Ownership & Control">
+          <Section title="Ownership & Control" collapsible>
             <SubTable
               title="UBOs"
               empty="None identified"
@@ -1068,7 +1062,7 @@ function App() {
             />
           </Section>
 
-          <Section title="ID&V">
+          <Section title="ID&V" collapsible>
             <SubTable
               empty="No ID&V requirements established"
               columns={[
@@ -1100,6 +1094,17 @@ function App() {
 
           <DigitalFootprintScreening cddState={cddState} onOpenTool={loadDigitalFootprintFromCdd} />
 
+          <CDDReviewCards
+            cddState={cddState}
+            loading={caseReviewLoading}
+            onRunCompleteness={runCDDCompleteness}
+            onRunEvidenceQuality={runEvidenceQuality}
+            onRunOtherRiskFactors={runOtherRiskFactors}
+            onRunShellCompanyRisk={runShellCompanyRisk}
+            onRunRiskRating={runRiskRating}
+            demoMode={demoMode}
+          />
+
           {showJson && cddState && (
             <Section title="CDDState JSON">
               <div className="json-view-header">
@@ -1125,26 +1130,6 @@ function App() {
                 uploadInputRef={uploadInputRef}
                 onUploadChange={handleUploadPlaceholder}
                 uploadNotice={uploadNotice}
-                demoMode={demoMode}
-              />
-            ) : activeWorkspace === "case-review" ? (
-              <CaseReview
-                cddState={cddState}
-                summary={caseAssessmentSummary}
-                decision={caseReviewDecision}
-                decisionDraft={reviewDecisionDraft}
-                note={reviewNote}
-                loading={caseReviewLoading}
-                hasCdd={Boolean(cdd)}
-                onRefresh={refreshCaseReview}
-                onRunCompleteness={runCDDCompleteness}
-                onRunEvidenceQuality={runEvidenceQuality}
-                onRunOtherRiskFactors={runOtherRiskFactors}
-                onRunShellCompanyRisk={runShellCompanyRisk}
-                onRunRiskRating={runRiskRating}
-                onDecisionChange={setReviewDecisionDraft}
-                onNoteChange={setReviewNote}
-                onSaveDecision={saveCaseReviewDecision}
                 demoMode={demoMode}
               />
             ) : activeWorkspace === "csp" ? (
@@ -1279,7 +1264,15 @@ function App() {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, children, collapsible = false }) {
+  if (collapsible) {
+    return (
+      <details className="section collapsible-section">
+        <summary><h2>{title}</h2></summary>
+        <div className="section-content">{children}</div>
+      </details>
+    );
+  }
   return (
     <section className="section">
       <h2>{title}</h2>
@@ -1288,10 +1281,9 @@ function Section({ title, children }) {
   );
 }
 
-function CaseReview({
+function CDDReviewCards({
   cddState,
   loading,
-  hasCdd,
   onRunCompleteness,
   onRunEvidenceQuality,
   onRunOtherRiskFactors,
@@ -1299,37 +1291,34 @@ function CaseReview({
   onRunRiskRating,
   demoMode,
 }) {
-  if (!hasCdd) {
-    return (
-      <Section title="CDD Checker">
-        <p className="empty">Run a CDD case to populate the checker.</p>
-      </Section>
-    );
-  }
-
   return (
     <>
-      <RiskFlags findings={cddState?.findings || []} evidence={cddState?.evidence || []} assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
-      <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
-      <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
       <ShellCompanyRisk assessments={assessmentsByType(cddState, "shell_company_risk")} findings={(cddState?.findings || []).filter((finding) => finding.category === "shell_company_risk")} riskFlags={(cddState?.risk_flags || []).filter((flag) => flag.category === "csp_address")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunShellCompanyRisk} />
       <OtherRiskFactors assessments={assessmentsByType(cddState, "other_risk_factors")} findings={(cddState?.findings || []).filter((finding) => finding.category === "other_risk_factors")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunOtherRiskFactors} />
+      <CDDCompleteness assessments={assessmentsByType(cddState, "cdd_completeness")} findings={(cddState?.findings || []).filter((finding) => finding.category === "cdd_completeness")} loading={loading} demoMode={demoMode} onRun={onRunCompleteness} />
+      <EvidenceQuality assessments={assessmentsByType(cddState, "evidence_quality")} findings={(cddState?.findings || []).filter((finding) => finding.category === "evidence_quality")} evidence={cddState?.evidence || []} loading={loading} demoMode={demoMode} onRun={onRunEvidenceQuality} />
+      <Findings findings={cddState?.findings || []} evidence={cddState?.evidence || []} />
+      <RiskRating assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
     </>
   );
 }
 
-function RiskFlags({ findings, evidence, assessments, loading, demoMode, onRun }) {
-  const rating = assessments[assessments.length - 1];
+function Findings({ findings, evidence }) {
   const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
-  return <Section title="Risk Flags"><div className="case-assessment-header"><div><h3>Risk Rating</h3>{rating ? <div className="adverse-news-summary"><strong>{statusLabel(rating.rating)}</strong><span>{rating.summary || "No rationale was recorded."}</span><span>{`Monitoring: ${rating.monitoring_posture || "Not recorded."}`}</span>{rating.matched_criteria?.length ? <span>{`Matched criteria: ${rating.matched_criteria.join("; ")}`}</span> : null}{rating.limitations?.length ? <span>{`Limitations: ${rating.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No Risk Rating assessment is available.</p>}</div><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Assessing…" : (rating ? "Re-run Risk Rating" : "Run Risk Rating")}</button></div><h3>Findings</h3>{findings.length ? <div className="review-list">{findings.map((finding) => <div className="review-item" key={finding.finding_id}><strong>{finding.title || finding.category || "Finding"}</strong><p>{finding.summary || "No summary was recorded."}</p><small>{`Confidence: ${statusLabel(finding.confidence?.level)} · Severity: ${statusLabel(finding.severity?.level)}`}</small>{finding.recommended_action_rfi?.internal_actions?.length ? <p className="risk">{`Recommended action: ${finding.recommended_action_rfi.internal_actions.join(" ")}`}</p> : null}{finding.recommended_action_rfi?.rfi?.length ? <BulletList items={finding.recommended_action_rfi.rfi.map((item) => `${item.request} — ${item.reason} (${item.priority})`)} /> : null}{(finding.relevant_evidence_ids || []).length ? <EvidenceReview evidence={finding.relevant_evidence_ids.map((id) => evidenceById[id] || { evidence_id: id, description: "Referenced evidence is not currently retained." })} /> : null}<small>{`Source: ${finding.source?.producer_name || "Not recorded"}${finding.source?.created_at ? ` · ${formatDateTime(finding.source.created_at)}` : ""}`}</small></div>)}</div> : <p className="empty">No canonical findings are currently recorded.</p>}</Section>;
+  return <Section title="All Findings" collapsible>{findings.length ? <div className="review-list">{findings.map((finding) => <div className="review-item" key={finding.finding_id}><strong>{finding.title || finding.category || "Finding"}</strong><p>{finding.summary || "No summary was recorded."}</p><small>{`Confidence: ${statusLabel(finding.confidence?.level)} · Severity: ${statusLabel(finding.severity?.level)}`}</small>{finding.recommended_action_rfi?.internal_actions?.length ? <p className="risk">{`Recommended action: ${finding.recommended_action_rfi.internal_actions.join(" ")}`}</p> : null}{finding.recommended_action_rfi?.rfi?.length ? <BulletList items={finding.recommended_action_rfi.rfi.map((item) => `${item.request} — ${item.reason} (${item.priority})`)} /> : null}{(finding.relevant_evidence_ids || []).length ? <EvidenceReview evidence={finding.relevant_evidence_ids.map((id) => evidenceById[id] || { evidence_id: id, description: "Referenced evidence is not currently retained." })} /> : null}<small>{`Source: ${finding.source?.producer_name || "Not recorded"}${finding.source?.created_at ? ` · ${formatDateTime(finding.source.created_at)}` : ""}`}</small></div>)}</div> : <p className="empty">No canonical findings are currently recorded.</p>}</Section>;
+}
+
+function RiskRating({ assessments, loading, demoMode, onRun }) {
+  const rating = assessments[assessments.length - 1];
+  return <Section title="Risk Rating"><div className="case-assessment-header"><div>{rating ? <div className="adverse-news-summary"><strong>{statusLabel(rating.rating)}</strong><span>{rating.summary || "No rationale was recorded."}</span><span>{`Monitoring: ${rating.monitoring_posture || "Not recorded."}`}</span>{rating.matched_criteria?.length ? <span>{`Matched criteria: ${rating.matched_criteria.join("; ")}`}</span> : null}{rating.limitations?.length ? <span>{`Limitations: ${rating.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No Risk Rating assessment is available.</p>}</div><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Assessing…" : (rating ? "Re-run Risk Rating" : "Run Risk Rating")}</button></div></Section>;
 }
 
 function CDDCompleteness({ assessments, findings, loading, demoMode, onRun }) {
   if (!assessments.length) {
-    return <Section title="CDD Completeness"><p className="empty">No completeness assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run CDD Completeness Check"}</button></Section>;
+    return <Section title="CDD Completeness" collapsible><p className="empty">No completeness assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run CDD Completeness Check"}</button></Section>;
   }
   return (
-    <Section title="CDD Completeness">
+    <Section title="CDD Completeness" collapsible>
       <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run CDD Completeness Check"}</button>
       <div className="review-list">
         {assessments.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => {
@@ -1348,10 +1337,10 @@ function CDDCompleteness({ assessments, findings, loading, demoMode, onRun }) {
 
 function EvidenceQuality({ assessments, findings, evidence, loading, demoMode, onRun }) {
   if (!assessments.length) {
-    return <Section title="Evidence Quality"><p className="empty">No Evidence Quality assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Evidence Quality Check"}</button></Section>;
+    return <Section title="Evidence Quality" collapsible><p className="empty">No Evidence Quality assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Evidence Quality Check"}</button></Section>;
   }
   return (
-    <Section title="Evidence Quality">
+    <Section title="Evidence Quality" collapsible>
       <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Evidence Quality Check"}</button>
       <div className="review-list">
         {EVIDENCE_SECTION_ORDER.map((section) => {
@@ -1388,10 +1377,10 @@ function EvidenceQuality({ assessments, findings, evidence, loading, demoMode, o
 
 function OtherRiskFactors({ assessments, findings, evidence, loading, demoMode, onRun }) {
   if (!assessments.length) {
-    return <Section title="Other Risk Factors"><p className="empty">No Other Risk Factors assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Other Risk Factors Check"}</button></Section>;
+    return <Section title="Other Risk Factors" collapsible><p className="empty">No Other Risk Factors assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Other Risk Factors Check"}</button></Section>;
   }
   const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
-  return <Section title="Other Risk Factors">
+  return <Section title="Other Risk Factors" collapsible>
     <button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Other Risk Factors Check"}</button>
     <div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
       const group = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section);
@@ -1410,11 +1399,11 @@ function OtherRiskFactors({ assessments, findings, evidence, loading, demoMode, 
 function ShellCompanyRisk({ assessments, findings, riskFlags, evidence, loading, demoMode, onRun }) {
   const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
   const cspEvidence = evidence.filter((item) => item.tool === "csp_address_assessment");
-  if (!assessments.length && !riskFlags.length) return <Section title="Shell Company Risk"><p className="empty">No Shell Company Risk assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Shell Company Risk Check"}</button></Section>;
-  return <Section title="Shell Company Risk"><button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Shell Company Risk Check"}</button><div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
+  if (!assessments.length && !riskFlags.length) return <Section title="Shell Company Risk" collapsible><p className="empty">No Shell Company Risk assessment is available.</p><button disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Run Shell Company Risk Check"}</button></Section>;
+  return <Section title="Shell Company Risk" collapsible><button className="secondary" disabled={loading || demoMode} onClick={onRun}>{loading ? "Checking…" : "Re-run Shell Company Risk Check"}</button><div className="review-list">{EVIDENCE_SECTION_ORDER.map((section) => {
     const group = assessments.filter((assessment) => assessment.cdd_section === section || assessment.definition?.cdd_section === section); if (!group.length) return null;
     return <div className="evidence-quality-section" key={section}><h3>{EVIDENCE_SECTION_LABELS[section]}</h3>{group.slice().sort((left, right) => (left.display_order || 0) - (right.display_order || 0)).map((assessment) => { const finding = findings.find((item) => item.assessment_id === assessment.assessment_id); const reviewed = (assessment.selected_evidence || []).map((item) => evidenceById[item.evidence_id] || item); return <div className="review-item" key={assessment.assessment_id}><strong>{assessment.title}</strong><p>{assessment.summary}</p>{reviewed.length ? <EvidenceReview evidence={reviewed} /> : null}{finding ? <p className="risk">{`${statusLabel(finding.severity?.level)}: ${finding.recommended_action_rfi?.internal_actions?.join(" ") || "Action required."}`}</p> : <small>No finding raised.</small>}</div>; })}</div>;
-  })}<div className="evidence-quality-section"><h3>Screening</h3><strong>CSP Address</strong>{riskFlags.length ? riskFlags.map((flag) => <div className="review-item" key={flag.finding_id}><p>{flag.description || "CSP assessment recorded."}</p><small>{`Outcome: ${flag.evaluation || "inconclusive"} · severity: ${flag.severity || "not recorded"}. This is the existing CSP record; no duplicate Shell Company Risk finding was created.`}</small></div>) : <p className="empty">No upstream CSP assessment is available.</p>}{cspEvidence.length ? <EvidenceReview evidence={cspEvidence} /> : null}</div></div></Section>;
+  })}<div className="evidence-quality-section"><strong>CSP Address</strong>{riskFlags.length ? riskFlags.map((flag) => <div className="review-item" key={flag.finding_id}><p>{flag.description || "CSP assessment recorded."}</p><small>{`Outcome: ${flag.evaluation || "inconclusive"} · severity: ${flag.severity || "not recorded"}. This is the existing CSP record; no duplicate Shell Company Risk finding was created.`}</small></div>) : <p className="empty">No upstream CSP assessment is available.</p>}{cspEvidence.length ? <EvidenceReview evidence={cspEvidence} /> : null}</div></div></Section>;
 }
 
 const EVIDENCE_SECTION_ORDER = ["customer_business_profile", "ownership_and_control", "identity_verification", "screening"];
@@ -1639,15 +1628,15 @@ function DigitalFootprintScreening({ cddState, onOpenTool }) {
   const assessment = latestAssessment(result, "digital_footprint");
 
   if (!assessment) {
-    return <Section title="Digital Footprint"><p className="empty">Not run.</p></Section>;
+    return <Section title="Digital Footprint" collapsible><p className="empty">Not run.</p></Section>;
   }
 
   if (assessment.outcome === "unavailable") {
-    return <Section title="Digital Footprint"><p className="risk">{`Assessment unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p></Section>;
+    return <Section title="Digital Footprint" collapsible><p className="risk">{`Assessment unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p></Section>;
   }
 
   return (
-    <Section title="Digital Footprint">
+    <Section title="Digital Footprint" collapsible>
       <div className="adverse-news-summary">
         <strong>{assessment.company_inputs?.company_name || "Company"}</strong>
         <span>{`Overall presence and visibility: ${statusLabel(assessment.presence_and_visibility?.indicator)}`}</span>
@@ -2136,7 +2125,7 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
 
   if (!assessment) {
     return (
-      <Section title="Adverse News Screening">
+      <Section title="Adverse News Screening" collapsible>
         <p className="empty">Not run.</p>
       </Section>
     );
@@ -2144,7 +2133,7 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
 
   if (assessment.outcome === "unavailable") {
     return (
-      <Section title="Adverse News Screening">
+      <Section title="Adverse News Screening" collapsible>
         <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p>
       </Section>
     );
@@ -2156,7 +2145,7 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
   const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
 
   return (
-    <Section title="Adverse News Screening">
+    <Section title="Adverse News Screening" collapsible>
       <div className="adverse-news-summary">
         <strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong>
         <span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={evidence} /></span>

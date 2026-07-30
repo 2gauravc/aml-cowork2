@@ -17,7 +17,7 @@ factors:
   - id: high_aml_risk_jurisdiction_link
     title: Link to high AML-risk jurisdiction
     order: 20
-    cdd_section: ownership_and_control
+    cdd_section: customer_business_profile
     method: llm_structured
     severity: medium
     risk_definition: An AML-risk jurisdiction link requires review where retained facts show incorporation, operations, customers, suppliers, ownership, control, or other commercial links to a jurisdiction associated with material money-laundering, terrorist-financing, or sanctions-evasion risk.
@@ -35,7 +35,7 @@ factors:
   - id: high_tax_risk_jurisdiction_link
     title: Link to high tax-risk jurisdiction
     order: 30
-    cdd_section: ownership_and_control
+    cdd_section: customer_business_profile
     method: llm_structured
     severity: medium
     risk_definition: A tax-risk jurisdiction link requires review where retained facts show incorporation, operations, customers, suppliers, ownership, or other commercial links to a jurisdiction associated with material tax-transparency, tax-evasion, or secrecy risk.

@@ -24,16 +24,22 @@ def test_cdd_metadata_uses_case_status_from_api_response() -> None:
     assert "evidence-quality-section" in app
 
 
-def test_case_assessment_workspace_uses_the_renamed_summary_field() -> None:
+def test_cdd_maker_includes_the_assessment_cards() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
-    assert "Case Assessment" in app
-    assert "data.case_assessment_summary" in app
-    assert "data.case_review_summary" not in app
-    assert '<CaseReview\n                cddState={cddState}' in app
+    assert "CDD Checker" not in app
+    assert '<CDDReviewCards\n            cddState={cddState}' in app
     assert 'function CDDCompleteness({ assessments, findings, loading, demoMode, onRun })' in app
-    assert '<Section title="Case Assessment">' not in app
-    assert '<Section title="Reviewer Decision">' not in app
+
+
+def test_cdd_maker_uses_collapsed_accordion_panels_for_case_sections() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+    styles = (Path(__file__).parents[1] / "src" / "frontend" / "styles.css").read_text(encoding="utf-8")
+
+    for title in ("Customer Business Profile", "Ownership & Control", "ID&V", "Adverse News Screening", "Digital Footprint", "Shell Company Risk", "Other Risk Factors", "CDD Completeness", "Evidence Quality", "All Findings"):
+        assert f'title="{title}" collapsible' in app
+    assert '<details className="section collapsible-section">' in app
+    assert '.collapsible-section > summary' in styles
 
 
 def test_risk_ui_has_no_aml_presentation() -> None:
@@ -145,14 +151,17 @@ def test_shell_company_risk_checker_surfaces_existing_csp_record_without_duplica
     assert 'fetch("/api/shell-company-risk/run"' in app
     assert 'flag.category === "csp_address"' in app
     assert 'no duplicate Shell Company Risk finding was created' in app
+    assert '<h3>Screening</h3><strong>CSP Address</strong>' not in app
 
 
-def test_risk_flags_is_the_top_cdd_checker_card_with_rating_and_findings() -> None:
+def test_cdd_maker_orders_assessment_cards_and_separates_findings_from_risk_rating() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
-    assert 'function RiskFlags' in app
+    assert 'function Findings' in app
+    assert 'function RiskRating' in app
+    assert '<Section title="All Findings" collapsible>' in app
     assert 'assessmentsByType(cddState, "risk_rating")' in app
     assert 'fetch("/api/risk-rating/run"' in app
-    assert app.index('<RiskFlags') < app.index('<CDDCompleteness')
+    assert app.index('<ShellCompanyRisk') < app.index('<OtherRiskFactors') < app.index('<CDDCompleteness') < app.index('<EvidenceQuality') < app.index('<Findings') < app.index('<RiskRating')
     assert 'Confidence: ${statusLabel(finding.confidence?.level)}' in app
 
 

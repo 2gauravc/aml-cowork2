@@ -280,6 +280,40 @@ button:disabled {
   margin: 0 0 12px;
 }
 
+.collapsible-section {
+  padding: 0;
+}
+
+.collapsible-section > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  padding: 16px;
+}
+
+.collapsible-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-section > summary::after {
+  content: "▸";
+  font-size: 20px;
+}
+
+.collapsible-section[open] > summary::after {
+  content: "▾";
+}
+
+.collapsible-section > summary h2 {
+  margin: 0;
+}
+
+.section-content {
+  padding: 0 16px 16px;
+}
+
 .grid {
   display: grid;
   gap: 12px;

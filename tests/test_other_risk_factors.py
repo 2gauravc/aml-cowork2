@@ -30,6 +30,13 @@ def test_all_configured_factors_create_assessments_without_duplicate_upstream_fi
     assert load_other_risk_factors_definition()["assessment"]["schema"] == "other_risk_factors_assessment/v1"
 
 
+def test_jurisdiction_factors_are_assigned_to_customer_business_profile() -> None:
+    factors = {item["id"]: item for item in load_other_risk_factors_definition()["factors"]}
+
+    assert factors["high_aml_risk_jurisdiction_link"]["cdd_section"] == "customer_business_profile"
+    assert factors["high_tax_risk_jurisdiction_link"]["cdd_section"] == "customer_business_profile"
+
+
 def test_industry_and_jurisdiction_indicators_raise_linked_findings() -> None:
     state = _state()
     state["cdd"]["company_business_profile"]["customer_static"]["activity_type"] = "Cryptocurrency exchange"

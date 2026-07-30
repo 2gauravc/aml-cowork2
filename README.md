@@ -20,10 +20,6 @@ Use CDD Maker to review the due-diligence results. For detailed **Adverse News**
 
 To understand any result in more detail, ask the chatbot. The chatbot may occasionally give an incomplete or inaccurate answer; in that case, ask the bot to 'Refer to the case data in `CDDState`'.
 
-### CDD Checker
-
-Use CDD Checker for the detailed assessment. This view currently presents the raw assessment output.
-
 ### Tools
 
 Run a tool independently, or load data from an existing CDD case.
