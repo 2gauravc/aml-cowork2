@@ -583,6 +583,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
         raise HTTPException(status_code=404, detail="No completed CDD state was found")
     session = _session(request.session_id)
     graph_state = snapshot["graph_state"]
+    migrated_rating = _migrate_legacy_risk_rating(graph_state)
     _normalise_document_state(graph_state)
     sync_case_status(graph_state, generation="completed")
     session["graph_state"] = graph_state
@@ -592,9 +593,38 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     session["case_id"] = identity.get("case_id")
     session["pipeline_status"] = "complete"
     session["pipeline_progress"] = None
-    session["saved_cdd_state"] = {"saved_at": snapshot.get("saved_at"), "identity": identity}
+    saved_cdd_state = {"saved_at": snapshot.get("saved_at"), "identity": identity}
+    if migrated_rating:
+        try:
+            saved_cdd_state = await asyncio.to_thread(
+                save_completed_state,
+                graph_state,
+                customer_name=session["customer_name"],
+                jurisdiction=session["jurisdiction"],
+                case_id=session["case_id"],
+            ) or saved_cdd_state
+        except CDDStateStoreError as exc:
+            session["state_persistence_error"] = str(exc)
+    session["saved_cdd_state"] = saved_cdd_state
     session["messages"].append({"role": "assistant", "content": "Loaded the saved completed CDD state."})
     return _response(session, status="complete")
+
+
+def _migrate_legacy_risk_rating(graph_state: dict[str, Any]) -> bool:
+    """Replace a retired model rating with the canonical #94 assessment."""
+    assessments = graph_state.get("assessments")
+    if not isinstance(assessments, list):
+        return False
+    current = [item for item in assessments if item.get("assessment_type") == "risk_rating"]
+    if len(current) == 1 and (current[0].get("provenance") or {}).get("method") == "deterministic_rule_based":
+        return False
+
+    result = assess_risk_rating(graph_state)
+    graph_state["assessments"] = [
+        item for item in assessments if item.get("assessment_type") != "risk_rating"
+    ]
+    graph_state["assessments"].extend(result["assessments"])
+    return True
 
 
 @app.post("/api/pdf")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
-from src.backend.app import _complete_pipeline_for_session
+from src.backend.app import _complete_pipeline_for_session, _migrate_legacy_risk_rating
 
 
 def test_completed_pipeline_persists_the_full_graph_state() -> None:
@@ -46,3 +46,24 @@ def test_completed_pipeline_persists_the_full_graph_state() -> None:
     assert session["pipeline_status"] == "complete"
     assert session["saved_cdd_state"] == saved
     assert session["messages"][-1]["content"] == "Completed CDD state saved to S3."
+
+
+def test_loading_legacy_state_replaces_its_model_rating_with_the_rule_based_rating() -> None:
+    graph_state = {
+        "findings": [],
+        "assessments": [
+            {"assessment_id": "adverse", "assessment_type": "adverse_news", "outcome": "completed_no_material_findings", "created_at": "2026-01-01T00:00:00Z", "source_evidence_ids": []},
+            {"assessment_id": "shell", "assessment_type": "shell_company_risk", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z", "source_evidence_ids": []},
+            {"assessment_id": "industry", "assessment_type": "other_risk_factors", "factor_id": "high_risk_industry", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z", "source_evidence_ids": []},
+            {"assessment_id": "aml", "assessment_type": "other_risk_factors", "factor_id": "high_aml_risk_jurisdiction_link", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z", "source_evidence_ids": []},
+            {"assessment_id": "tax", "assessment_type": "other_risk_factors", "factor_id": "high_tax_risk_jurisdiction_link", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z", "source_evidence_ids": []},
+            {"assessment_id": "legacy", "assessment_type": "risk_rating", "rating": "standalone_high", "summary": "Legacy model result"},
+        ],
+    }
+
+    assert _migrate_legacy_risk_rating(graph_state) is True
+    ratings = [item for item in graph_state["assessments"] if item["assessment_type"] == "risk_rating"]
+    assert len(ratings) == 1
+    assert ratings[0]["rating"] == "low"
+    assert ratings[0]["total_score"] == 0
+    assert ratings[0]["provenance"] == {"method": "deterministic_rule_based"}

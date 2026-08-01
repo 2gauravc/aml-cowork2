@@ -13,6 +13,18 @@
 </head>
 <body>
   {% macro summary_card(title, summary) -%}<div class="card">{% if title %}<strong>{{ title }}</strong>{% endif %}<p>{{ summary|blank }}</p></div>{%- endmacro %}
+  {% macro assessment_card(item, findings) -%}
+    {% set finding = findings|selectattr('assessment_id', 'equalto', item.get('assessment_id'))|list|first %}
+    <div class="card">
+      <strong>{{ item.get('title')|blank }}</strong>
+      <p>{{ item.get('summary') or item.get('rationale')|blank }}</p>
+      {% if item.get('detail', {}).get('missing_items') %}<p><strong>Missing:</strong> {{ item.get('detail', {}).get('missing_items')|join(', ') }}</p>{% endif %}
+      {% if item.get('detail', {}).get('matched_indicators') %}<p><strong>Matched evidence:</strong></p><ul>{% for indicator in item.get('detail', {}).get('matched_indicators', []) %}<li>{{ indicator.get('evidence_id')|blank }} · {{ indicator.get('field_path')|blank }} · {{ indicator.get('value')|blank }}</li>{% endfor %}</ul>{% endif %}
+      {% if item.get('dimensions') %}<table><thead><tr><th>Dimension</th><th>Outcome</th><th>Rationale</th></tr></thead><tbody>{% for key, result in item.get('dimensions', {}).items() %}<tr><td>{{ key|replace('_', ' ')|title }}</td><td>{{ result.get('outcome')|blank }}</td><td>{{ result.get('rationale')|blank }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+      {% if finding %}<p><strong>{{ finding.get('severity', {}).get('level')|blank }}:</strong> {{ finding.get('recommended_action_rfi', {}).get('internal_actions', [])|join(' ') or finding.get('summary')|blank }}</p>{% else %}<p class="empty">No finding raised.</p>{% endif %}
+      {% if item.get('limitations') %}<p class="empty">Limitations: {{ item.get('limitations')|join(' ') }}</p>{% endif %}
+    </div>
+  {%- endmacro %}
   {% set profile = cdd.get('company_business_profile', {}) %}
   {% set customer = profile.get('customer_static', {}) %}
   {% set ownership = cdd.get('ownership_and_control', {}) %}
@@ -48,10 +60,35 @@
   {% set digital_assessments = state.get('assessments', [])|selectattr('assessment_type', 'equalto', 'digital_footprint')|list %}
   {% if digital_assessments %}{% set assessment = digital_assessments|last %}<div class="card"><strong>{{ assessment.get('company_inputs', {}).get('company_name') or 'Company' }}</strong><p>Overall presence and visibility: {{ assessment.get('presence_and_visibility', {}).get('indicator')|blank }}</p><p>{{ assessment.get('presence_and_visibility', {}).get('rationale')|blank }}</p><p>Confidence: {{ assessment.get('confidence', {}).get('level')|blank }}</p>{% if assessment.get('limitations') %}<p class="empty">Limitations: {{ assessment.get('limitations')|join(' ') }}</p>{% endif %}</div>{% else %}<p class="empty">Not run.</p>{% endif %}
 
-  <h2>CDD Checker</h2>
-  <h3>Findings</h3>{% for item in state.get('findings', []) %}{{ summary_card('', item.get('summary')) }}{% else %}<p class="empty">No findings recorded.</p>{% endfor %}
-  <h3>CDD Completeness Check</h3>{% for item in state.get('assessments', []) if item.get('assessment_type') == 'cdd_completeness' %}{{ summary_card('', item.get('summary')) }}{% else %}<p class="empty">CDD completeness has not been run.</p>{% endfor %}
-  <h3>Evidence Quality Check</h3>{% for item in state.get('assessments', []) if item.get('assessment_type') == 'evidence_quality' %}{{ summary_card('', item.get('summary')) }}{% else %}<p class="empty">Evidence quality has not been run.</p>{% endfor %}
+  {% set section_order = ['customer_business_profile', 'ownership_and_control', 'identity_verification', 'screening'] %}
+  {% set section_labels = {'customer_business_profile': 'Customer Business Profile', 'ownership_and_control': 'Ownership & Control', 'identity_verification': 'ID&V', 'screening': 'Screening'} %}
+  {% set all_assessments = state.get('assessments', []) %}
+  {% set all_findings = state.get('findings', []) %}
+
+  <h2>Shell Company Risk</h2>
+  {% set shell_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'shell_company_risk')|list %}
+  {% for section in section_order %}{% set group = shell_assessments|selectattr('cdd_section', 'equalto', section)|list %}{% if group %}<h3>{{ section_labels.get(section) }}</h3>{% for item in group|sort(attribute='display_order') %}{{ assessment_card(item, all_findings) }}{% endfor %}{% endif %}{% endfor %}
+  {% set csp_flags = state.get('risk_flags', [])|selectattr('category', 'equalto', 'csp_address')|list %}
+  {% if csp_flags %}<h3>CSP Address</h3>{% for flag in csp_flags %}<div class="card"><p>{{ flag.get('description') or 'CSP assessment recorded.' }}</p><p>Outcome: {{ flag.get('evaluation')|blank }} · Severity: {{ flag.get('severity')|blank }}</p></div>{% endfor %}{% elif not shell_assessments %}<p class="empty">No Shell Company Risk assessment is available.</p>{% endif %}
+
+  <h2>Other Risk Factors</h2>
+  {% set other_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'other_risk_factors')|list %}
+  {% for section in section_order %}{% set group = other_assessments|selectattr('cdd_section', 'equalto', section)|list %}{% if group %}<h3>{{ section_labels.get(section) }}</h3>{% for item in group|sort(attribute='display_order') %}{{ assessment_card(item, all_findings) }}{% endfor %}{% endif %}{% endfor %}{% if not other_assessments %}<p class="empty">No Other Risk Factors assessment is available.</p>{% endif %}
+
+  <h2>CDD Completeness</h2>
+  {% set completeness_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'cdd_completeness')|list %}
+  {% for item in completeness_assessments|sort(attribute='display_order') %}{{ assessment_card(item, all_findings) }}{% else %}<p class="empty">No completeness assessment is available.</p>{% endfor %}
+
+  <h2>Evidence Quality</h2>
+  {% set quality_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'evidence_quality')|list %}
+  {% for section in section_order %}{% set group = quality_assessments|selectattr('cdd_section', 'equalto', section)|list %}{% if group %}<h3>{{ section_labels.get(section) }}</h3>{% for item in group|sort(attribute='display_order') %}{{ assessment_card(item, all_findings) }}{% endfor %}{% endif %}{% endfor %}{% if not quality_assessments %}<p class="empty">No Evidence Quality assessment is available.</p>{% endif %}
+
+  <h2>All Findings</h2>
+  {% for item in all_findings %}<div class="card"><strong>{{ item.get('title') or item.get('category') or 'Finding' }}</strong><p>{{ item.get('summary')|blank }}</p><p>Confidence: {{ item.get('confidence', {}).get('level')|blank }} · Severity: {{ item.get('severity', {}).get('level')|blank }}</p>{% if item.get('recommended_action_rfi', {}).get('internal_actions') %}<p><strong>Recommended action:</strong> {{ item.get('recommended_action_rfi', {}).get('internal_actions')|join(' ') }}</p>{% endif %}{% if item.get('recommended_action_rfi', {}).get('rfi') %}<p><strong>Request for information:</strong></p><ul>{% for rfi in item.get('recommended_action_rfi', {}).get('rfi', []) %}<li>{{ rfi.get('request')|blank }} — {{ rfi.get('reason')|blank }} ({{ rfi.get('priority')|blank }})</li>{% endfor %}</ul>{% endif %}<p class="empty">Source: {{ item.get('source', {}).get('producer_name')|blank }}{% if item.get('source', {}).get('created_at') %} · {{ item.get('source', {}).get('created_at') }}{% endif %}</p></div>{% else %}<p class="empty">No canonical findings are currently recorded.</p>{% endfor %}
+
+  <h2>Risk Rating</h2>
+  {% set risk_ratings = all_assessments|selectattr('assessment_type', 'equalto', 'risk_rating')|list %}
+  {% if risk_ratings %}{% set rating = risk_ratings|last %}<div class="card"><strong>{{ rating.get('rating')|blank }}</strong>{% if rating.get('total_score') is not none %}<p>Risk score: {{ rating.get('total_score') }}</p>{% endif %}<p>{{ rating.get('rule_explanation') or rating.get('summary')|blank }}</p><p>Monitoring: {{ rating.get('monitoring_posture')|blank }}</p>{% if rating.get('matched_criteria') %}<p><strong>Applied factors:</strong> {{ rating.get('matched_criteria')|join('; ') }}</p>{% endif %}{% if rating.get('limitations') %}<p class="empty">Limitations: {{ rating.get('limitations')|join(' ') }}</p>{% endif %}</div>{% set factor_scores = rating.get('definition', {}).get('factor_scores', {}) %}{% if factor_scores %}<h3>Risk Rating Rubric</h3><table><thead><tr><th>Factor</th><th>Available points</th><th>Score</th></tr></thead><tbody>{% for factor, points in factor_scores.items() %}{% set contribution = rating.get('contributing_factors', [])|selectattr('factor_id', 'equalto', factor)|list|first %}<tr><td>{{ factor|replace('_', ' ')|title }}</td><td>{{ points }}</td><td>{{ contribution.get('points', 0) if contribution else 0 }}</td></tr>{% endfor %}</tbody><tfoot><tr><th colspan="2">Total score</th><td>{{ rating.get('total_score')|blank }}</td></tr><tr><th colspan="2">Final rating</th><td>{{ rating.get('rating')|blank }}</td></tr></tfoot></table>{% endif %}{% else %}<p class="empty">No Risk Rating assessment is available.</p>{% endif %}
 
   <div class="page-break"></div><h2>Full CDDState JSON</h2><pre class="json">{{ cdd_state_json }}</pre>
   <div id="footer">CDD Report</div>

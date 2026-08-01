@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import re
 import json
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from xhtml2pdf import pisa
+
+from src.tools.risk_rating import evaluate_risk_rating
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -67,10 +70,40 @@ def render_cdd_html(
 
 
 def _report_state(state: dict[str, Any]) -> dict[str, Any]:
-    """Normalize legacy CDD-only input into the report's graph-state shape."""
-    if "cdd" in state:
-        return state
-    return {"cdd": state}
+    """Normalize report state and always derive its deterministic risk rating.
+
+    Saved CDD cases can contain the retired LLM-produced standalone rating.
+    A report must never display that legacy result: it calculates its rating
+    from the current canonical findings and assessment records at render time.
+    """
+    report_state = deepcopy(state) if "cdd" in state else {"cdd": deepcopy(state)}
+    if "assessments" not in report_state:
+        return report_state
+
+    result = evaluate_risk_rating(report_state)
+    definition = result["definition"]
+    rating = result["result"]
+    assessment = {
+        "assessment_id": "assessment:report-deterministic-risk-rating",
+        "assessment_type": "risk_rating",
+        "schema_version": definition["assessment"]["schema"],
+        "tool": "risk_rating",
+        "definition": {
+            "skill_path": definition["path"],
+            "ratings": definition["ratings"],
+            "factor_scores": definition["factor_scores"],
+            "thresholds": definition["thresholds"],
+        },
+        **rating,
+        "provenance": {"method": "deterministic_rule_based"},
+    }
+    report_state["assessments"] = [
+        item
+        for item in report_state["assessments"]
+        if item.get("assessment_type") != "risk_rating"
+    ]
+    report_state["assessments"].append(assessment)
+    return report_state
 
 
 def _pdf_filename(cdd: dict[str, Any]) -> str:

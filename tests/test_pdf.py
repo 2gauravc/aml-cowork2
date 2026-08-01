@@ -24,6 +24,9 @@ def _state() -> dict:
             {"assessment_id": "assessment:digital", "assessment_type": "digital_footprint", "summary": "Assessment complete"},
             {"assessment_id": "assessment:completeness", "assessment_type": "cdd_completeness", "summary": "CDD complete"},
             {"assessment_id": "assessment:quality", "assessment_type": "evidence_quality", "summary": "Evidence sufficient"},
+            {"assessment_id": "assessment:shell", "assessment_type": "shell_company_risk", "title": "Registered-address indicator", "summary": "No indicator matched", "cdd_section": "customer_business_profile"},
+            {"assessment_id": "assessment:other", "assessment_type": "other_risk_factors", "title": "High-risk industry", "summary": "No industry risk", "cdd_section": "screening"},
+            {"assessment_id": "assessment:risk", "assessment_type": "risk_rating", "rating": "low", "total_score": 0, "summary": "No factors were triggered", "definition": {"factor_scores": {"high_risk_industry": 2}}},
         ],
         "case_status": {"cdd_generation": "completed"},
     }
@@ -39,8 +42,12 @@ def test_report_html_includes_requested_sections_and_full_state_json() -> None:
         "ID&amp;V",
         "Adverse News Screening",
         "Digital Footprint",
-        "CDD Completeness Check",
-        "Evidence Quality Check",
+        "Shell Company Risk",
+        "Other Risk Factors",
+        "CDD Completeness",
+        "Evidence Quality",
+        "All Findings",
+        "Risk Rating",
         "Full CDDState JSON",
     ):
         assert heading in html
@@ -52,6 +59,9 @@ def test_report_html_includes_requested_sections_and_full_state_json() -> None:
     assert "https://acme.example" in html
     assert "All Business Profile Details" not in html
     assert "Retained Tool Evidence" not in html
+    assert "CDD Checker" not in html
+    assert html.index("Shell Company Risk") < html.index("Other Risk Factors") < html.index("CDD Completeness") < html.index("Evidence Quality") < html.index("All Findings") < html.index("Risk Rating")
+    assert "Risk score: 0" in html
 
 
 def test_report_pdf_renders_complete_state(tmp_path: Path) -> None:
@@ -59,3 +69,24 @@ def test_report_pdf_renders_complete_state(tmp_path: Path) -> None:
 
     assert pdf_path.exists()
     assert pdf_path.stat().st_size > 0
+
+
+def test_report_replaces_legacy_risk_rating_with_deterministic_rubric() -> None:
+    state = _state()
+    state["findings"] = []
+    state["assessments"].extend([
+        {"assessment_id": "assessment:adverse-input", "assessment_type": "adverse_news", "outcome": "completed_no_material_findings", "created_at": "2026-01-01T00:00:00Z"},
+        {"assessment_id": "assessment:shell-input", "assessment_type": "shell_company_risk", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z"},
+        {"assessment_id": "assessment:industry-input", "assessment_type": "other_risk_factors", "factor_id": "high_risk_industry", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z"},
+        {"assessment_id": "assessment:aml-input", "assessment_type": "other_risk_factors", "factor_id": "high_aml_risk_jurisdiction_link", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z"},
+        {"assessment_id": "assessment:tax-input", "assessment_type": "other_risk_factors", "factor_id": "high_tax_risk_jurisdiction_link", "outcome": "not_triggered", "created_at": "2026-01-01T00:00:00Z"},
+        {"assessment_id": "assessment:legacy-risk", "assessment_type": "risk_rating", "rating": "standalone_high", "summary": "Legacy model rating"},
+    ])
+
+    html = render_cdd_html(state)
+
+    assert "standalone_high" not in html
+    assert "Legacy model rating" not in html
+    assert "Risk score: 0" in html
+    assert "Risk Rating Rubric" in html
+    assert "High Risk Industry" in html
