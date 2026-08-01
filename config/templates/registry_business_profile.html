@@ -68,6 +68,11 @@
     <tr><td>Company Type</td><td>{{ document.company_type }}</td></tr>
     <tr><td>Paid-up Capital</td><td>{{ document.paid_up_capital }}</td></tr>
     <tr><td>Activity Type</td><td>{{ document.activity_type }}</td></tr>
+    {% if document.activity_inference %}
+    <tr><td>Activity Source</td><td>Synthetic LLM inference (not authoritative registry data)</td></tr>
+    <tr><td>Inference Rationale</td><td>{{ document.activity_inference.rationale }}</td></tr>
+    <tr><td>Inference Confidence</td><td>{{ document.activity_inference.confidence|capitalize }}</td></tr>
+    {% endif %}
     <tr><td>Incorporation Date</td><td>{{ document.incorporation_date }}</td></tr>
     <tr><td>Registered Address</td><td>{{ document.registered_address.full_address }}</td></tr>
   </table>

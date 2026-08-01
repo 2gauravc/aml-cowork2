@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,10 +10,82 @@ from src.tools.cdd_enrichment import (
 )
 from src.tools.document_extraction import classify_document, extract_document
 from src.agents.nodes import extract_registry_document, generate_registry_document_node
-from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL, generate_registry_document
+from src.utils.document_pipeline import (
+    REGISTRY_SOURCE_LABEL,
+    generate_registry_document,
+    infer_synthetic_activity,
+)
 
 
 class DocumentPipelineTests(unittest.TestCase):
+    def test_registry_document_preserves_upstream_activity_without_inference(self):
+        cdd = {
+            "company_business_profile": {
+                "customer_static": {
+                    "name": "SPELTIBUS GMBH",
+                    "jurisdiction": "DE",
+                    "activity_type": "Intercity bus transport",
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "src.utils.document_pipeline.infer_synthetic_activity"
+        ) as infer:
+            artifact = generate_registry_document(cdd, output_dir=Path(tmp))
+            document = json.loads(Path(artifact["json_path"]).read_text())
+
+        infer.assert_not_called()
+        self.assertEqual(document["activity_type"], "Intercity bus transport")
+        self.assertIsNone(document["activity_inference"])
+
+    def test_registry_document_records_llm_activity_inference(self):
+        cdd = {
+            "company_business_profile": {
+                "customer_static": {"name": "SPELTIBUS GMBH", "jurisdiction": "DE"}
+            }
+        }
+        inference = {
+            "activity_type": "Intercity bus transport services",
+            "rationale": "The company name includes 'bus', indicating passenger transport.",
+            "confidence": "high",
+            "source": "synthetic_llm_inference",
+            "model": "test-model",
+        }
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "src.utils.document_pipeline.infer_synthetic_activity", return_value=inference
+        ) as infer:
+            artifact = generate_registry_document(cdd, output_dir=Path(tmp))
+            document = json.loads(Path(artifact["json_path"]).read_text())
+            rendered_html = Path(artifact["html_path"]).read_text()
+
+        self.assertEqual(document["activity_type"], inference["activity_type"])
+        self.assertEqual(document["activity_inference"], inference)
+        self.assertEqual(artifact["activity_inference"], inference)
+        self.assertTrue(artifact["synthetic"])
+        self.assertIn("passenger transport.", rendered_html)
+        infer.assert_called_once()
+
+    def test_synthetic_activity_inference_accepts_ambiguous_name_output(self):
+        response = type(
+            "Response",
+            (),
+            {
+                "output_text": (
+                    '{"activity_type":"Business equipment wholesale and distribution",'
+                    '"rationale":"The company name provides limited sector detail; this is a broad commercial inference.",'
+                    '"confidence":"low"}'
+                )
+            },
+        )()
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}), patch(
+            "src.utils.document_pipeline.OpenAI"
+        ) as openai:
+            openai.return_value.responses.create.return_value = response
+            inferred = infer_synthetic_activity({"name": "Aster GmbH", "jurisdiction": "DE"})
+
+        self.assertEqual(inferred["activity_type"], "Business equipment wholesale and distribution")
+        self.assertEqual(inferred["confidence"], "low")
+        self.assertEqual(inferred["source"], "synthetic_llm_inference")
     def test_registry_document_enriches_missing_paid_up_capital_only(self):
         cdd = {
             "company_business_profile": {
@@ -303,6 +376,8 @@ class DocumentPipelineTests(unittest.TestCase):
         document = {
             "name": "registry-business-profile-demo-co.pdf",
             "category": "registry_document",
+            "provenance": "synthetic_demo",
+            "synthetic": True,
             "url": "https://example.s3.amazonaws.com/generated_documents/GB/demo-co/registry-business-profile-demo-co.pdf",
             "storage": {
                 "provider": "s3",

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import re
 import json
+import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from openai import OpenAI, OpenAIError
 from xhtml2pdf import pisa
 
 
@@ -17,6 +19,24 @@ TEMPLATE_DIR = PROJECT_ROOT / "config" / "templates"
 DOCUMENT_DIR = PROJECT_ROOT / "generated_documents"
 REGISTRY_TEMPLATE = "registry_business_profile.html"
 REGISTRY_SOURCE_LABEL = "Registry Document (synthetic demo)"
+ACTIVITY_INFERENCE_MODEL = os.getenv("OPENAI_SYNTHETIC_ACTIVITY_MODEL") or os.getenv(
+    "OPENAI_MODEL", "gpt-5.6"
+)
+
+ACTIVITY_INFERENCE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "activity_type": {"type": "string"},
+        "rationale": {"type": "string"},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+    },
+    "required": ["activity_type", "rationale", "confidence"],
+}
+
+
+class SyntheticActivityInferenceError(RuntimeError):
+    """Raised when the required synthetic business-activity inference fails."""
 
 ABOUT_FIELD_PATHS = {
     "name": ("name",),
@@ -91,10 +111,14 @@ def generate_registry_document(
     return {
         "document_type": "registry_document",
         "source": REGISTRY_SOURCE_LABEL,
+        "source_type": "generated_demo",
+        "provenance": "synthetic_demo",
+        "synthetic": True,
         "html_path": str(html_path),
         "pdf_path": str(pdf_path),
         "json_path": str(json_path),
         "generated_at": datetime.now(UTC).isoformat(),
+        "activity_inference": document.get("activity_inference"),
     }
 
 
@@ -102,6 +126,18 @@ def _registry_document_data(cdd: dict[str, Any]) -> dict[str, Any]:
     static = _customer_static(cdd)
     name = static.get("name") or "Demo Company Limited"
     jurisdiction = static.get("jurisdiction") or "GB"
+    upstream_activity = static.get("activity_type")
+    activity_inference = None
+    if not upstream_activity:
+        activity_inference = infer_synthetic_activity(
+            {
+                "name": name,
+                "jurisdiction": jurisdiction,
+                "company_type": static.get("company_type"),
+                "company_status": static.get("company_status"),
+                "registered_address": _get_path(static, ("registered_address", "full_address")),
+            }
+        )
     return {
         "document_type": "registry_document",
         "name": name,
@@ -113,7 +149,8 @@ def _registry_document_data(cdd: dict[str, Any]) -> dict[str, Any]:
         "paid_up_capital": _get_path(static, ("display_capital", "value"))
         or static.get("paid_up_capital")
         or _demo_paid_up_capital(name, jurisdiction),
-        "activity_type": static.get("activity_type") or _demo_activity(name),
+        "activity_type": upstream_activity or activity_inference["activity_type"],
+        "activity_inference": activity_inference,
         "incorporation_date": static.get("incorporation_date")
         or static.get("registration_date")
         or _demo_date(name),
@@ -182,12 +219,69 @@ def _demo_registration_number(name: str, jurisdiction: str) -> str:
     return f"{jurisdiction}-{number}"
 
 
-def _demo_activity(name: str) -> str:
-    if "ENGINEERING" in name.upper():
-        return "Engineering services and related technical consulting"
-    if "CREAMERY" in name.upper():
-        return "Dairy production and wholesale distribution"
-    return "Investment holding and business support services"
+def infer_synthetic_activity(customer_context: dict[str, Any]) -> dict[str, str]:
+    """Infer an auditable synthetic activity when no upstream value is available."""
+    if not os.getenv("OPENAI_API_KEY"):
+        raise SyntheticActivityInferenceError(
+            "OPENAI_API_KEY is required to infer a synthetic registry activity"
+        )
+
+    prompt = (
+        "Create a synthetic demo business activity from the supplied company context. "
+        "Use only that context; do not search for or claim facts about the company. "
+        "Always return one concise, plausible activity. If the name is ambiguous, "
+        "choose the most plausible broad but specific commercial activity rather than "
+        "an unknown value or a generic investment-holding catch-all. The result is an "
+        "inference, not authoritative registry information. Explain the basis briefly "
+        "and calibrate confidence to the available context.\n\n"
+        + json.dumps(customer_context, ensure_ascii=False)
+    )
+    try:
+        response = OpenAI().responses.create(
+            model=ACTIVITY_INFERENCE_MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                }
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "synthetic_registry_activity",
+                    "schema": ACTIVITY_INFERENCE_SCHEMA,
+                    "strict": True,
+                }
+            },
+        )
+        result = json.loads(response.output_text)
+    except OpenAIError as exc:
+        raise SyntheticActivityInferenceError(
+            f"Synthetic registry activity inference failed: {exc}"
+        ) from exc
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise SyntheticActivityInferenceError(
+            "Synthetic registry activity inference did not return valid structured output"
+        ) from exc
+
+    if not isinstance(result, dict):
+        raise SyntheticActivityInferenceError(
+            "Synthetic registry activity inference did not return an object"
+        )
+    activity = str(result.get("activity_type") or "").strip()
+    rationale = str(result.get("rationale") or "").strip()
+    confidence = str(result.get("confidence") or "").strip().casefold()
+    if not activity or not rationale or confidence not in {"high", "medium", "low"}:
+        raise SyntheticActivityInferenceError(
+            "Synthetic registry activity inference returned incomplete output"
+        )
+    return {
+        "activity_type": activity,
+        "rationale": rationale,
+        "confidence": confidence,
+        "source": "synthetic_llm_inference",
+        "model": ACTIVITY_INFERENCE_MODEL,
+    }
 
 
 def _demo_address(name: str, jurisdiction: str) -> str:

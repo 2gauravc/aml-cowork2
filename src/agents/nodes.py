@@ -240,6 +240,11 @@ def generate_registry_document_node(state: CDDState) -> dict[str, Any]:
         else None
     )
     document = _find_document(existing_documents, expected_name)
+    # Older generated registry documents have no retained synthetic provenance
+    # and may contain the retired generic activity default. Regenerate those
+    # once so they receive the current activity-inference format.
+    if document and document.get("provenance") != "synthetic_demo":
+        document = None
     if document:
         artifact = _reused_artifact(
             document,
