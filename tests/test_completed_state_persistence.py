@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
-from src.backend.app import _complete_pipeline_for_session, _migrate_legacy_risk_rating
+from src.backend.app import _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready
 
 
 def test_completed_pipeline_persists_the_full_graph_state() -> None:
@@ -67,3 +67,56 @@ def test_loading_legacy_state_replaces_its_model_rating_with_the_rule_based_rati
     assert ratings[0]["rating"] == "low"
     assert ratings[0]["total_score"] == 0
     assert ratings[0]["provenance"] == {"method": "deterministic_rule_based"}
+
+
+def test_resumed_pipeline_syncs_completion_and_persists_the_completed_state() -> None:
+    resumed_state = {
+        "metadata": {"kyc_case": {"case_id": 42}},
+        "cdd": {"completed_at": "2026-07-27T00:00:00+00:00"},
+        "documents": [{"document_id": "document:idv:p1:1", "gap": {"status": "resolved"}, "status": "processed"}],
+        "messages": [],
+        "case_status": {"cdd_generation": "in_progress"},
+    }
+    session = {
+        "session_id": "session-1",
+        "messages": [],
+        "customer_name": "UBIZENSE LIMITED",
+        "jurisdiction": "HK",
+        "case_id": 42,
+        "graph_thread_id": "thread-1",
+        "graph_state": {"documents": resumed_state["documents"], "case_status": {"cdd_generation": "in_progress"}},
+    }
+    saved = {"saved_at": "2026-07-27T00:00:01+00:00", "identity": {"customer_name": "UBIZENSE LIMITED"}}
+
+    with patch("src.backend.app.resume_cdd_agent_state", return_value=resumed_state) as resume, patch(
+        "src.backend.app.save_completed_state", return_value=saved
+    ) as persist:
+        asyncio.run(_resume_if_ready(session))
+
+    resume.assert_called_once()
+    persist.assert_called_once_with(
+        resumed_state,
+        customer_name="UBIZENSE LIMITED",
+        jurisdiction="HK",
+        case_id=42,
+    )
+    assert session["pipeline_status"] == "complete"
+    assert session["graph_state"]["case_status"] == {"cdd_generation": "completed"}
+    assert session["pipeline_progress"]["status"] == "completed"
+    assert session["saved_cdd_state"] == saved
+
+
+def test_document_action_queues_a_resume_without_waiting_for_the_full_pipeline() -> None:
+    session = {
+        "session_id": "session-1",
+        "messages": [],
+        "graph_thread_id": "thread-1",
+        "graph_state": {"documents": [{"gap": {"status": "resolved"}}], "case_status": {}},
+    }
+
+    with patch("src.backend.app.asyncio.create_task") as create_task:
+        asyncio.run(_queue_resume_if_ready(session))
+
+    assert session["pipeline_status"] == "running"
+    assert create_task.call_count == 1
+    create_task.call_args.args[0].close()

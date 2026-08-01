@@ -738,7 +738,7 @@ async def upload_case_document(
         "processing": {"classification": classification, "match": _match_summary(requirement, classification, preview)},
     })
     try:
-        await _resume_if_ready(session)
+        await _queue_resume_if_ready(session)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -783,7 +783,7 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
             "acquisition": {"source": "generated", "artifact": artifact},
         })
     try:
-        await _resume_if_ready(session)
+        await _queue_resume_if_ready(session)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -800,7 +800,7 @@ async def process_case_documents(request: DocumentActionRequest) -> dict[str, An
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
     try:
-        await _resume_if_ready(session)
+        await _queue_resume_if_ready(session)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -1136,18 +1136,50 @@ def _safe_file_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", Path(name).name) or "document.pdf"
 
 
-async def _resume_if_ready(session: dict[str, Any]) -> None:
-    documents = (_active_cdd_state(session) or {}).get("documents", [])
+def _prepare_document_resume(
+    session: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]]] | None:
+    state = _active_cdd_state(session)
+    documents = (state or {}).get("documents", [])
     if any((row.get("gap") or {}).get("status") == "outstanding" for row in documents):
         session["pipeline_status"] = "awaiting_documents"
-        sync_case_status(session, generation="in_progress")
-        return
+        if state:
+            sync_case_status(state, generation="in_progress")
+        return None
     thread_id = session.get("graph_thread_id")
     if not thread_id:
-        return
+        return None
     session["pipeline_status"] = "running"
     session.pop("pipeline_error", None)
-    sync_case_status(session, generation="in_progress")
+    session.pop("state_persistence_error", None)
+    if state:
+        sync_case_status(state, generation="in_progress")
+    return thread_id, documents
+
+
+async def _queue_resume_if_ready(session: dict[str, Any]) -> None:
+    """Resume a paused CDD without holding the document-action HTTP request open."""
+    if session.get("pipeline_status") == "running":
+        return
+    resume = _prepare_document_resume(session)
+    if resume is not None:
+        thread_id, documents = resume
+        asyncio.create_task(_resume_paused_pipeline(session, thread_id, documents))
+
+
+async def _resume_if_ready(session: dict[str, Any]) -> None:
+    """Synchronously resume a paused CDD for direct callers and tests."""
+    resume = _prepare_document_resume(session)
+    if resume is None:
+        return
+    thread_id, documents = resume
+    await _resume_paused_pipeline(session, thread_id, documents)
+
+
+async def _resume_paused_pipeline(
+    session: dict[str, Any], thread_id: str, documents: list[dict[str, Any]]
+) -> None:
+    """Run the potentially long post-document graph continuation in the background."""
     def publish_progress(progress: dict[str, Any]) -> None:
         session["pipeline_progress"] = progress
     try:
@@ -1159,12 +1191,60 @@ async def _resume_if_ready(session: dict[str, Any]) -> None:
         )
         _apply_graph_result(session, result)
         session["pipeline_status"] = "complete"
-        sync_case_status(session, generation="completed")
+        sync_case_status(result, generation="completed")
+        session["pipeline_progress"] = {
+            "node": "finalize_cdd",
+            "node_number": len(PIPELINE_NODE_LABELS),
+            "total_nodes": len(PIPELINE_NODE_LABELS),
+            "message": "CDD completed",
+            "using_cache": False,
+            "cache_source": None,
+            "status": "completed",
+        }
+        await _persist_completed_cdd_state(session, result)
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)
-        sync_case_status(session, generation="failed")
+        state = _active_cdd_state(session)
+        if state:
+            sync_case_status(state, generation="failed")
+        current_progress = session.get("pipeline_progress") or {}
+        session["pipeline_progress"] = {
+            **current_progress,
+            "status": "error",
+            "error": str(exc),
+        }
         raise
+
+
+async def _persist_completed_cdd_state(
+    session: dict[str, Any],
+    graph_state: dict[str, Any],
+    *,
+    customer_name: str | None = None,
+    jurisdiction: str | None = None,
+    case_id: str | int | None = None,
+) -> None:
+    """Persist a completed state after either an initial run or a document resume."""
+    try:
+        saved = await asyncio.to_thread(
+            save_completed_state,
+            graph_state,
+            customer_name=customer_name if customer_name is not None else session.get("customer_name") or "",
+            jurisdiction=jurisdiction if jurisdiction is not None else session.get("jurisdiction") or "",
+            case_id=case_id if case_id is not None else session.get("case_id"),
+        )
+        if saved:
+            session["saved_cdd_state"] = saved
+            session["messages"].append(
+                {"role": "assistant", "content": "Completed CDD state saved to S3."}
+            )
+    except CDDStateStoreError as exc:
+        LOGGER.exception("Completed CDD state was not persisted")
+        session["state_persistence_error"] = str(exc)
+        session["messages"].append(
+            {"role": "assistant", "content": f"CDD completed, but its S3 state could not be stored: {exc}"}
+        )
 
 
 def _session_document_by_key(
@@ -1391,25 +1471,13 @@ async def _complete_pipeline_for_session(
 
         session["pipeline_status"] = "complete"
         sync_case_status(graph_state, generation="completed")
-        try:
-            saved = await asyncio.to_thread(
-                save_completed_state,
-                graph_state,
-                customer_name=customer_name,
-                jurisdiction=jurisdiction or "",
-                case_id=case_id,
-            )
-            if saved:
-                session["saved_cdd_state"] = saved
-                session["messages"].append(
-                    {"role": "assistant", "content": "Completed CDD state saved to S3."}
-                )
-        except CDDStateStoreError as exc:
-            LOGGER.exception("Completed CDD state was not persisted")
-            session["state_persistence_error"] = str(exc)
-            session["messages"].append(
-                {"role": "assistant", "content": f"CDD completed, but its S3 state could not be stored: {exc}"}
-            )
+        await _persist_completed_cdd_state(
+            session,
+            graph_state,
+            customer_name=customer_name,
+            jurisdiction=jurisdiction,
+            case_id=case_id,
+        )
     except Exception as exc:
         session["pipeline_status"] = "error"
         session["pipeline_error"] = str(exc)

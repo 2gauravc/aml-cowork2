@@ -108,9 +108,11 @@ function App() {
     generationStatus: caseStatus.cdd_generation || "not_started",
   };
   const formattedCddState = cddState ? JSON.stringify(cddState, null, 2) : "";
-  const pipelineStatusText = pipelineProgress
-    ? formatPipelineProgress(pipelineProgress)
-    : latestAssistantMessage(messages) || "Setting up";
+  const pipelineStatusText = pipelineStatus === "awaiting_documents"
+    ? "CDD paused — documents required"
+    : pipelineProgress
+      ? formatPipelineProgress(pipelineProgress)
+      : latestAssistantMessage(messages) || "Setting up";
   const pipelineRunning = pipelineStatus === "running" || pipelineStatus === "awaiting_documents";
   const missingDocumentRequirements = useMemo(
     () => documentRequirements.filter((requirement) => (requirement.gap || {}).status === "outstanding"),
@@ -573,12 +575,20 @@ function App() {
     setLoading(true);
     setError(null);
     try {
+      let resumeStarted = false;
       for (const file of files) {
         const body = new FormData();
         body.append("session_id", sessionId);
         body.append("file", file);
         const response = await fetch("/api/documents/upload", { method: "POST", body });
-        applyResponse(await readJsonResponse(response, "Document upload failed"));
+        const data = await readJsonResponse(response, "Document upload failed");
+        applyResponse(data);
+        resumeStarted = resumeStarted || data.status === "running";
+      }
+      if (resumeStarted) {
+        setGenerationStatus("Document generation completed — CDD restarted.");
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await pollSession(sessionId);
       }
       setUploadNotice(`${files.length} document${files.length === 1 ? "" : "s"} matched and staged for processing.`);
     } catch (err) {
@@ -599,7 +609,13 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      applyResponse(await readJsonResponse(response, "Document action failed"));
+      const data = await readJsonResponse(response, "Document action failed");
+      applyResponse(data);
+      if (data.status === "running") {
+        setGenerationStatus("Document generation completed — CDD restarted.");
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await pollSession(sessionId);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -614,6 +630,7 @@ function App() {
     setLoading(true);
     setError(null);
     try {
+      let resumeStarted = false;
       for (const requirement of missing) {
         setGenerationStatus(`Generating ${documentLabel(requirement.document_type)} for ${(requirement.subject || {}).name}...`);
         await new Promise((resolve) => window.requestAnimationFrame(resolve));
@@ -622,9 +639,17 @@ function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: sessionId, requirement_ids: [requirement.document_id] }),
         });
-        applyResponse(await readJsonResponse(response, "Document generation failed"));
+        const data = await readJsonResponse(response, "Document generation failed");
+        applyResponse(data);
+        resumeStarted = resumeStarted || data.status === "running";
       }
-      setGenerationStatus(`Generated ${missing.length} document${missing.length === 1 ? "" : "s"}.`);
+      if (resumeStarted) {
+        setGenerationStatus("Document generation completed — CDD restarted.");
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await pollSession(sessionId);
+      } else {
+        setGenerationStatus(`Generated ${missing.length} document${missing.length === 1 ? "" : "s"}.`);
+      }
     } catch (err) {
       setError(err.message);
       setGenerationStatus("Document generation failed.");
@@ -947,7 +972,7 @@ function App() {
               </button>
               {demoMode && <button className="secondary" disabled={pipelineLoading} onClick={loadDemoCase}>Load Demo Case</button>}
             </div>
-            {pipelineLoading && <p className="empty">{pipelineStatusText}</p>}
+            {(pipelineLoading || pipelineRunning) && <p className="empty">{pipelineStatusText}</p>}
             {savedStatePrompt && (
               <div className="saved-state-prompt" role="alertdialog" aria-label="Saved CDD state available">
                 <p>{`A completed CDD state was saved for ${savedStatePrompt.identity?.customer_name || customerName} (${savedStatePrompt.identity?.jurisdiction || jurisdiction})${savedStatePrompt.saved_at ? ` on ${formatDateTime(savedStatePrompt.saved_at)}` : ""}.`}</p>
@@ -994,7 +1019,7 @@ function App() {
             </div>
             <div className="metadata-item">
               <span>CDD Generation</span>
-              <strong>{generationStatusLabel(cddMetadata.generationStatus)}</strong>
+              <strong>{cddPausedForDocuments ? "Paused" : generationStatusLabel(cddMetadata.generationStatus)}</strong>
             </div>
           </section>
 

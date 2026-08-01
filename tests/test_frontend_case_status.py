@@ -177,6 +177,15 @@ def test_awaiting_documents_has_cdd_callout_and_documents_navigation() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
     assert 'const cddPausedForDocuments = pipelineStatus === "awaiting_documents";' in app
+
+
+def test_document_actions_poll_after_starting_a_background_resume() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert "resumeStarted = resumeStarted || data.status === \"running\";" in app
+    assert "Document generation completed — CDD restarted." in app
+    assert 'cddPausedForDocuments ? "Paused"' in app
+    assert 'pipelineStatus === "awaiting_documents"' in app
     assert "CDD paused — documents required" in app
     assert 'setActiveWorkspace("generation")' in app
     assert "Generate the missing ID&V documents or upload customer-provided PDFs" in app
