@@ -108,7 +108,10 @@ function App() {
     generationStatus: caseStatus.cdd_generation || "not_started",
   };
   const formattedCddState = cddState ? JSON.stringify(cddState, null, 2) : "";
-  const pipelineStatusText = pipelineStatus === "awaiting_documents"
+  const loadingSavedCdd = pipelineLoading && Boolean(savedStatePrompt);
+  const pipelineStatusText = loadingSavedCdd
+    ? "Loading saved CDD…"
+    : pipelineStatus === "awaiting_documents"
     ? "CDD paused — documents required"
     : pipelineProgress
       ? formatPipelineProgress(pipelineProgress)

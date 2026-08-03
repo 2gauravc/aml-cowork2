@@ -179,6 +179,14 @@ def test_awaiting_documents_has_cdd_callout_and_documents_navigation() -> None:
     assert 'const cddPausedForDocuments = pipelineStatus === "awaiting_documents";' in app
 
 
+def test_saved_cdd_loading_uses_a_dedicated_status_instead_of_chat_history() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert 'const loadingSavedCdd = pipelineLoading && Boolean(savedStatePrompt);' in app
+    assert '? "Loading saved CDD…"' in app
+    assert app.index('const loadingSavedCdd') < app.index('latestAssistantMessage(messages)')
+
+
 def test_document_actions_poll_after_starting_a_background_resume() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
