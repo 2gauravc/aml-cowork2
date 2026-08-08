@@ -8,6 +8,8 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
+from src.utils.aws import has_resolved_credentials, s3_client
+
 
 SCHEMA_VERSION = 1
 DEFAULT_PREFIX = "cdd-states"
@@ -26,7 +28,7 @@ def save_completed_state(
     has been configured instead of preventing a completed CDD run from returning.
     """
     config = _config()
-    if config is None:
+    if config is None or not has_resolved_credentials():
         return None
     saved_at = datetime.now(UTC).isoformat()
     identity = {
@@ -55,7 +57,7 @@ def save_completed_state(
 def get_completed_state(*, customer_name: str, jurisdiction: str) -> dict[str, Any] | None:
     """Return one completed state snapshot for a customer/jurisdiction."""
     config = _config()
-    if config is None:
+    if config is None or not has_resolved_credentials():
         return None
     try:
         response = _client(config).get_object(
@@ -99,11 +101,7 @@ def _slug(value: str) -> str:
 
 
 def _client(config: dict[str, str | None]) -> Any:
-    try:
-        import boto3
-    except ImportError as exc:
-        raise CDDStateStoreError("boto3 is required for CDD state storage") from exc
-    return boto3.client("s3", region_name=config["region"])
+    return s3_client(region_name=config["region"])
 
 
 def _missing(exc: Exception) -> bool:

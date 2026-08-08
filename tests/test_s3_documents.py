@@ -51,7 +51,7 @@ class S3CredentialChainTests(unittest.TestCase):
             }
         }
         with patch("src.utils.s3_documents._has_aws_credentials", return_value=True), patch(
-            "boto3.client", return_value=client
+            "src.utils.s3_documents.s3_client", return_value=client
         ):
             documents = s3_documents.find_documents_in_s3(
                 company_name="Example", jurisdiction="GB"
@@ -68,7 +68,7 @@ class S3CredentialChainTests(unittest.TestCase):
             path = Path(tmp) / "passport-alex.pdf"
             path.write_bytes(b"pdf")
             with patch("src.utils.s3_documents._has_aws_credentials", return_value=True), patch(
-                "boto3.client", return_value=client
+                "src.utils.s3_documents.s3_client", return_value=client
             ):
                 s3_documents.upload_document_to_s3(
                     path,

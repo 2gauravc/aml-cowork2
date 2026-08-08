@@ -18,12 +18,12 @@ import time
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
+from src.utils.environment import load_application_env
 
 from src.utils.kyc_cache import CacheSubject, company_cache_subject, get_cache_value, set_cache_value
 
 
-load_dotenv()
+load_application_env()
 
 BASE_URL = os.getenv("KYCBASEURL", "https://api.knowyourcustomer.dev")
 CLIENT_ID = os.getenv("KYCCLIENTID")

@@ -10,13 +10,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from dotenv import load_dotenv
+from src.utils.aws import has_resolved_credentials, s3_client
+from src.utils.environment import load_application_env
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BUCKET_URL = "https://onbo-bkt.s3.us-east-1.amazonaws.com"
 
-load_dotenv(PROJECT_ROOT / ".env")
+load_application_env(PROJECT_ROOT / ".env")
 
 
 def upload_document_to_s3(
@@ -55,11 +56,6 @@ def upload_document_to_s3(
     )
     content_type = mimetypes.guess_type(document_path.name)[0] or "application/octet-stream"
 
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required to upload generated documents to S3") from exc
-
     metadata = _provenance_metadata(
         source_type=source_type,
         provenance=provenance,
@@ -68,7 +64,7 @@ def upload_document_to_s3(
     extra_args: dict[str, Any] = {"ContentType": content_type}
     if metadata:
         extra_args["Metadata"] = metadata
-    boto3.client("s3", region_name=_region_name(bucket_url)).upload_file(
+    s3_client(region_name=_region_name(bucket_url)).upload_file(
         str(document_path),
         bucket_name,
         key,
@@ -105,14 +101,9 @@ def find_documents_in_s3(
     if not prefix or not _has_aws_credentials():
         return []
 
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required to read generated documents from S3") from exc
-
     bucket_url = _bucket_url()
     bucket_name = _bucket_name(bucket_url)
-    client = boto3.client("s3", region_name=_region_name(bucket_url))
+    client = s3_client(region_name=_region_name(bucket_url))
     response = client.list_objects_v2(
         Bucket=bucket_name,
         Prefix=prefix,
@@ -188,15 +179,10 @@ def download_document_from_s3(
     key = storage.get("key")
     if not bucket or not key:
         raise ValueError("S3 document metadata must include storage.bucket and storage.key")
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required to download generated documents from S3") from exc
-
     directory = Path(output_dir) if output_dir else Path(tempfile.mkdtemp(prefix="cdd-s3-"))
     directory.mkdir(parents=True, exist_ok=True)
     local_path = directory / Path(key).name
-    boto3.client("s3", region_name=_region_name(_bucket_url())).download_file(
+    s3_client(region_name=_region_name(_bucket_url())).download_file(
         bucket,
         key,
         str(local_path),
@@ -234,12 +220,7 @@ def presign_document_url(
     expires_in_seconds: int = 900,
 ) -> str:
     """Generate a short-lived download URL for a private S3 document."""
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required to generate S3 presigned URLs") from exc
-
-    return boto3.client("s3", region_name=_region_name(_bucket_url())).generate_presigned_url(
+    return s3_client(region_name=_region_name(_bucket_url())).generate_presigned_url(
         "get_object",
         Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expires_in_seconds,
@@ -259,14 +240,7 @@ def _has_aws_credentials() -> bool:
     This supports local AWS profiles and EC2 instance profiles without storing
     long-lived access keys in the application environment.
     """
-    try:
-        import boto3
-    except ImportError:
-        return False
-    try:
-        return boto3.Session().get_credentials() is not None
-    except Exception:
-        return False
+    return has_resolved_credentials()
 
 
 def _bucket_url() -> str:
