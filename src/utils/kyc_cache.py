@@ -13,6 +13,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from src.utils.aws import s3_client
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE_PATH = PROJECT_ROOT / "outputs" / "cache" / "kyc_api_cache.json"
@@ -252,11 +254,7 @@ def _new_s3_document(subject: CacheSubject) -> dict[str, Any]:
 
 
 def _s3_client(config: S3CacheConfig) -> Any:
-    try:
-        import boto3
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required for the S3 KYC cache") from exc
-    return boto3.client("s3", region_name=config.region)
+    return s3_client(region_name=config.region)
 
 
 def _s3_object_key(config: S3CacheConfig, subject: CacheSubject) -> str:

@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
@@ -55,10 +54,11 @@ from src.agents.nodes import (  # noqa: E402
 from src.agents.state import CDDState, new_cdd_state  # noqa: E402
 from src.utils.langgraph_debug import maybe_debug_node  # noqa: E402
 from src.utils.kyc_cache import company_cache_subject, get_cache_source  # noqa: E402
+from src.utils.environment import load_application_env  # noqa: E402
 from src.utils.pdf import render_cdd_pdf  # noqa: E402
 
 
-load_dotenv()
+load_application_env()
 CHECKPOINTER = MemorySaver()
 
 

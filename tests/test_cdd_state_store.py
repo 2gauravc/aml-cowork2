@@ -19,8 +19,8 @@ def test_completed_state_round_trips_through_s3() -> None:
         "source_date": date(2026, 7, 28),
     }
     with patch.dict("os.environ", {"CDD_STATE_S3_BUCKET": "test-bucket"}, clear=False), patch(
-        "boto3.client", return_value=client
-    ):
+        "src.utils.cdd_state_store.has_resolved_credentials", return_value=True
+    ), patch("src.utils.cdd_state_store.s3_client", return_value=client):
         saved = save_completed_state(
             state, customer_name="Example Ltd", jurisdiction="gb", case_id=None
         )
@@ -42,9 +42,21 @@ def test_state_store_is_disabled_without_an_s3_bucket() -> None:
         assert get_completed_state(customer_name="Example Ltd", jurisdiction="GB") is None
 
 
+def test_state_store_is_disabled_without_resolved_credentials() -> None:
+    with patch.dict("os.environ", {"CDD_STATE_S3_BUCKET": "state-bucket"}, clear=False), patch(
+        "src.utils.cdd_state_store.has_resolved_credentials", return_value=False
+    ), patch("src.utils.cdd_state_store.s3_client") as client:
+        assert save_completed_state({}, customer_name="Example Ltd", jurisdiction="GB", case_id=None) is None
+        assert get_completed_state(customer_name="Example Ltd", jurisdiction="GB") is None
+
+    client.assert_not_called()
+
+
 def test_state_store_defaults_to_the_configured_kyc_cache_bucket() -> None:
     with patch.dict("os.environ", {"CDD_STATE_S3_BUCKET": "", "KYC_CACHE_S3_BUCKET": "cache-bucket"}, clear=False):
-        with patch("boto3.client") as client:
+        with patch("src.utils.cdd_state_store.has_resolved_credentials", return_value=True), patch(
+            "src.utils.cdd_state_store.s3_client"
+        ) as client:
             save_completed_state({}, customer_name="Example Ltd", jurisdiction="GB", case_id=None)
 
     assert client.return_value.put_object.call_args.kwargs["Bucket"] == "cache-bucket"

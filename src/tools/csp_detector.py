@@ -12,12 +12,16 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_ROOT / ".env")
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.environment import load_application_env  # noqa: E402
+
+load_application_env(PROJECT_ROOT / ".env")
 
 SKILL_PATH = PROJECT_ROOT / "skills" / "csp-detector" / "SKILL.md"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"

@@ -13,7 +13,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +37,7 @@ from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
 from src.utils.case_status import sync_case_status
 from src.utils.cdd_state_store import CDDStateStoreError, get_completed_state, save_completed_state
+from src.utils.environment import load_application_env
 from src.utils.s3_documents import (
     download_document_from_s3,
     find_documents_in_s3,
@@ -47,7 +47,7 @@ from src.utils.s3_documents import (
 )
 
 
-load_dotenv()
+load_application_env()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = PROJECT_ROOT / "src" / "frontend"

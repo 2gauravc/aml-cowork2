@@ -357,7 +357,7 @@ class DocumentPipelineTests(unittest.TestCase):
                 return_value=None,
             ), patch(
                 "src.agents.nodes.s3_upload_skip_reason",
-                return_value="missing AWS credential env vars: AWS_ACCESS_KEY_ID",
+                return_value="no usable AWS credentials were found (instance role, profile, or environment)",
             ):
                 update = generate_registry_document_node({"cdd": {}})
 
@@ -366,7 +366,7 @@ class DocumentPipelineTests(unittest.TestCase):
             self.assertEqual(evidence_artifact["storage"]["status"], "skipped")
             self.assertEqual(
                 evidence_artifact["storage"]["reason"],
-                "missing AWS credential env vars: AWS_ACCESS_KEY_ID",
+                "no usable AWS credentials were found (instance role, profile, or environment)",
             )
             self.assertTrue(pdf_path.exists())
             self.assertTrue(html_path.exists())

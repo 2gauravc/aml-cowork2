@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
 
 
@@ -18,7 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-load_dotenv(PROJECT_ROOT / ".env")
+from src.utils.environment import load_application_env  # noqa: E402
+
+load_application_env(PROJECT_ROOT / ".env")
 
 DEFAULT_POLICY_PATH = PROJECT_ROOT / "policies" / "idv_policy.txt"
 DEFAULT_MODEL = os.getenv("OPENAI_POLICY_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
