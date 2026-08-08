@@ -1,6 +1,6 @@
 # How to get started
 
-Open the application at [http://100.51.23.165](http://100.51.23.165).
+Open the application at [http://54.88.224.180/](http://54.88.224.180/).
 
 ## Select a case
 
