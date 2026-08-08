@@ -10,10 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
-from langgraph.types import interrupt
+from langgraph.types import Overwrite, interrupt
 
 from src.agents.businesslogic import build_ownership_tables
-from src.agents.red_flags_graph import run_red_flags_graph
 from src.agents.state import CDDState, classify_evidence_item
 from src.tools.cdd_enrichment import (
     apply_document_extract_to_cdd,
@@ -26,10 +25,9 @@ from src.tools.idv_requirements import establish_idv_requirements as apply_idv_r
 from src.tools.case_review import (
     CaseReviewError,
     generate_case_review_summary,
-    merge_case_review_assessments,
     unavailable_case_review,
 )
-from src.tools.risk_severity_policy import interpret_risk_severity_policy
+from src.tools.csp_assessment import assess_csp_address as build_csp_assessment
 from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen_adverse_news
 from src.tools.digital_footprint import DigitalFootprintError, evaluate_digital_footprint
 from src.tools.cdd_completeness import CDDCompletenessError, evaluate_cdd_completeness
@@ -1002,28 +1000,12 @@ def _idv_validation(document: dict[str, Any], item: dict[str, Any]) -> dict[str,
     }
 
 
-def evaluate_risk_flags(state: CDDState) -> dict[str, Any]:
-    """Run the focused red-flags subgraph and merge its additive outputs."""
-    cdd = state.get("cdd", {})
-    severity_policy = interpret_risk_severity_policy()
-    result = run_red_flags_graph(
-        customer_static=cdd.get("company_business_profile", {}).get("customer_static", {}),
-        ownership_and_control=cdd.get("ownership_and_control", {}),
-        severity_policy=severity_policy,
-    )
-    return {
-        "evidence": [
-            *[classify_evidence_item(item) for item in result.get("evidence", [])],
-            _evidence(
-                tool="interpret_risk_severity_policy",
-                description="Interpreted and applied the risk-severity policy",
-                source="OpenAI policy interpretation",
-                data=severity_policy,
-                relevance_tags=["risk", "severity", "policy"],
-            ),
-        ],
-        "risk_flags": result.get("risk_flags", []),
-    }
+def assess_csp_address(state: CDDState) -> dict[str, Any]:
+    """Replace only previous canonical CSP records with a new CDD assessment."""
+    records = build_csp_assessment(state)
+    assessments = [item for item in state.get("assessments", []) if item.get("assessment_type") != "csp_address"] + records["assessments"]
+    findings = [item for item in state.get("findings", []) if item.get("category") != "csp_address"] + records["findings"]
+    return {"evidence": records["evidence"], "assessments": Overwrite(assessments), "findings": Overwrite(findings)}
 
 
 def assess_cdd_completeness(state: CDDState) -> dict[str, Any]:
@@ -1211,14 +1193,13 @@ def generate_case_review(state: CDDState) -> dict[str, Any]:
         summary = generate_case_review_summary(
             cdd=state.get("cdd", {}),
             case_status=state.get("case_status", {}),
-            risk_flags=state.get("risk_flags", []),
+            findings=state.get("findings", []),
             evidence=state.get("evidence", []),
         )
     except CaseReviewError as exc:
         summary = unavailable_case_review(str(exc))
     return {
         "case_assessment_summary": summary,
-        "risk_flags": merge_case_review_assessments(state.get("risk_flags", []), summary),
     }
 
 

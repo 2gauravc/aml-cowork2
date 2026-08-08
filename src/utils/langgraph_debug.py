@@ -31,7 +31,7 @@ NODE_FUNCTIONS = {
     "establish_idv_requirements": ["interpret_idv_policy", "establish_idv_requirements"],
     "generate_idv_documents": ["generate_idv_documents"],
     "extract_idv_documents": ["classify_document", "extract_document"],
-    "evaluate_risk_flags": [],
+    "assess_csp_address": [],
     "finalize_cdd": [],
 }
 

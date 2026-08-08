@@ -26,10 +26,10 @@
     }
   },
   "pipeline_progress": {
-    "node": "generate_case_review",
-    "node_number": 16,
-    "total_nodes": 16,
-    "message": "Demo case loaded",
+    "node": "finalize_cdd",
+    "node_number": 23,
+    "total_nodes": 23,
+    "message": "Completing CDD",
     "using_cache": true,
     "status": "complete"
   },
@@ -176,39 +176,6 @@
         "confidence": 1,
         "reason": "Pre-processed demo document",
         "classification": "passport"
-      }
-    }
-  ],
-  "risk_flags": [
-    {
-      "finding_id": "ownership:category",
-      "category": "ownership",
-      "evaluation": "no",
-      "severity": "none",
-      "description": "Individual UBOs above 25% were identified: Maya Chen.",
-      "source": "demo_fixture"
-    },
-    {
-      "finding_id": "csp_address:category",
-      "category": "csp_address",
-      "severity": "medium",
-      "evaluation": "inconclusive",
-      "description": "Search evidence identifies corporate-services activity at the building, but does not establish a provider at the exact address.",
-      "source": "csp_address_assessment",
-      "evidence_tool": "csp_address_assessment",
-      "evidence": {
-        "assessment": {
-          "is_csp": "inconclusive",
-          "confidence": "medium",
-          "explanation": "The supplied evidence is building-level and does not verify an exact registered-office provider relationship."
-        },
-        "sources": [
-          {
-            "title": "Example House business directory",
-            "url": "https://example.test/example-house-directory",
-            "content": "Representative demo source only; not a live search result."
-          }
-        ]
       }
     }
   ],

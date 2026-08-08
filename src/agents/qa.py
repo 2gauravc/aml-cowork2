@@ -17,15 +17,14 @@ def answer_cdd_question(
     question: str,
     cdd: dict[str, Any],
     evidence: list[dict[str, Any]],
-    risk_flags: list[dict[str, Any]],
     findings: list[dict[str, Any]] | None = None,
 ) -> str:
     """Answer a follow-up question using CDD first, then richer evidence."""
-    deterministic = _deterministic_answer(question, cdd, evidence, risk_flags, findings or [])
+    deterministic = _deterministic_answer(question, cdd, evidence, findings or [])
     if deterministic:
         return deterministic
 
-    snippets = retrieve_evidence_snippets(question, cdd, evidence, risk_flags, findings or [])
+    snippets = retrieve_evidence_snippets(question, cdd, evidence, findings or [])
     if not _openai_qa_enabled():
         return _fallback_answer(question, snippets)
 
@@ -39,7 +38,7 @@ def answer_cdd_question(
                 SystemMessage(
                     content=(
                         "You are a CDD analyst assistant. Answer only from the CDD "
-                        "JSON, neutral findings, risk flags, and evidence snippets provided. If the "
+                        "JSON, canonical findings, and evidence snippets provided. If the "
                         "answer is not present, say what is missing."
                     )
                 ),
@@ -60,7 +59,6 @@ def retrieve_evidence_snippets(
     question: str,
     cdd: dict[str, Any],
     evidence: list[dict[str, Any]],
-    risk_flags: list[dict[str, Any]],
     findings: list[dict[str, Any]] | None = None,
     *,
     limit: int = 6,
@@ -74,13 +72,8 @@ def retrieve_evidence_snippets(
             "data": _trim(cdd),
         },
         {
-            "source": "risk_flags",
-            "description": "Risk flags from graph state",
-            "data": _trim(risk_flags),
-        },
-        {
             "source": "findings",
-            "description": "Neutral, evidence-referenced findings; currently includes adverse-news screening findings.",
+            "description": "Canonical, evidence-referenced findings.",
             "data": _trim(findings or []),
         },
     ]
@@ -107,7 +100,6 @@ def _deterministic_answer(
     question: str,
     cdd: dict[str, Any],
     evidence: list[dict[str, Any]],
-    risk_flags: list[dict[str, Any]],
     findings: list[dict[str, Any]],
 ) -> str | None:
     q = question.casefold()
@@ -164,11 +156,11 @@ def _deterministic_answer(
         return "Related parties: " + "; ".join(rows) + "."
 
     if "risk" in q or "review" in q or "flag" in q or "why" in q:
-        if not risk_flags:
-            return "There are no open risk flags stored in the current graph state."
+        if not findings:
+            return "There are no open findings stored in the current graph state."
         rows = [
-            f"{flag.get('severity', 'unknown').title()}: {flag.get('description')}"
-            for flag in risk_flags
+            f"{((finding.get('severity') or {}).get('level') or 'unknown').title()}: {finding.get('summary')}"
+            for finding in findings
         ]
         return "Current review items: " + "; ".join(rows)
 

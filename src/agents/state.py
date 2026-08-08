@@ -201,17 +201,6 @@ class Finding(TypedDict, total=False):
     relevant_evidence_ids: list[str]
 
 
-class RiskFlag(TypedDict, total=False):
-    finding_id: str
-    category: str
-    evaluation: Literal["yes", "no", "inconclusive"]
-    severity: Literal["none", "low", "medium", "high"]
-    description: str
-    source: str
-    subject: dict[str, Any]
-    evidence: dict[str, Any]
-
-
 class CDDState(TypedDict, total=False):
     metadata: Metadata
     cdd: CDD
@@ -219,7 +208,6 @@ class CDDState(TypedDict, total=False):
     evidence: Annotated[list[EvidenceItem], add]
     findings: Annotated[list[Finding], add]
     assessments: Annotated[list[dict[str, Any]], add]
-    risk_flags: list[RiskFlag]
     case_status: CaseStatus
     case_assessment_summary: dict[str, Any] | None
     messages: Annotated[list[AnyMessage], add_messages]
@@ -276,7 +264,6 @@ def new_cdd_state(
         "evidence": [],
         "findings": [],
         "assessments": [],
-        "risk_flags": [],
         "case_status": {"cdd_generation": "in_progress"},
         "case_assessment_summary": None,
         "messages": [],

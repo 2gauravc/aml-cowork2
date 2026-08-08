@@ -27,13 +27,12 @@ from pydantic import BaseModel, Field
 from src.agents.graph import run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
-from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address
+from src.tools.csp_assessment import assess_csp_address
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.members import get_company_members_by_name
 from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.pdf import render_cdd_pdf
 from src.utils.case_status import sync_case_status
-from src.tools.risk_severity_policy import apply_risk_severity_policy, interpret_risk_severity_policy
 from src.utils.s3_documents import presign_document_url
 
 
@@ -349,7 +348,6 @@ def _execute_tool_call(name: str, args: dict[str, Any], session: dict[str, Any])
                     question=args.get("question") or "",
                 cdd=(session.get("graph_state") or {}).get("cdd", {}),
                 evidence=(session.get("graph_state") or {}).get("evidence", []),
-                risk_flags=(session.get("graph_state") or {}).get("risk_flags", []),
                 findings=(session.get("graph_state") or {}).get("findings", []),
                 )
             }
@@ -582,7 +580,6 @@ def _current_session_snapshot(session: dict[str, Any]) -> dict[str, Any]:
         "document_status_counts": requirement_counts,
         "document_count": len(graph_state.get("documents") or []),
         "evidence_count": len(graph_state.get("evidence") or []),
-        "risk_flags": graph_state.get("risk_flags") or [],
         "findings_count": len(graph_state.get("findings") or []),
         "findings": graph_state.get("findings") or [],
         "assessments": graph_state.get("assessments") or [],
@@ -690,40 +687,12 @@ def _run_csp_address_tool(*, args: dict[str, Any], session: dict[str, Any]) -> d
         customer_static.get("registered_address") or {}
     ).get("full_address")
     company_name = args.get("company_name") or customer_static.get("name") or session.get("customer_name")
-    if not address:
-        return {"error": {"message": "A registered address is required for CSP assessment."}}
-
-    try:
-        result = evaluate_csp_address(address, company_name=company_name)
-    except CSPAssessmentError as exc:
-        return {"error": {"type": exc.__class__.__name__, "message": str(exc)}}
-
-    assessment = result.get("assessment") or {}
-    outcome = str(assessment.get("is_csp") or "inconclusive").casefold()
-    if outcome in {"yes", "no", "inconclusive"}:
-        flag = {
-            "finding_id": "csp_address:category",
-            "category": "csp_address",
-            "evaluation": outcome,
-            "severity": "none",
-            "description": (assessment.get("explanation") or "CSP assessment completed.").strip(),
-            "source": "csp_address_assessment",
-            "subject": {},
-            "evidence": result,
-        }
-        flag = apply_risk_severity_policy([flag], interpret_risk_severity_policy())[0]
-        existing = state.setdefault("risk_flags", [])
-        if not any(item.get("category") == "csp_address" for item in existing):
-            existing.append(flag)
-        state.setdefault("evidence", []).append({
-            "source": "CSP assessment tool",
-            "tool": "evaluate_csp_address",
-            "description": "Assessed registered address for company service provider indicators.",
-            "relevance_tags": ["risk_flag", "csp_address", "registered_address"],
-            "data": result,
-        })
-        sync_case_status(state)
-    return result
+    records = assess_csp_address(state, address=address, company_name=company_name)
+    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "csp_address"] + records["assessments"]
+    state["findings"] = [item for item in state.get("findings", []) if item.get("category") != "csp_address"] + records["findings"]
+    state.setdefault("evidence", []).extend(records["evidence"])
+    sync_case_status(state)
+    return records["assessments"][0]["result"]
 
 
 def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
@@ -759,7 +728,6 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
         "cdd": cdd,
         "documents": graph_state.get("documents", []),
         "evidence_count": len(graph_state.get("evidence", [])),
-        "risk_flags": graph_state.get("risk_flags", []),
         "case_status": graph_state.get("case_status", {}),
     }
 

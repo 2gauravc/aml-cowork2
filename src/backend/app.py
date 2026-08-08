@@ -25,7 +25,7 @@ from src.agents.nodes import adverse_news_screening, assess_cdd_completeness, as
 from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
-from src.tools.case_review import CaseReviewError, generate_case_review_summary, merge_case_review_assessments, unavailable_case_review
+from src.tools.case_review import CaseReviewError, generate_case_review_summary, unavailable_case_review
 from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
 from src.tools.digital_footprint import load_digital_footprint_skill
 from src.tools.customer_static import get_customer_static_by_name
@@ -418,13 +418,12 @@ async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, An
             generate_case_review_summary,
             cdd=state["cdd"],
             case_status=state.get("case_status", {}),
-            risk_flags=state.get("risk_flags", []),
+            findings=state.get("findings", []),
             evidence=state.get("evidence", []),
         )
     except CaseReviewError as exc:
         summary = unavailable_case_review(str(exc))
     state["case_assessment_summary"] = summary
-    state["risk_flags"] = merge_case_review_assessments(state.get("risk_flags", []), summary)
     sync_case_status(state)
     return _response(session, status="case_review_refreshed")
 
@@ -908,7 +907,7 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     session["graph_state"] = {
         key: session.pop(key)
         for key in (
-            "cdd", "documents", "evidence", "findings", "assessments", "risk_flags",
+            "cdd", "documents", "evidence", "findings", "assessments",
             "case_status", "case_assessment_summary",
         )
         if key in session
@@ -921,9 +920,6 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     session["demo_mode"] = True
     state = session.get("graph_state")
     if isinstance(state, dict):
-        state["risk_flags"] = merge_case_review_assessments(
-            state.get("risk_flags", []), state.get("case_assessment_summary") or {},
-        )
         sync_case_status(state, generation="completed")
     return _response(session, status="complete")
 
@@ -948,7 +944,6 @@ def _response(
         "cdd_state": state,
         "case_status": state.get("case_status"),
         "documents": state.get("documents", []),
-        "risk_flags": state.get("risk_flags", []),
         "findings": state.get("findings", []),
         "assessments": state.get("assessments", []),
         "case_assessment_summary": state.get("case_assessment_summary"),

@@ -14,7 +14,7 @@ def _previous_case_session() -> dict:
         "jurisdiction": "GB",
         "case_id": "previous-case",
         "messages": [{"role": "assistant", "content": "Previous case result"}],
-        "graph_state": {"cdd": {"company_business_profile": {"customer_static": {"name": "Previous Co"}}}, "evidence": [{"source": "old"}], "documents": [{"name": "old.pdf"}], "document_requirements": [{"id": "old"}], "risk_flags": [{"finding_id": "old"}], "findings": [{"finding_id": "old-finding"}], "assessments": [{"assessment_id": "old-assessment"}], "case_assessment_summary": {"summary": "old"}, "case_status": {"cdd_generation": "completed"}},
+        "graph_state": {"cdd": {"company_business_profile": {"customer_static": {"name": "Previous Co"}}}, "evidence": [{"source": "old"}], "documents": [{"name": "old.pdf"}], "document_requirements": [{"id": "old"}], "findings": [{"finding_id": "old-finding"}], "assessments": [{"assessment_id": "old-assessment"}], "case_assessment_summary": {"summary": "old"}, "case_status": {"cdd_generation": "completed"}},
         "graph_thread_id": "session-1",
         "document_results": [{"name": "old.pdf"}],
         "case_review_decision": {"decision": "approve"},
@@ -42,7 +42,6 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     assert response["status"] == "running"
     assert response["cdd"]["company_business_profile"]["status"] == "incomplete"
     assert response["documents"] == []
-    assert response["risk_flags"] == []
     assert response["findings"] == []
     assert response["assessments"] == []
     assert response["case_assessment_summary"] is None

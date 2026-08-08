@@ -10,16 +10,16 @@ def test_case_status_records_generation_only() -> None:
     assert status == {"cdd_generation": "completed"}
 
 
-def test_case_status_refreshes_after_chat_adds_a_risk_flag() -> None:
+def test_case_status_refreshes_after_chat_adds_a_finding() -> None:
     session = {
         "case_status": {"cdd_generation": "completed"},
-        "risk_flags": [{"description": "CSP: Evaluation: Yes."}],
+        "findings": [{"category": "csp_address"}],
     }
 
     assert sync_case_status(session) == {"cdd_generation": "completed"}
 
 
 def test_case_status_records_pipeline_failure() -> None:
-    session = {"risk_flags": []}
+    session = {"findings": []}
 
     assert sync_case_status(session, generation="failed") == {"cdd_generation": "failed"}

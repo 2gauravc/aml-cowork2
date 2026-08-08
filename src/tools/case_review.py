@@ -96,7 +96,7 @@ def generate_case_review_summary(
     *,
     cdd: dict[str, Any],
     case_status: dict[str, Any],
-    risk_flags: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
     skill_path: str | Path = SKILL_PATH,
 ) -> dict[str, Any]:
@@ -107,7 +107,7 @@ def generate_case_review_summary(
     evidence_packet = {
         "cdd": _compact(cdd),
         "case_status": _compact(case_status),
-        "risk_flags": [_risk_flag_packet(flag, index) for index, flag in enumerate(risk_flags, start=1)],
+        "findings": [_finding_packet(finding, index) for index, finding in enumerate(findings, start=1)],
         "evidence": [_evidence_packet(item, index) for index, item in enumerate(evidence, start=1)],
     }
     prompt = (
@@ -149,41 +149,25 @@ def unavailable_case_review(reason: str) -> dict[str, Any]:
     """Provide a safe, visible fallback while preserving the CDD result."""
     return {
         "status": "unavailable",
-        "executive_summary": "A generated case review is unavailable; review the recorded CDD evidence and risk flags.",
+        "executive_summary": "A generated case review is unavailable; review the recorded CDD evidence and findings.",
         "key_evidence": [],
         "limitations": [reason],
-        "recommended_actions": ["Review the CDD evidence and open risk flags before recording a decision."],
+        "recommended_actions": ["Review the CDD evidence and open findings before recording a decision."],
         "requests_for_information": [],
         "finding_assessments": [],
         "evidence_index": [],
     }
 
 
-def _risk_flag_packet(flag: dict[str, Any], index: int) -> dict[str, Any]:
+def _finding_packet(finding: dict[str, Any], index: int) -> dict[str, Any]:
     return {
-        "id": flag.get("finding_id") or f"risk:{flag.get('category') or 'item'}:{index}",
-        "category": flag.get("category"),
-        "evaluation": flag.get("evaluation"),
-        "severity": flag.get("severity"),
-        "subject": _compact(flag.get("subject")),
-        "description": flag.get("description"),
-        "source": flag.get("source"),
+        "id": finding.get("finding_id") or f"finding:{finding.get('category') or 'item'}:{index}",
+        "category": finding.get("category"),
+        "severity": _compact(finding.get("severity")),
+        "subject": _compact(finding.get("subject")),
+        "summary": finding.get("summary"),
+        "source": _compact(finding.get("source")),
     }
-
-
-def merge_case_review_assessments(
-    risk_flags: list[dict[str, Any]], summary: dict[str, Any],
-) -> list[dict[str, Any]]:
-    assessments = {
-        item.get("finding_id"): item
-        for item in summary.get("finding_assessments", [])
-        if item.get("finding_id")
-    }
-    return [
-        {**flag, "case_review": assessments[flag["finding_id"]]}
-        if flag.get("finding_id") in assessments else flag
-        for flag in risk_flags
-    ]
 
 
 def _evidence_packet(item: dict[str, Any], index: int) -> dict[str, Any]:

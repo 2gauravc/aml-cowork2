@@ -46,4 +46,4 @@ Create one assessment for each configured factor from the retained facts selecte
 
 Create a `finding/v1` only for `triggered` or `inconclusive`; clear factors create assessments only. Keep the policy definition, selected evidence IDs, model/method provenance, and analyst-readable rationale on each assessment.
 
-CSP Address is an upstream producer. Do not create a Shell Company Risk CSP finding or assessment. Surface its existing risk flag/finding and relevant evidence in the Shell Company Risk UI exactly as recorded.
+CSP Address is an upstream producer. Do not create a Shell Company Risk CSP finding or assessment. Surface its canonical CSP assessment/finding and relevant evidence in the Shell Company Risk UI exactly as recorded.

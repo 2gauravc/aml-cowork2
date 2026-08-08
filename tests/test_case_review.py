@@ -49,7 +49,7 @@ class CaseReviewTests(unittest.TestCase):
             result = generate_case_review_summary(
                 cdd={},
                 case_status={"cdd_generation": "completed"},
-                risk_flags=[{"finding_id": "csp_address:category", "category": "csp_address", "evaluation": "inconclusive", "severity": "medium", "description": "Address evidence is incomplete."}],
+                findings=[{"finding_id": "finding:csp-address:1", "category": "csp_address", "summary": "Address evidence is incomplete.", "severity": {"level": "medium"}}],
                 evidence=[
                     {
                         "tool": "csp_address_assessment",
@@ -80,7 +80,7 @@ class CaseReviewTests(unittest.TestCase):
         self.assertIn("Requests for Information", skill)
 
     @patch("src.agents.nodes.generate_case_review_summary")
-    def test_node_passes_case_status_and_merges_finding_assessments(self, generate_summary) -> None:
+    def test_node_passes_case_status_and_findings(self, generate_summary) -> None:
         generate_summary.return_value = {
             "status": "available",
             "executive_summary": "No material issues.",
@@ -94,14 +94,14 @@ class CaseReviewTests(unittest.TestCase):
             {
                 "cdd": {},
                 "case_status": {"cdd_generation": "completed"},
-                "risk_flags": [{"finding_id": "ownership:category", "evaluation": "yes", "category": "ownership"}],
+                "findings": [{"finding_id": "finding:ownership:1", "category": "cdd_completeness"}],
                 "evidence": [],
             }
         )
 
         self.assertEqual(result["case_assessment_summary"]["status"], "available")
         self.assertNotIn("case_review_summary", result)
-        self.assertEqual(result["risk_flags"][0]["case_review"]["confidence"], "medium")
+        self.assertNotIn("findings", result)
         self.assertEqual(generate_summary.call_args.kwargs["case_status"], {"cdd_generation": "completed"})
 
     def test_unavailable_review_records_limitation(self) -> None:

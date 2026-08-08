@@ -149,7 +149,7 @@ def test_shell_company_risk_checker_surfaces_existing_csp_record_without_duplica
     assert 'function ShellCompanyRisk' in app
     assert 'assessmentsByType(cddState, "shell_company_risk")' in app
     assert 'fetch("/api/shell-company-risk/run"' in app
-    assert 'flag.category === "csp_address"' in app
+    assert 'cspAssessments' in app
     assert 'no duplicate Shell Company Risk finding was created' in app
     assert '<h3>Screening</h3><strong>CSP Address</strong>' not in app
 

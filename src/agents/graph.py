@@ -35,7 +35,7 @@ from src.agents.nodes import (  # noqa: E402
     adverse_news_screening,
     digital_footprint_assessment,
     process_available_documents,
-    evaluate_risk_flags,
+    assess_csp_address,
     assess_cdd_completeness,
     assess_evidence_quality,
     assess_other_risk_factors,
@@ -79,7 +79,7 @@ PIPELINE_NODE_LABELS = {
     "extract_idv_documents": "Extracting from ID&V documents",
     "digital_footprint_assessment": "Assessing digital footprint",
     "adverse_news_screening": "Screening adverse news",
-    "evaluate_risk_flags": "Evaluating red flags",
+    "assess_csp_address": "Assessing company-service-provider address",
     "assess_cdd_completeness": "Checking CDD completeness",
     "assess_evidence_quality": "Checking evidence quality",
     "assess_shell_company_risk": "Assessing shell company risk",
@@ -234,7 +234,7 @@ def build_cdd_graph(
     add_node("extract_idv_documents", extract_idv_documents)
     add_node("digital_footprint_assessment", digital_footprint_assessment)
     add_node("adverse_news_screening", adverse_news_screening)
-    add_node("evaluate_risk_flags", evaluate_risk_flags)
+    add_node("assess_csp_address", assess_csp_address)
     add_node("assess_cdd_completeness", assess_cdd_completeness)
     add_node("assess_evidence_quality", assess_evidence_quality)
     add_node("assess_other_risk_factors", assess_other_risk_factors)
@@ -266,8 +266,8 @@ def build_cdd_graph(
     graph.add_edge("await_documents", "extract_idv_documents")
     graph.add_edge("extract_idv_documents", "digital_footprint_assessment")
     graph.add_edge("digital_footprint_assessment", "adverse_news_screening")
-    graph.add_edge("adverse_news_screening", "evaluate_risk_flags")
-    graph.add_edge("evaluate_risk_flags", "assess_cdd_completeness")
+    graph.add_edge("adverse_news_screening", "assess_csp_address")
+    graph.add_edge("assess_csp_address", "assess_cdd_completeness")
     graph.add_edge("assess_cdd_completeness", "assess_evidence_quality")
     graph.add_edge("assess_evidence_quality", "assess_shell_company_risk")
     graph.add_edge("assess_shell_company_risk", "assess_other_risk_factors")

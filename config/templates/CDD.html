@@ -68,8 +68,8 @@
   <h2>Shell Company Risk</h2>
   {% set shell_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'shell_company_risk')|list %}
   {% for section in section_order %}{% set group = shell_assessments|selectattr('cdd_section', 'equalto', section)|list %}{% if group %}<h3>{{ section_labels.get(section) }}</h3>{% for item in group|sort(attribute='display_order') %}{{ assessment_card(item, all_findings) }}{% endfor %}{% endif %}{% endfor %}
-  {% set csp_flags = state.get('risk_flags', [])|selectattr('category', 'equalto', 'csp_address')|list %}
-  {% if csp_flags %}<h3>CSP Address</h3>{% for flag in csp_flags %}<div class="card"><p>{{ flag.get('description') or 'CSP assessment recorded.' }}</p><p>Outcome: {{ flag.get('evaluation')|blank }} · Severity: {{ flag.get('severity')|blank }}</p></div>{% endfor %}{% elif not shell_assessments %}<p class="empty">No Shell Company Risk assessment is available.</p>{% endif %}
+  {% set csp_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'csp_address')|list %}
+  {% if csp_assessments %}<h3>CSP Address</h3>{% for item in csp_assessments %}<div class="card"><p>{{ item.get('summary') or 'CSP assessment recorded.' }}</p><p>Outcome: {{ item.get('outcome')|blank }}</p></div>{% endfor %}{% elif not shell_assessments %}<p class="empty">No Shell Company Risk assessment is available.</p>{% endif %}
 
   <h2>Other Risk Factors</h2>
   {% set other_assessments = all_assessments|selectattr('assessment_type', 'equalto', 'other_risk_factors')|list %}

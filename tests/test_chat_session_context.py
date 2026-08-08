@@ -42,7 +42,7 @@ class ChatSessionContextTests(unittest.TestCase):
             "graph_state": {"metadata": {"case_id": "sg-001"}, "cdd": {"customer": {"name": "SC ENGINEERING PRIVATE LIMITED"}, "company_business_profile": {"customer_static": {}}}, "documents": [
                 {"document_id": "document:idv:claire:1", "purpose": "identity_verification", "subject": {"name": "Claire Wallace"}, "document_type": "passport", "status": "processed", "gap": {"status": "resolved"}, "storage": {"bucket": "documents", "key": "GB/claire-passport.pdf"}, "processing": {"classification": {"document_type": "passport", "confidence": 0.99}, "extract": {"full_name": "Claire Wallace", "document_number": "P123456"}}},
                 {"document_id": "document:idv:missing:1", "purpose": "identity_verification", "document_type": "passport", "status": "required", "gap": {"status": "outstanding"}}
-            ], "evidence": [{"source": "tool", "tool": "get_customer_static_by_name", "description": "Customer static profile"}, {"source": "graph", "tool": "extract_idv_documents", "description": "ID&V extraction"}], "risk_flags": [{"severity": "low"}], "findings": [_adverse_news_finding()]},
+            ], "evidence": [{"source": "tool", "tool": "get_customer_static_by_name", "description": "Customer static profile"}, {"source": "graph", "tool": "extract_idv_documents", "description": "ID&V extraction"}], "findings": [_adverse_news_finding()]},
             "documents": [{"name": "registry.pdf"}],
             "document_requirements": [
                 {
@@ -66,7 +66,6 @@ class ChatSessionContextTests(unittest.TestCase):
                     "description": "ID&V extraction",
                 },
             ],
-            "risk_flags": [{"severity": "low"}],
             "findings": [_adverse_news_finding()],
             "messages": [],
         }
@@ -191,9 +190,8 @@ class ChatSessionContextTests(unittest.TestCase):
             "A normal chat completion.",
         )
 
-    @patch("src.agents.chat_graph.interpret_risk_severity_policy", return_value={"policy_name": "test", "source_path": "test", "rules": [{"category": "csp_address", "evaluation": "yes", "severity": "medium"}]})
-    @patch("src.agents.chat_graph.evaluate_csp_address")
-    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, evaluate_csp, _) -> None:
+    @patch("src.agents.chat_graph.assess_csp_address")
+    def test_csp_tool_uses_the_address_in_the_active_cdd_session(self, assess_csp) -> None:
         self.session["graph_state"]["cdd"] = {
             "company_business_profile": {
                 "customer_static": {
@@ -202,16 +200,13 @@ class ChatSessionContextTests(unittest.TestCase):
                 }
             }
         }
-        evaluate_csp.return_value = {
-            "assessment": {"is_csp": "yes", "explanation": "Provider evidence."},
-            "sources": [],
-        }
+        assess_csp.return_value = {"evidence": [], "assessments": [{"assessment_type": "csp_address", "result": {"assessment": {"is_csp": "yes"}}}], "findings": [{"category": "csp_address"}]}
 
         result = _execute_tool_call("evaluate_csp_address", {}, self.session)
 
-        evaluate_csp.assert_called_once_with("1 Example Street", company_name="SC ENGINEERING PRIVATE LIMITED")
+        assess_csp.assert_called_once_with(self.session["graph_state"], address="1 Example Street", company_name="SC ENGINEERING PRIVATE LIMITED")
         self.assertEqual(result["assessment"]["is_csp"], "yes")
-        self.assertEqual(self.session["graph_state"]["risk_flags"][-1]["category"], "csp_address")
+        self.assertEqual(self.session["graph_state"]["findings"][-1]["category"], "csp_address")
 
 
 def _adverse_news_finding() -> dict:

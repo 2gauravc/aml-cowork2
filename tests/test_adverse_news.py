@@ -92,7 +92,7 @@ class AdverseNewsTests(unittest.TestCase):
                 search_adverse_news([])
 
     @patch("src.agents.nodes.screen_adverse_news")
-    def test_node_adds_evidence_and_a_valid_finding_without_risk_flags(self, screening) -> None:
+    def test_node_adds_evidence_and_a_valid_finding(self, screening) -> None:
         screening.return_value = {
             "entities": [{"key": "ultimate_beneficial_owner:0", "entity_type": "ultimate_beneficial_owner", "entity_id": "ubo-1", "name": "Alex Chen", "disambiguators": {"nationality": "Singapore"}}],
             "queries": [{"entity_key": "ultimate_beneficial_owner:0", "query": "Alex Chen enforcement"}],
@@ -105,7 +105,6 @@ class AdverseNewsTests(unittest.TestCase):
 
         result = adverse_news_screening({"cdd": {}})
 
-        self.assertNotIn("risk_flags", result)
         self.assertEqual(len(result["findings"]), 1)
         finding = result["findings"][0]
         self.assertEqual(finding["category"], "adverse_news")
