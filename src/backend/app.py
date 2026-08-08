@@ -37,6 +37,7 @@ from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
 from src.utils.case_status import sync_case_status
 from src.utils.cdd_state_store import CDDStateStoreError, get_completed_state, save_completed_state
+from src.utils.legacy_cdd_state import migrate_legacy_risk_flags
 from src.utils.environment import load_application_env
 from src.utils.s3_documents import (
     download_document_from_s3,
@@ -583,6 +584,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     session = _session(request.session_id)
     graph_state = snapshot["graph_state"]
     migrated_rating = _migrate_legacy_risk_rating(graph_state)
+    migrated_flags = migrate_legacy_risk_flags(graph_state)
     _normalise_document_state(graph_state)
     sync_case_status(graph_state, generation="completed")
     session["graph_state"] = graph_state
@@ -593,7 +595,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     session["pipeline_status"] = "complete"
     session["pipeline_progress"] = None
     saved_cdd_state = {"saved_at": snapshot.get("saved_at"), "identity": identity}
-    if migrated_rating:
+    if migrated_rating or migrated_flags:
         try:
             saved_cdd_state = await asyncio.to_thread(
                 save_completed_state,

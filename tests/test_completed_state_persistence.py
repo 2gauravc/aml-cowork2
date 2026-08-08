@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from src.backend.app import _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready
+from src.backend.app import CDDStateLookupRequest, SESSIONS, _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready, load_completed_cdd_state
+from src.utils.legacy_cdd_state import migrate_legacy_risk_flags
 
 
 def test_completed_pipeline_persists_the_full_graph_state() -> None:
@@ -67,6 +68,54 @@ def test_loading_legacy_state_replaces_its_model_rating_with_the_rule_based_rati
     assert ratings[0]["rating"] == "low"
     assert ratings[0]["total_score"] == 0
     assert ratings[0]["provenance"] == {"method": "deterministic_rule_based"}
+
+
+def _legacy_csp_state(evaluation: str | None) -> dict:
+    return {
+        "cdd": {"company_business_profile": {"customer_static": {"name": "Example Ltd", "registered_address": {"full_address": "1 Example Street"}}}},
+        "evidence": [], "assessments": [], "findings": [],
+        "risk_flags": [{"finding_id": "csp_address:legacy", "category": "csp_address", "evaluation": evaluation, "severity": "medium", "description": "Legacy CSP result.", "evidence": {"assessment": {"is_csp": evaluation, "confidence": "medium", "explanation": "Legacy explanation."}, "sources": [{"url": "https://example.test/csp"}]}}],
+    }
+
+
+def test_legacy_csp_outcomes_become_canonical_records() -> None:
+    for evaluation, outcome, findings in (("no", "not_triggered", 0), ("yes", "triggered", 1), ("inconclusive", "inconclusive", 1)):
+        state = _legacy_csp_state(evaluation)
+        assert migrate_legacy_risk_flags(state) is True
+        assert "risk_flags" not in state
+        assert state["assessments"][-1]["schema_version"] == "csp_address_assessment/v1"
+        assert state["assessments"][-1]["outcome"] == outcome
+        assert len(state["findings"]) == findings
+
+
+def test_legacy_ownership_only_flags_are_dropped_and_migration_is_idempotent() -> None:
+    state = {"risk_flags": [{"category": "ownership", "evaluation": "yes"}], "evidence": [], "assessments": [], "findings": []}
+    assert migrate_legacy_risk_flags(state) is True
+    assert "risk_flags" not in state
+    assert state["assessments"] == []
+    assert migrate_legacy_risk_flags(state) is False
+
+
+def test_malformed_legacy_csp_is_visible_as_an_inconclusive_migration_limitation() -> None:
+    state = _legacy_csp_state(None)
+    state["risk_flags"][0].pop("evidence")
+    migrate_legacy_risk_flags(state)
+    assert state["assessments"][-1]["outcome"] == "inconclusive"
+    assert state["assessments"][-1]["provenance"]["limitations"]
+    assert state["findings"][-1]["confidence"]["limitations"]
+
+
+def test_loading_a_migrated_legacy_snapshot_persists_it() -> None:
+    state = _legacy_csp_state("yes")
+    state["assessments"].append({"assessment_id": "rating", "assessment_type": "risk_rating", "provenance": {"method": "deterministic_rule_based"}})
+    snapshot = {"saved_at": "2026-01-01T00:00:00Z", "identity": {"customer_name": "Example Ltd", "jurisdiction": "GB", "case_id": "1"}, "graph_state": state}
+    SESSIONS.clear()
+    to_thread = AsyncMock(side_effect=lambda func, *args, **kwargs: func(*args, **kwargs))
+    with patch("src.backend.app.get_completed_state", return_value=snapshot), patch("src.backend.app.save_completed_state", return_value={"saved_at": "2026-01-02T00:00:00Z", "identity": snapshot["identity"]}) as persist, patch("src.backend.app.asyncio.to_thread", to_thread):
+        response = asyncio.run(load_completed_cdd_state(CDDStateLookupRequest(session_id="migration-test", customer_name="Example Ltd", jurisdiction="GB")))
+    assert "risk_flags" not in response["cdd_state"]
+    assert response["cdd_state"]["findings"][-1]["category"] == "csp_address"
+    persist.assert_called_once()
 
 
 def test_resumed_pipeline_syncs_completion_and_persists_the_completed_state() -> None:
