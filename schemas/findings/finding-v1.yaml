@@ -82,7 +82,7 @@ properties:
       - rationale
     properties:
       level:
-        enum: [low, medium, high, critical]
+        enum: [not_applicable, low, medium, high, critical]
       rationale:
         type: string
         minLength: 1

@@ -89,6 +89,8 @@ def test_legacy_csp_outcomes_become_canonical_records() -> None:
         assert state["assessments"][-1]["schema_version"] == "csp_address_assessment/v1"
         assert state["assessments"][-1]["outcome"] == outcome
         assert len(state["findings"]) == findings
+        if findings:
+            assert state["findings"][-1]["severity"]["level"] == "not_applicable"
 
 
 def test_legacy_ownership_only_flags_are_dropped_and_migration_is_idempotent() -> None:

@@ -14,6 +14,7 @@ def test_csp_node_replaces_only_prior_csp_records(evaluate_csp):
     assert {item["assessment_type"] for item in result["assessments"].value} == {"csp_address", "other"}
     assert {item["category"] for item in result["findings"].value} == {"csp_address", "other"}
     assert result["findings"].value[-1]["schema_version"] == "finding/v1"
+    assert result["findings"].value[-1]["severity"]["level"] == "not_applicable"
 
 
 @patch("src.tools.csp_assessment.evaluate_csp_address")
@@ -30,3 +31,4 @@ def test_inconclusive_csp_result_has_a_finding(evaluate_csp):
     result = assess_csp_address({"cdd": {"company_business_profile": {"customer_static": {"registered_address": {"full_address": "1 Example Street"}}}}})
     assert result["assessments"].value[0]["outcome"] == "inconclusive"
     assert result["findings"].value[0]["category"] == "csp_address"
+    assert result["findings"].value[0]["severity"]["level"] == "not_applicable"

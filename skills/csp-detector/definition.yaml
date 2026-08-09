@@ -1,2 +1,32 @@
 name: csp-detector
 description: Assess whether a company's registered address appears to be used by a company service provider (CSP) using cited web-search evidence. Use when evaluating a CDD red flag for registered-office, virtual-office, formation-agent, registered-agent, or corporate-services indicators.
+assessment:
+  schema: csp_address_assessment/v1
+  required: [is_csp, confidence, explanation]
+  outcomes: ["yes", "no", "inconclusive"]
+  confidence_levels: [low, medium, high]
+policy:
+  address_matching:
+    require_exact_address: true
+    unit_number_is_part_of_address: true
+    building_or_postal_only_is_insufficient_when_subject_has_unit: true
+    direct_provider_evidence_for_exact_unit_is_sufficient: true
+  direct_service_indicators:
+    - registered office
+    - incorporation
+    - formation
+    - corporate secretarial
+    - fiduciary
+    - nominee
+    - virtual office
+    - registered agent
+  shared_address:
+    minimum_unrelated_entities: 3
+  decision_rules:
+    yes: Cited evidence directly identifies a CSP at the exact address, or identifies at least the configured number of unrelated entities using that exact address.
+    no: Available evidence supports a non-CSP use and does not show credible shared-address or direct-provider indicators.
+    inconclusive: Evidence is insufficient, contradictory, irrelevant, building-only, or unavailable.
+finding:
+  severity:
+    level: not_applicable
+    rationale: CSP address detection is an address-service indicator; it does not independently assess the severity of financial-crime risk.
