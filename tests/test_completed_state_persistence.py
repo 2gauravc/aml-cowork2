@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+from jsonschema import Draft202012Validator
+
 from src.backend.app import CDDStateLookupRequest, SESSIONS, _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready, load_completed_cdd_state
+from src.tools.adverse_news import load_finding_schema
 from src.utils.legacy_cdd_state import migrate_legacy_risk_flags
 
 
@@ -103,6 +106,9 @@ def test_malformed_legacy_csp_is_visible_as_an_inconclusive_migration_limitation
     assert state["assessments"][-1]["outcome"] == "inconclusive"
     assert state["assessments"][-1]["provenance"]["limitations"]
     assert state["findings"][-1]["confidence"]["limitations"]
+    assert state["findings"][-1]["source"]["producer_type"] == "tool"
+    assert state["findings"][-1]["migration"]["method"] == "legacy_risk_flags_migration"
+    assert not list(Draft202012Validator(load_finding_schema()).iter_errors(state["findings"][-1]))
 
 
 def test_loading_a_migrated_legacy_snapshot_persists_it() -> None:
