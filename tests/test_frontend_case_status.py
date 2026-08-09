@@ -103,6 +103,9 @@ def test_standalone_adverse_news_tool_filters_cdd_records_and_supports_both_mode
     assert "← Previous" in app
     assert "Next →" in app
     assert "Review in Adverse News tool" in app
+    assert "showAdverseDetails" in app
+    assert 'Identity match: ${statusLabel(finding.adverse_news?.identity_match?.status)}' in app
+    assert 'Adverse event: ${statusLabel(finding.adverse_news?.adverse_event?.event_category)}' in app
 
 
 def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> None:

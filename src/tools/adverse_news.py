@@ -215,6 +215,8 @@ def _overlay_leaf_schema(name: str, definition: dict[str, Any] | None = None) ->
     values = (definition or {}).get("status_values") if name == "status" else None
     if name == "event_category":
         values = (definition or {}).get("event_categories")
+    if name == "legal_or_procedural_status":
+        values = (definition or {}).get("legal_or_procedural_status_values")
     if isinstance(values, list):
         return {"type": "string", "enum": values}
     return {"type": "string"}

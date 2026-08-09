@@ -40,14 +40,34 @@ output:
         - event_date
         - jurisdiction
       event_categories:
-        - adverse_reporting
-        - allegations
-        - enforcement_action
-        - sanctions_or_watchlist_reporting
+        - money_laundering
+        - terrorist_financing
+        - proliferation_financing
+        - sanctions_evasion_or_violation
         - fraud
-        - corruption
-        - financial_crime
-        - other
+        - bribery_or_corruption
+        - tax_evasion_or_tax_crime
+        - embezzlement_or_misappropriation
+        - market_abuse_or_insider_dealing
+        - cybercrime
+        - organised_crime_or_racketeering
+        - drug_trafficking
+        - human_trafficking_or_migrant_smuggling
+        - arms_trafficking
+        - illicit_trade_or_smuggling
+        - environmental_crime
+        - other_serious_crime
+      legal_or_procedural_status_values:
+        - allegation_or_media_report
+        - investigation
+        - charge_or_indictment
+        - prosecution_or_trial
+        - conviction
+        - civil_or_regulatory_action
+        - enforcement_penalty_or_settlement
+        - sanctions_designation
+        - acquittal_or_dismissal
+        - unknown
     screening_coverage:
       required:
         - queries

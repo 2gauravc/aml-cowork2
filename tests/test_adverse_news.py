@@ -36,6 +36,7 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual(overlay["properties"]["screened_entity"]["properties"]["disambiguators_used"]["type"], "array")
         self.assertEqual(overlay["properties"]["identity_match"]["properties"]["status"]["enum"], ["matched", "ambiguous", "not_matched"])
         self.assertEqual(overlay["properties"]["adverse_event"]["properties"]["event_category"]["enum"], definition["overlay"]["properties"]["adverse_event"]["event_categories"])
+        self.assertEqual(overlay["properties"]["adverse_event"]["properties"]["legal_or_procedural_status"]["enum"], definition["overlay"]["properties"]["adverse_event"]["legal_or_procedural_status_values"])
         self.assertEqual(overlay["properties"]["screening_coverage"]["properties"]["limitations"]["type"], "array")
         self.assertEqual(overlay["properties"]["identity_match"]["required"], ["status", "confidence", "rationale"])
         self.assertEqual(overlay["properties"]["screening_coverage"]["required"], ["queries", "source_evidence_ids", "limitations"])
@@ -195,11 +196,17 @@ class AdverseNewsTests(unittest.TestCase):
     def test_skill_contains_policy_guidance_not_runtime_contract_details(self) -> None:
         instructions = load_adverse_news_definition()["instructions"]
 
-        self.assertIn("## Identity and source assessment", instructions)
+        self.assertIn("## Identity attribution", instructions)
+        self.assertIn("## Source assessment", instructions)
         self.assertIn("Confidence is determined by identity attribution", instructions)
         self.assertIn("Establish the severity baseline", instructions)
+        self.assertIn("Classify the underlying event", instructions)
         self.assertNotIn("Generic finding runtime contract", instructions)
         self.assertNotIn("x-runtime-owned-fields", instructions)
+        self.assertNotIn("construct queries", instructions)
+        self.assertNotIn("configured adverse-news terms", instructions)
+        self.assertNotIn("untrusted evidence", instructions)
+        self.assertNotIn("data_gap", instructions)
 
 
 def _draft() -> dict:
@@ -215,7 +222,7 @@ def _draft() -> dict:
         "adverse_news": {
             "screened_entity": {"entity_type": "ultimate_beneficial_owner", "name_used": "Alex Chen", "disambiguators_available": {"nationality": "Singapore"}, "disambiguators_used": ["nationality"]},
             "identity_match": {"status": "ambiguous", "confidence": "medium", "rationale": "Name and nationality align."},
-            "adverse_event": {"event_category": "enforcement_action", "summary": "Potential regulatory notice.", "legal_or_procedural_status": "Unconfirmed.", "event_date": "2024-05-10", "jurisdiction": "Singapore"},
+            "adverse_event": {"event_category": "bribery_or_corruption", "summary": "Potential regulatory notice.", "legal_or_procedural_status": "investigation", "event_date": "2024-05-10", "jurisdiction": "Singapore"},
             "screening_coverage": {"queries": ["Alex Chen enforcement"], "source_evidence_ids": [], "limitations": ["Identity not confirmed."]},
         },
     }

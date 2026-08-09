@@ -2284,7 +2284,7 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
               <p><LinkedAdverseNewsText text={entityOutcome?.summary || "No entity-level assessment was recorded."} evidence={result.evidence || []} /></p>
               {entityOutcome?.limitations?.length ? <p className="empty">{`Limitations: ${entityOutcome.limitations.join(" ")}`}</p> : null}
               <h3>Findings</h3>
-              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">No material attributable adverse-news findings were identified in the retained results for this entity.</p>}
+              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} showAdverseDetails />) : <p className="empty">No material attributable adverse-news findings were identified in the retained results for this entity.</p>}
               <h3>Evidence</h3>
               {evidence.length ? <div className="csp-sources">{evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence for this entity.</p>}
             </Section>
@@ -2295,7 +2295,7 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
   );
 }
 
-function AdverseNewsFinding({ evidenceById, finding, popoverId }) {
+function AdverseNewsFinding({ evidenceById, finding, popoverId, showAdverseDetails = false }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const sourceButtonRef = useRef(null);
   const evidenceItems = (finding.relevant_evidence_ids || [])
@@ -2314,6 +2314,8 @@ function AdverseNewsFinding({ evidenceById, finding, popoverId }) {
         <strong>{`${subject}${finding.title ? ` — ${finding.title}` : ""}`}</strong>
         <span>{finding.summary || "No summary was recorded."}</span>
         <div className="adverse-news-finding-tags">
+          {showAdverseDetails && <span className="adverse-news-finding-tag identity-match-tag">{`Identity match: ${statusLabel(finding.adverse_news?.identity_match?.status)}`}</span>}
+          {showAdverseDetails && <span className="adverse-news-finding-tag adverse-event-tag">{`Adverse event: ${statusLabel(finding.adverse_news?.adverse_event?.event_category)}`}</span>}
           <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(finding.confidence?.level)}`}</span>
           <span className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}>{`Severity: ${statusLabel(finding.severity?.level)}`}</span>
           <small>{`Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</small>
