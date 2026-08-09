@@ -1,0 +1,54 @@
+name: adverse-news-screening
+description: Assess material, attributable adverse-news search results using public-web evidence. Use when a CDD workflow needs evidence-grounded findings, confidence and severity assessment, or analyst actions and RFIs.
+input:
+  search_terms: 'enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist'
+assessment:
+  schema: adverse_news_assessment/v1
+  required:
+    - outcome
+    - summary
+    - limitations
+    - entity_outcomes
+output:
+  schema: adverse_news/v1
+  required:
+    - screened_entity
+    - identity_match
+    - adverse_event
+    - screening_coverage
+  properties:
+    screened_entity:
+      required:
+        - entity_type
+        - name_used
+        - disambiguators_used
+    identity_match:
+      required:
+        - status
+        - confidence
+        - rationale
+      status_values:
+        - matched
+        - ambiguous
+        - not_matched
+    adverse_event:
+      required:
+        - event_category
+        - summary
+        - legal_or_procedural_status
+        - event_date
+        - jurisdiction
+      event_categories:
+        - adverse_reporting
+        - allegations
+        - enforcement_action
+        - sanctions_or_watchlist_reporting
+        - fraud
+        - corruption
+        - financial_crime
+        - other
+    screening_coverage:
+      required:
+        - queries
+        - source_evidence_ids
+        - limitations

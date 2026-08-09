@@ -12,6 +12,8 @@ import requests
 import yaml
 from openai import OpenAI, OpenAIError
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "adverse-news-screening" / "SKILL.md"
@@ -27,10 +29,9 @@ class AdverseNewsError(RuntimeError):
 def load_adverse_news_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     """Load the overlay declaration and instructions from the reusable skill."""
     try:
-        raw = Path(path).read_text(encoding="utf-8")
-        _, front_matter, instructions = raw.split("---\n", 2)
-        metadata = yaml.safe_load(front_matter)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+        instructions = Path(path).read_text(encoding="utf-8")
+        metadata, definition_path, definition_version = load_skill_definition(path)
+    except (OSError, SkillDefinitionError) as exc:
         raise AdverseNewsError(f"Adverse-news skill could not be loaded: {exc}") from exc
     output = metadata.get("output") if isinstance(metadata, dict) else None
     if not isinstance(output, dict) or output.get("schema") != "adverse_news/v1":
@@ -48,7 +49,9 @@ def load_adverse_news_definition(path: str | Path = SKILL_PATH) -> dict[str, Any
         "assessment": assessment,
         "input": {"search_terms": _search_terms_from_metadata(metadata)},
         "instructions": instructions.strip(),
-        "path": str(path),
+        "path": definition_path,
+        "definition_version": definition_version,
+        "instructions_path": str(path),
     }
 
 

@@ -9,6 +9,8 @@ from typing import Any
 import requests, yaml
 from openai import OpenAI, OpenAIError
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "digital-footprint" / "SKILL.md"
 FINDING_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "findings" / "finding-v1.yaml"
@@ -28,9 +30,9 @@ def load_finding_schema(path: str | Path = FINDING_SCHEMA_PATH) -> dict[str, Any
 
 def load_digital_footprint_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        _, front, instructions = Path(path).read_text(encoding="utf-8").split("---\n", 2)
-        metadata = yaml.safe_load(front)
-    except (OSError, ValueError, yaml.YAMLError) as exc: raise DigitalFootprintError(f"Digital-footprint skill could not be loaded: {exc}") from exc
+        instructions = Path(path).read_text(encoding="utf-8")
+        metadata, definition_path, definition_version = load_skill_definition(path)
+    except (OSError, SkillDefinitionError) as exc: raise DigitalFootprintError(f"Digital-footprint skill could not be loaded: {exc}") from exc
     input_ = metadata.get("input") if isinstance(metadata, dict) else None
     assessment, output = metadata.get("assessment"), metadata.get("output") if isinstance(metadata, dict) else (None, None)
     terms = input_.get("search_terms") if isinstance(input_, dict) else None
@@ -49,7 +51,7 @@ def load_digital_footprint_definition(path: str | Path = SKILL_PATH) -> dict[str
         normalized.append({"key": key, "label": label.strip()})
     if len({item["key"] for item in normalized}) != len(normalized): raise DigitalFootprintError("Digital-footprint dimensions must have unique keys")
     assessment_definition = {"schema_version": assessment["schema"], "sections": [{"id": "presence_and_visibility", "title": presence.get("title") or "Presence and Visibility", "type": "scorecard", "dimensions": normalized}]}
-    return {"input": {"search_terms": [term.strip() for term in terms]}, "assessment": assessment, "assessment_definition": assessment_definition, "overlay": output, "instructions": instructions.strip(), "path": str(path)}
+    return {"input": {"search_terms": [term.strip() for term in terms]}, "assessment": assessment, "assessment_definition": assessment_definition, "overlay": output, "instructions": instructions.strip(), "path": definition_path, "definition_version": definition_version, "instructions_path": str(path)}
 
 def build_search_queries(company_name: str, *, search_terms: list[str], jurisdiction: str | None = None, registration_number: str | None = None, known_domain: str | None = None, registered_address: str | None = None) -> list[str]:
     identity = " ".join(part for part in [f'"{company_name}"', jurisdiction, registration_number, known_domain, registered_address] if part)

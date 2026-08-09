@@ -10,6 +10,8 @@ from typing import Any
 import yaml
 from openai import OpenAI, OpenAIError
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "shell-company-risk" / "SKILL.md"
 DEFAULT_MODEL = os.getenv("OPENAI_SHELL_COMPANY_RISK_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
@@ -22,9 +24,9 @@ class ShellCompanyRiskError(RuntimeError):
 
 def load_shell_company_risk_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        _, front, instructions = Path(path).read_text(encoding="utf-8").split("---\n", 2)
-        metadata = yaml.safe_load(front)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+        instructions = Path(path).read_text(encoding="utf-8")
+        metadata, definition_path, definition_version = load_skill_definition(path)
+    except (OSError, SkillDefinitionError) as exc:
         raise ShellCompanyRiskError(f"Shell Company Risk skill could not be loaded: {exc}") from exc
     assessment = metadata.get("assessment") if isinstance(metadata, dict) else None
     factors = metadata.get("factors") if isinstance(metadata, dict) else None
@@ -35,7 +37,7 @@ def load_shell_company_risk_definition(path: str | Path = SKILL_PATH) -> dict[st
         raise ShellCompanyRiskError("Shell Company Risk skill must declare four configured factors")
     if any(item.get("cdd_section") not in SECTIONS for item in factors):
         raise ShellCompanyRiskError("Every Shell Company Risk factor must declare a CDD section")
-    return {"assessment": assessment, "factors": sorted(factors, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": str(path)}
+    return {"assessment": assessment, "factors": sorted(factors, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": definition_path, "definition_version": definition_version, "instructions_path": str(path)}
 
 
 def evaluate_shell_company_risk(state: dict[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,8 @@ from typing import Any
 import requests
 from openai import OpenAI, OpenAIError
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -45,7 +47,11 @@ class CSPAssessmentError(RuntimeError):
 
 def load_csp_skill(path: str | Path = SKILL_PATH) -> str:
     """Load the reusable CSP decision instructions."""
-    return Path(path).read_text(encoding="utf-8")
+    try:
+        load_skill_definition(path)
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, SkillDefinitionError) as exc:
+        raise CSPAssessmentError(f"CSP skill could not be loaded: {exc}") from exc
 
 
 def search_address(address: str, *, company_name: str | None = None) -> dict[str, Any]:
@@ -112,6 +118,7 @@ def evaluate_csp_address(
         search_results=search["results"],
         skill_text=load_csp_skill(skill_path),
     )
+    _, definition_path, definition_version = load_skill_definition(skill_path)
     return {
         "registered_address": address,
         "company_name": company_name,
@@ -119,6 +126,8 @@ def evaluate_csp_address(
         "assessment": assessment,
         "sources": search["results"],
         "skill_path": str(skill_path),
+        "definition_path": definition_path,
+        "definition_version": definition_version,
         "evaluated_at": datetime.now(UTC).isoformat(),
     }
 

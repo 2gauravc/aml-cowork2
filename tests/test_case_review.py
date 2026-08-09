@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.agents.nodes import generate_case_review
 from src.tools.case_review import generate_case_review_summary, load_case_review_skill, unavailable_case_review
+from src.utils.skill_definitions import load_skill_definition
 
 
 class CaseReviewTests(unittest.TestCase):
@@ -75,7 +77,7 @@ class CaseReviewTests(unittest.TestCase):
     def test_loads_reusable_case_review_skill(self) -> None:
         skill = load_case_review_skill()
 
-        self.assertIn("name: case-assessment", skill)
+        self.assertEqual(load_skill_definition(Path(__file__).parents[1] / "skills" / "case-assessment" / "SKILL.md")[0]["name"], "case-assessment")
         self.assertIn("# CDD Case Review", skill)
         self.assertIn("Requests for Information", skill)
 

@@ -1,0 +1,2 @@
+name: csp-detector
+description: Assess whether a company's registered address appears to be used by a company service provider (CSP) using cited web-search evidence. Use when evaluating a CDD red flag for registered-office, virtual-office, formation-agent, registered-agent, or corporate-services indicators.

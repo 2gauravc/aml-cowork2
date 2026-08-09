@@ -703,6 +703,7 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             result["assessment"], result["entities"], result["queries"], list(source_ids.values()),
             run_id, result["evaluated_at"], bool(findings),
         )
+        assessment["definition"] = {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")}
         return {"evidence": [classify_evidence_item(item) for item in source_evidence], "findings": findings, "assessments": [assessment]}
     except AdverseNewsError as exc:
         evaluated_at = datetime.now(UTC).isoformat()
@@ -745,7 +746,7 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
         for source in result["sources"]:
             evidence_id = f"evidence:digital-footprint:{uuid4().hex}"; ids[source["id"]] = evidence_id
             evidence.append({"evidence_id": evidence_id, "source": "Tavily", "tool": "digital_footprint_assessment", "description": source.get("title") or "Digital-footprint web search result", "relevance_tags": ["digital_footprint", "web_search"], "data": source, "source_url": source.get("url"), "published_at": source.get("published_date"), "collected_at": result["evaluated_at"]})
-        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "assessment_type": "digital_footprint", "schema_version": result["definition"]["assessment_definition"]["schema_version"], "definition": result["definition"]["assessment_definition"], "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
+        assessment = {"assessment_id": f"assessment:digital-footprint:{uuid4().hex}", "assessment_type": "digital_footprint", "schema_version": result["definition"]["assessment_definition"]["schema_version"], "definition": {**result["definition"]["assessment_definition"], "skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")}, "tool": "digital_footprint_assessment", "run_id": run_id, "created_at": result["evaluated_at"], "company_inputs": result["company_inputs"], "queries": result["queries"], "source_evidence_ids": list(ids.values()), **result["assessment"]}
         findings=[]
         for draft in result["findings"]:
             refs=draft.get("source_refs") or []; unknown=set(refs)-set(ids)
@@ -1019,7 +1020,7 @@ def assess_cdd_completeness(state: CDDState) -> dict[str, Any]:
             tool="cdd_completeness",
             description="Evaluated configured CDD completeness checks",
             source="CDD Completeness",
-            data={"checks": result["assessments"], "skill_path": result["definition"]["path"]},
+            data={"checks": result["assessments"], "skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")},
             relevance_tags=["cdd_completeness", "policy"],
         )
         evidence["evidence_id"] = evidence_id
@@ -1034,7 +1035,7 @@ def assess_cdd_completeness(state: CDDState) -> dict[str, Any]:
                 "tool": "cdd_completeness",
                 "run_id": run_id,
                 "created_at": evaluated_at,
-                "definition": {"skill_path": result["definition"]["path"], "check_id": check["check_id"], "display_order": check["display_order"]},
+                "definition": {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version"), "check_id": check["check_id"], "display_order": check["display_order"]},
                 **check,
                 "source_evidence_ids": [evidence_id],
             }
@@ -1075,7 +1076,7 @@ def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
             tool="evidence_quality",
             description="Evaluated configured CDD claims for source reliability, evidence sufficiency, consistency, and plausibility",
             source="Evidence Quality",
-            data={"claims": result["assessments"], "skill_path": result["definition"]["path"]},
+            data={"claims": result["assessments"], "skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")},
             relevance_tags=["evidence_quality", "policy"],
         )
         evidence["evidence_id"] = evidence_id
@@ -1089,7 +1090,7 @@ def assess_evidence_quality(state: CDDState) -> dict[str, Any]:
                 "tool": "evidence_quality",
                 "run_id": run_id,
                 "created_at": evaluated_at,
-                "definition": {"skill_path": result["definition"]["path"], "claim_id": check["claim_id"], "display_order": check["display_order"], "cdd_section": check["cdd_section"], "dimensions": result["definition"]["dimensions"]},
+                "definition": {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version"), "claim_id": check["claim_id"], "display_order": check["display_order"], "cdd_section": check["cdd_section"], "dimensions": result["definition"]["dimensions"]},
                 "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in check["selected_evidence"]]],
                 **check,
             }
@@ -1128,14 +1129,14 @@ def assess_other_risk_factors(state: CDDState) -> dict[str, Any]:
     try:
         result = evaluate_other_risk_factors(state)
         evidence_id = f"evidence:other-risk-factors:{uuid4().hex}"
-        evidence = _evidence(tool="other_risk_factors", description="Evaluated configured Other Risk Factors", source="Other Risk Factors", data={"factors": result["assessments"], "skill_path": result["definition"]["path"]}, relevance_tags=["other_risk_factors", "policy"])
+        evidence = _evidence(tool="other_risk_factors", description="Evaluated configured Other Risk Factors", source="Other Risk Factors", data={"factors": result["assessments"], "skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")}, relevance_tags=["other_risk_factors", "policy"])
         evidence["evidence_id"] = evidence_id
         profile = (((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {})
         subject = {"entity_id": str(profile.get("registration_number") or "") or None, "entity_type": "company", "name": profile.get("name") or (state.get("metadata") or {}).get("customer", {}).get("name") or "Customer"}
         assessments, findings = [], []
         for factor in result["assessments"]:
             assessment_id = f"assessment:other-risk-factors:{factor['factor_id']}:{uuid4().hex}"
-            assessment = {"assessment_id": assessment_id, "assessment_type": "other_risk_factors", "schema_version": result["definition"]["assessment"]["schema"], "tool": "other_risk_factors", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "method": factor["method"], "display_order": factor["display_order"]}, "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in factor["selected_evidence"]]], "upstream_assessment_ids": factor["upstream_assessment_ids"], "upstream_finding_ids": factor["upstream_finding_ids"], **factor}
+            assessment = {"assessment_id": assessment_id, "assessment_type": "other_risk_factors", "schema_version": result["definition"]["assessment"]["schema"], "tool": "other_risk_factors", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version"), "factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "method": factor["method"], "display_order": factor["display_order"]}, "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in factor["selected_evidence"]]], "upstream_assessment_ids": factor["upstream_assessment_ids"], "upstream_finding_ids": factor["upstream_finding_ids"], **factor}
             assessments.append(assessment)
             if factor["outcome"] not in {"triggered", "inconclusive"}:
                 continue
@@ -1153,12 +1154,12 @@ def assess_shell_company_risk(state: CDDState) -> dict[str, Any]:
     try:
         result = evaluate_shell_company_risk(state)
         evidence_id = f"evidence:shell-company-risk:{uuid4().hex}"
-        evidence = _evidence(tool="shell_company_risk", description="Evaluated configured Shell Company Risk factors", source="Shell Company Risk", data={"factors": result["assessments"], "skill_path": result["definition"]["path"]}, relevance_tags=["shell_company_risk", "policy"]); evidence["evidence_id"] = evidence_id
+        evidence = _evidence(tool="shell_company_risk", description="Evaluated configured Shell Company Risk factors", source="Shell Company Risk", data={"factors": result["assessments"], "skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")}, relevance_tags=["shell_company_risk", "policy"]); evidence["evidence_id"] = evidence_id
         profile = (((state.get("cdd") or {}).get("company_business_profile") or {}).get("customer_static") or {}); subject = {"entity_id": str(profile.get("registration_number") or "") or None, "entity_type": "company", "name": profile.get("name") or (state.get("metadata") or {}).get("customer", {}).get("name") or "Customer"}
         assessments, findings = [], []
         for factor in result["assessments"]:
             assessment_id = f"assessment:shell-company-risk:{factor['factor_id']}:{uuid4().hex}"
-            record = {"assessment_id": assessment_id, "assessment_type": "shell_company_risk", "schema_version": result["definition"]["assessment"]["schema"], "tool": "shell_company_risk", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "method": factor["method"], "display_order": factor["display_order"]}, "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in factor["selected_evidence"]]], **factor}
+            record = {"assessment_id": assessment_id, "assessment_type": "shell_company_risk", "schema_version": result["definition"]["assessment"]["schema"], "tool": "shell_company_risk", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version"), "factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "method": factor["method"], "display_order": factor["display_order"]}, "source_evidence_ids": [evidence_id, *[item["evidence_id"] for item in factor["selected_evidence"]]], **factor}
             assessments.append(record)
             if factor["outcome"] not in {"triggered", "inconclusive"}: continue
             finding = {"finding_id": f"finding:shell-company-risk:{factor['factor_id']}:{uuid4().hex}", "schema_version": "finding/v1", "category": "shell_company_risk", "assessment_id": assessment_id, "check_id": factor["factor_id"], "title": factor["title"], "summary": factor["summary"], "subject": subject, "confidence": {"level": "medium", "rationale": "Derived from retained CDD facts and the configured Shell Company Risk skill.", "limitations": ["This is an indicator assessment, not a shell-company determination."]}, "severity": {"level": factor["severity"], "rationale": "Configured by the Shell Company Risk skill."}, "potential_impact_risk": "The identified indicator may require further review or enhanced due diligence before a case decision.", "recommended_action_rfi": {"internal_actions": [factor["action"]], "rfi": []}, "source": {"producer_type": "tool", "producer_name": "shell_company_risk", "run_id": run_id, "created_at": evaluated_at}, "relevant_evidence_ids": record["source_evidence_ids"], "shell_company_risk": {"factor_id": factor["factor_id"], "cdd_section": factor["cdd_section"], "detail": factor["detail"]}}
@@ -1174,7 +1175,7 @@ def assess_risk_rating(state: CDDState) -> dict[str, Any]:
     try:
         result = evaluate_risk_rating(state); assessment_id = f"assessment:risk-rating:{uuid4().hex}"
         evidence_ids = [item["evidence_id"] for item in result["inputs"]["evidence"]]
-        assessment = {"assessment_id": assessment_id, "assessment_type": "risk_rating", "schema_version": result["definition"]["assessment"]["schema"], "tool": "risk_rating", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "ratings": result["definition"]["ratings"], "factor_scores": result["definition"]["factor_scores"], "thresholds": result["definition"]["thresholds"]}, "rating": result["result"]["rating"], "total_score": result["result"]["total_score"], "contributing_factors": result["result"]["contributing_factors"], "summary": result["result"]["rationale"], "rationale": result["result"]["rationale"], "rule_explanation": result["result"]["rule_explanation"], "matched_criteria": result["result"]["matched_criteria"], "limitations": result["result"]["limitations"], "monitoring_posture": result["result"]["monitoring_posture"], "selected_finding_ids": [item["finding_id"] for item in result["inputs"]["findings"]], "selected_assessment_ids": [item["assessment_id"] for item in result["inputs"]["assessments"]], "selected_evidence_ids": evidence_ids, "source_evidence_ids": evidence_ids, "provenance": {"method": "deterministic_rule_based"}}
+        assessment = {"assessment_id": assessment_id, "assessment_type": "risk_rating", "schema_version": result["definition"]["assessment"]["schema"], "tool": "risk_rating", "run_id": run_id, "created_at": evaluated_at, "definition": {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version"), "ratings": result["definition"]["ratings"], "factor_scores": result["definition"]["factor_scores"], "thresholds": result["definition"]["thresholds"]}, "rating": result["result"]["rating"], "total_score": result["result"]["total_score"], "contributing_factors": result["result"]["contributing_factors"], "summary": result["result"]["rationale"], "rationale": result["result"]["rationale"], "rule_explanation": result["result"]["rule_explanation"], "matched_criteria": result["result"]["matched_criteria"], "limitations": result["result"]["limitations"], "monitoring_posture": result["result"]["monitoring_posture"], "selected_finding_ids": [item["finding_id"] for item in result["inputs"]["findings"]], "selected_assessment_ids": [item["assessment_id"] for item in result["inputs"]["assessments"]], "selected_evidence_ids": evidence_ids, "source_evidence_ids": evidence_ids, "provenance": {"method": "deterministic_rule_based"}}
         return {"assessments": [assessment], "findings": [], "evidence": []}
     except RiskRatingError as exc:
         return {"assessments": [{"assessment_id": f"assessment:risk-rating:{uuid4().hex}", "assessment_type": "risk_rating", "schema_version": "risk_rating_assessment/v1", "tool": "risk_rating", "run_id": run_id, "created_at": evaluated_at, "rating": "inconclusive", "summary": "Risk Rating assessment could not be completed.", "limitations": [str(exc)], "selected_finding_ids": [], "selected_assessment_ids": [], "selected_evidence_ids": []}], "findings": [], "evidence": []}

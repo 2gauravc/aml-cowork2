@@ -9,6 +9,8 @@ from typing import Any
 import yaml
 from openai import OpenAI, OpenAIError
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "other-risk-factors" / "SKILL.md"
 SECTIONS = {"customer_business_profile", "ownership_and_control", "identity_verification", "screening"}
@@ -21,9 +23,9 @@ class OtherRiskFactorsError(RuntimeError):
 
 def load_other_risk_factors_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        _, front, instructions = Path(path).read_text(encoding="utf-8").split("---\n", 2)
-        metadata = yaml.safe_load(front)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+        instructions = Path(path).read_text(encoding="utf-8")
+        metadata, definition_path, definition_version = load_skill_definition(path)
+    except (OSError, SkillDefinitionError) as exc:
         raise OtherRiskFactorsError(f"Other Risk Factors skill could not be loaded: {exc}") from exc
     assessment = metadata.get("assessment") if isinstance(metadata, dict) else None
     factors = metadata.get("factors") if isinstance(metadata, dict) else None
@@ -34,7 +36,7 @@ def load_other_risk_factors_definition(path: str | Path = SKILL_PATH) -> dict[st
         raise OtherRiskFactorsError("Other Risk Factors skill must declare the five configured factors")
     if any(item.get("cdd_section") not in SECTIONS for item in factors):
         raise OtherRiskFactorsError("Every Other Risk Factors factor must declare a CDD section")
-    return {"assessment": assessment, "factors": sorted(factors, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": str(path)}
+    return {"assessment": assessment, "factors": sorted(factors, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": definition_path, "definition_version": definition_version, "instructions_path": str(path)}
 
 
 def evaluate_other_risk_factors(state: dict[str, Any]) -> dict[str, Any]:

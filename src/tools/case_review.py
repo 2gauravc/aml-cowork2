@@ -9,6 +9,8 @@ from typing import Any
 
 from openai import OpenAI, OpenAIError
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 
 DEFAULT_MODEL = os.getenv("OPENAI_CASE_REVIEW_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5.6")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -89,7 +91,11 @@ class CaseReviewError(RuntimeError):
 
 def load_case_review_skill(path: str | Path = SKILL_PATH) -> str:
     """Load the reusable case-review decision instructions."""
-    return Path(path).read_text(encoding="utf-8")
+    try:
+        load_skill_definition(path)
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, SkillDefinitionError) as exc:
+        raise CaseReviewError(f"Case-review skill could not be loaded: {exc}") from exc
 
 
 def generate_case_review_summary(
@@ -137,9 +143,12 @@ def generate_case_review_summary(
         raise CaseReviewError("Case-review summary did not return valid JSON") from exc
     if not isinstance(summary, dict):
         raise CaseReviewError("Case-review summary did not return an object")
+    _, definition_path, definition_version = load_skill_definition(skill_path)
     return {
         "status": "available",
         "skill_path": str(skill_path),
+        "definition_path": definition_path,
+        "definition_version": definition_version,
         "evidence_index": [_evidence_index_item(item, index) for index, item in enumerate(evidence, start=1)],
         **summary,
     }

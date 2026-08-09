@@ -1,5 +1,6 @@
 """Coverage for the Digital Footprint evidence/assessment/findings contract."""
 import json, os, tempfile, unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 from src.tools.digital_footprint import DIGITAL_FOOTPRINT_SCHEMA, DigitalFootprintError, _response_schema, build_search_queries, evaluate_digital_footprint, load_digital_footprint_definition, load_finding_schema, search_digital_footprint
 from src.agents.nodes import digital_footprint_assessment
@@ -19,10 +20,11 @@ class DigitalFootprintTests(unittest.TestCase):
         self.assertNotIn("basic_website", indicators["properties"])
 
     def test_skill_allows_an_optional_explicit_dimension_key(self):
-        with tempfile.NamedTemporaryFile("w") as skill:
-            skill.write("---\ninput: {search_terms: [website]}\nassessment:\n  schema: digital_footprint_assessment/v2\n  presence_and_visibility:\n    dimensions: [{id: official_site, label: Official website}]\noutput: {schema: digital_footprint/v1}\n---\nx")
-            skill.flush()
-            self.assertEqual(load_digital_footprint_definition(skill.name)["assessment_definition"]["sections"][0]["dimensions"], [{"key": "official_site", "label": "Official website"}])
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / "SKILL.md"; definition = Path(directory) / "definition.yaml"
+            skill.write_text("# Test skill\n", encoding="utf-8")
+            definition.write_text("input: {search_terms: [website]}\nassessment:\n  schema: digital_footprint_assessment/v2\n  presence_and_visibility:\n    dimensions: [{id: official_site, label: Official website}]\noutput: {schema: digital_footprint/v1}\n", encoding="utf-8")
+            self.assertEqual(load_digital_footprint_definition(skill)["assessment_definition"]["sections"][0]["dimensions"], [{"key": "official_site", "label": "Official website"}])
 
     def test_query_terms_are_skill_inputs(self):
         self.assertEqual(build_search_queries("Example Ltd", search_terms=["services", "partners"]), ['"Example Ltd" services', '"Example Ltd" partners'])
@@ -33,9 +35,11 @@ class DigitalFootprintTests(unittest.TestCase):
         self.assertEqual(len(sources),1); self.assertEqual(sources[0]["query"],"a")
 
     def test_missing_input_is_clear(self):
-        with tempfile.NamedTemporaryFile("w") as skill:
-            skill.write("---\nname: x\nassessment: {schema: digital_footprint_assessment/v1}\noutput: {schema: digital_footprint/v1}\n---\nx"); skill.flush()
-            with self.assertRaisesRegex(DigitalFootprintError,"input.search_terms"): load_digital_footprint_definition(skill.name)
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / "SKILL.md"; definition = Path(directory) / "definition.yaml"
+            skill.write_text("# Test skill\n", encoding="utf-8")
+            definition.write_text("assessment: {schema: digital_footprint_assessment/v1}\noutput: {schema: digital_footprint/v1}\n", encoding="utf-8")
+            with self.assertRaisesRegex(DigitalFootprintError,"input.search_terms"): load_digital_footprint_definition(skill)
 
     def test_assessment_uses_strict_schema(self):
         response=Mock(); response.output_text=json.dumps(_result()); client=Mock(); client.responses.create.return_value=response

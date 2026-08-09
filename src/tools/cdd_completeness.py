@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "cdd-completeness" / "SKILL.md"
 
@@ -16,9 +18,9 @@ class CDDCompletenessError(RuntimeError):
 
 def load_cdd_completeness_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        _, front, instructions = Path(path).read_text(encoding="utf-8").split("---\n", 2)
-        metadata = yaml.safe_load(front)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+        instructions = Path(path).read_text(encoding="utf-8")
+        metadata, definition_path, definition_version = load_skill_definition(path)
+    except (OSError, SkillDefinitionError) as exc:
         raise CDDCompletenessError(f"CDD Completeness skill could not be loaded: {exc}") from exc
     assessment = metadata.get("assessment") if isinstance(metadata, dict) else None
     checks = metadata.get("checks") if isinstance(metadata, dict) else None
@@ -26,7 +28,7 @@ def load_cdd_completeness_definition(path: str | Path = SKILL_PATH) -> dict[str,
         raise CDDCompletenessError("CDD Completeness skill must declare assessment.schema")
     if not isinstance(checks, list) or len(checks) != 4 or any(not item.get("id") for item in checks if isinstance(item, dict)):
         raise CDDCompletenessError("CDD Completeness skill must declare four identified checks")
-    return {"assessment": assessment, "checks": sorted(checks, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": str(path)}
+    return {"assessment": assessment, "checks": sorted(checks, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": definition_path, "definition_version": definition_version, "instructions_path": str(path)}
 
 
 def evaluate_cdd_completeness(state: dict[str, Any]) -> dict[str, Any]:

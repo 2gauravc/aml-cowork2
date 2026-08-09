@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SKILL_PATH = PROJECT_ROOT / "skills" / "evidence-quality" / "SKILL.md"
 
@@ -16,9 +18,9 @@ class EvidenceQualityError(RuntimeError):
 
 def load_evidence_quality_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        _, front, instructions = Path(path).read_text(encoding="utf-8").split("---\n", 2)
-        metadata = yaml.safe_load(front)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+        instructions = Path(path).read_text(encoding="utf-8")
+        metadata, definition_path, definition_version = load_skill_definition(path)
+    except (OSError, SkillDefinitionError) as exc:
         raise EvidenceQualityError(f"Evidence Quality skill could not be loaded: {exc}") from exc
     assessment = metadata.get("assessment") if isinstance(metadata, dict) else None
     claims = metadata.get("claims") if isinstance(metadata, dict) else None
@@ -39,7 +41,9 @@ def load_evidence_quality_definition(path: str | Path = SKILL_PATH) -> dict[str,
         "dimensions": dimensions,
         "source_classes": metadata.get("source_classes") or {},
         "instructions": instructions.strip(),
-        "path": str(path),
+        "path": definition_path,
+        "definition_version": definition_version,
+        "instructions_path": str(path),
     }
 
 

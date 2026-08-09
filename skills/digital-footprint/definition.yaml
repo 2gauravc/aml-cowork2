@@ -1,0 +1,30 @@
+name: digital-footprint
+description: Assess a company's public digital presence and business profile from retained web evidence. Use for evidence-grounded company footprint assessments, verification gaps, and actionable inconsistencies.
+input:
+  search_terms:
+    - company website services locations
+    - products services customers partners suppliers distributors
+    - recent business activity LinkedIn
+assessment:
+  schema: digital_footprint_assessment/v2
+  required:
+    - presence_and_visibility
+    - digital_business_profile
+    - confidence
+    - limitations
+  presence_and_visibility:
+    title: Presence and Visibility
+    dimensions:
+      - Professional website
+      - Active LinkedIn
+      - Multiple independent references
+      - Recent business activity
+      - Evidence of operations
+output:
+  schema: digital_footprint/v1
+  required:
+    - presence_and_visibility
+    - digital_business_profile
+    - confidence
+    - severity
+    - screening_coverage
