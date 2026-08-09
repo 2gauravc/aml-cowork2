@@ -837,10 +837,20 @@ def _assemble_adverse_news_finding(
     if not isinstance(overlay, dict) or any(field not in overlay for field in required_overlay):
         raise AdverseNewsError("Adverse-news assessment returned an incomplete adverse_news/v1 overlay")
     overlay = deepcopy(overlay)
+    available_disambiguators = entity.get("disambiguators", {})
+    used_disambiguators = overlay.get("screened_entity", {}).get("disambiguators_used")
+    if not isinstance(used_disambiguators, list) or any(
+        not isinstance(name, str) or name not in available_disambiguators
+        for name in used_disambiguators
+    ):
+        raise AdverseNewsError(
+            "Adverse-news finding must identify only available CDD disambiguators used for identity resolution"
+        )
     overlay["screened_entity"] = {
         "entity_type": entity["entity_type"],
         "name_used": entity["name"],
-        "disambiguators_used": entity.get("disambiguators", {}),
+        "disambiguators_available": available_disambiguators,
+        "disambiguators_used": used_disambiguators,
     }
     overlay["screening_coverage"] = {
         **(overlay.get("screening_coverage") or {}),
@@ -864,6 +874,7 @@ def _assemble_adverse_news_finding(
             "adverse_news": overlay,
         }
     )
+    _validate_adverse_news_consistency(finding)
     _validate_finding(finding)
     return finding
 
@@ -886,6 +897,19 @@ def _validate_overlay(value: dict[str, Any], definition: dict[str, Any]) -> None
     for name, child in (definition.get("properties") or {}).items():
         if isinstance(value.get(name), dict) and isinstance(child, dict):
             _validate_overlay(value[name], child)
+
+
+def _validate_adverse_news_consistency(finding: dict[str, Any]) -> None:
+    """Enforce the identity-attribution floor for an adverse-news confidence rating."""
+    adverse_news = finding.get("adverse_news") or {}
+    identity_match = adverse_news.get("identity_match") or {}
+    confidence = finding.get("confidence") or {}
+    if confidence.get("level") != "high":
+        return
+    if identity_match.get("status") != "matched" or identity_match.get("confidence") != "high":
+        raise AdverseNewsError(
+            "High adverse-news finding confidence requires a matched identity with high identity-match confidence"
+        )
 
 
 def _document_requirement_artifacts(state: CDDState) -> list[dict[str, Any]]:

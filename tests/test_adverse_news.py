@@ -7,7 +7,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.agents.nodes import adverse_news_screening
+from src.agents.nodes import _assemble_adverse_news_finding, adverse_news_screening
 from src.backend.app import IndependentAdverseNewsRequest, assess_independent_adverse_news
 from src.tools.adverse_news import AdverseNewsError, _assessment_schema, build_search_queries, entities_for_screening, load_adverse_news_definition, load_finding_schema, search_adverse_news
 
@@ -30,8 +30,12 @@ class AdverseNewsTests(unittest.TestCase):
 
         self.assertEqual(overlay["required"], definition["overlay"]["required"])
         self.assertFalse(overlay["additionalProperties"])
-        self.assertEqual(set(overlay["properties"]["screened_entity"]["properties"]), {"entity_type", "name_used", "disambiguators_used"})
+        self.assertEqual(set(overlay["properties"]["screened_entity"]["properties"]), {"entity_type", "name_used", "disambiguators_available", "disambiguators_used"})
         self.assertEqual(overlay["properties"]["screened_entity"]["properties"]["entity_type"], {"type": "string"})
+        self.assertEqual(overlay["properties"]["screened_entity"]["properties"]["disambiguators_available"]["type"], "object")
+        self.assertEqual(overlay["properties"]["screened_entity"]["properties"]["disambiguators_used"]["type"], "array")
+        self.assertEqual(overlay["properties"]["identity_match"]["properties"]["status"]["enum"], ["matched", "ambiguous", "not_matched"])
+        self.assertEqual(overlay["properties"]["adverse_event"]["properties"]["event_category"]["enum"], definition["overlay"]["properties"]["adverse_event"]["event_categories"])
         self.assertEqual(overlay["properties"]["screening_coverage"]["properties"]["limitations"]["type"], "array")
         self.assertEqual(overlay["properties"]["identity_match"]["required"], ["status", "confidence", "rationale"])
         self.assertEqual(overlay["properties"]["screening_coverage"]["required"], ["queries", "source_evidence_ids", "limitations"])
@@ -68,6 +72,15 @@ class AdverseNewsTests(unittest.TestCase):
         query = build_search_queries([{"key": "ubo:0", "name": "Alex Chen", "disambiguators": {}}], "sanctions OR watchlist")[0]["query"]
 
         self.assertEqual(query, '"Alex Chen" AND (sanctions OR watchlist)')
+
+    def test_person_query_keeps_associated_company_for_disambiguation_not_filtering(self) -> None:
+        query = build_search_queries(
+            [{"key": "ubo:0", "name": "Alex Chen", "disambiguators": {"associated_company": "Example Trading Ltd"}}],
+            "sanctions OR watchlist",
+        )[0]["query"]
+
+        self.assertEqual(query, '"Alex Chen" AND (sanctions OR watchlist)')
+        self.assertNotIn("Example Trading Ltd", query)
 
     def test_skill_requires_non_empty_search_terms_input(self) -> None:
         definition = load_adverse_news_definition()
@@ -110,6 +123,8 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual(finding["category"], "adverse_news")
         self.assertEqual(finding["subject"]["name"], "Alex Chen")
         self.assertEqual(finding["adverse_news"]["screened_entity"]["name_used"], "Alex Chen")
+        self.assertEqual(finding["adverse_news"]["screened_entity"]["disambiguators_available"], {"nationality": "Singapore"})
+        self.assertEqual(finding["adverse_news"]["screened_entity"]["disambiguators_used"], ["nationality"])
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["queries"], ["Alex Chen enforcement"])
         self.assertEqual(finding["adverse_news"]["screening_coverage"]["source_evidence_ids"], finding["relevant_evidence_ids"])
         self.assertEqual(result["evidence"][0]["source"], "Brave Search")
@@ -164,6 +179,28 @@ class AdverseNewsTests(unittest.TestCase):
         state = screening.call_args.args[0]
         self.assertEqual(state["cdd"]["ownership_and_control"]["ubos"], [{"name": "Alpha Ltd"}, {"name": "Beta Ltd"}])
 
+    def test_high_confidence_requires_a_high_confidence_identity_match(self) -> None:
+        draft = _draft()
+        draft["confidence"]["level"] = "high"
+        with self.assertRaisesRegex(AdverseNewsError, "requires a matched identity"):
+            _assemble_adverse_news_finding(
+                draft,
+                {"ultimate_beneficial_owner:0": {"key": "ultimate_beneficial_owner:0", "entity_type": "ultimate_beneficial_owner", "entity_id": "ubo-1", "name": "Alex Chen", "disambiguators": {"nationality": "Singapore"}}},
+                {"source:1": "evidence:adverse-news:1"},
+                "run:adverse-news:test",
+                load_adverse_news_definition()["overlay"],
+                {"ultimate_beneficial_owner:0": "Alex Chen enforcement"},
+            )
+
+    def test_skill_contains_policy_guidance_not_runtime_contract_details(self) -> None:
+        instructions = load_adverse_news_definition()["instructions"]
+
+        self.assertIn("## Identity and source assessment", instructions)
+        self.assertIn("Confidence is determined by identity attribution", instructions)
+        self.assertIn("Establish the severity baseline", instructions)
+        self.assertNotIn("Generic finding runtime contract", instructions)
+        self.assertNotIn("x-runtime-owned-fields", instructions)
+
 
 def _draft() -> dict:
     return {
@@ -176,7 +213,7 @@ def _draft() -> dict:
         "potential_impact_risk": "The relationship could create regulatory and reputational exposure.",
         "recommended_action_rfi": {"internal_actions": ["Verify the authoritative notice."], "rfi": [{"request": "Explain the matter.", "reason": "Confirm identity and status.", "priority": "high"}]},
         "adverse_news": {
-            "screened_entity": {"entity_type": "ultimate_beneficial_owner", "name_used": "Alex Chen", "disambiguators_used": {"nationality": "Singapore"}},
+            "screened_entity": {"entity_type": "ultimate_beneficial_owner", "name_used": "Alex Chen", "disambiguators_available": {"nationality": "Singapore"}, "disambiguators_used": ["nationality"]},
             "identity_match": {"status": "ambiguous", "confidence": "medium", "rationale": "Name and nationality align."},
             "adverse_event": {"event_category": "enforcement_action", "summary": "Potential regulatory notice.", "legal_or_procedural_status": "Unconfirmed.", "event_date": "2024-05-10", "jurisdiction": "Singapore"},
             "screening_coverage": {"queries": ["Alex Chen enforcement"], "source_evidence_ids": [], "limitations": ["Identity not confirmed."]},

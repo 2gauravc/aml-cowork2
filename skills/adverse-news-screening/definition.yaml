@@ -21,6 +21,7 @@ output:
       required:
         - entity_type
         - name_used
+        - disambiguators_available
         - disambiguators_used
     identity_match:
       required:
