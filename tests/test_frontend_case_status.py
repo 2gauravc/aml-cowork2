@@ -158,6 +158,14 @@ def test_shell_company_risk_checker_surfaces_existing_csp_record_without_duplica
     assert '<h3>Screening</h3><strong>CSP Address</strong>' not in app
 
 
+def test_csp_tool_shows_confidence_and_severity_tags() -> None:
+    app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+
+    assert 'const severity = result?.finding_policy?.severity?.level || "not_applicable";' in app
+    assert 'Confidence: ${statusLabel(assessment.confidence)}' in app
+    assert 'Severity: ${statusLabel(severity)}' in app
+
+
 def test_cdd_maker_orders_assessment_cards_and_separates_findings_from_risk_rating() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
     assert 'function Findings' in app

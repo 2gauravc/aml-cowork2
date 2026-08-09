@@ -1514,6 +1514,7 @@ function CSPDetection({
   const presentation = result
     ? riskPresentation({ category: "csp_address", evidence: result })
     : null;
+  const severity = result?.finding_policy?.severity?.level || "not_applicable";
   return (
     <>
       <Section title="CSP Detection">
@@ -1552,6 +1553,10 @@ function CSPDetection({
               <strong>{presentation.title}</strong>
               <span>{`Evaluation: ${presentation.evaluation}. ${presentation.summary}`}</span>
               <p>{assessment.explanation}</p>
+              <div className="adverse-news-finding-tags">
+                <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(assessment.confidence)}`}</span>
+                <span className={`adverse-news-finding-tag severity-tag severity-${severity}`}>{`Severity: ${statusLabel(severity)}`}</span>
+              </div>
             </div>
           </div>
           {(result.sources || []).length > 0 && (
