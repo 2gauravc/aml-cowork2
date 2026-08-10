@@ -681,8 +681,8 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
         source_evidence = []
         source_ids: dict[str, str] = {}
         for item in result["sources"]:
-            evidence_id = f"evidence:adverse-news:{uuid4().hex}"
-            source_ids[item["id"]] = evidence_id
+            evidence_id = item.get("evidence_id") or f"evidence:adverse-news:{uuid4().hex}"
+            source_ids[evidence_id] = evidence_id
             source_evidence.append(
                 {
                     "evidence_id": evidence_id,
@@ -698,11 +698,11 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             )
         entities = {entity["key"]: entity for entity in result["entities"]}
         queries_by_entity = {item["entity_key"]: item["query"] for item in result["queries"]}
-        findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"], queries_by_entity) for draft in result["drafts"]]
         assessment = _assemble_adverse_news_assessment(
             result["assessment"], result["entities"], result["queries"], list(source_ids.values()),
-            run_id, result["evaluated_at"], bool(findings),
+            run_id, result["evaluated_at"], bool(result["drafts"]),
         )
+        findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"], queries_by_entity, assessment) for draft in result["drafts"]]
         assessment["definition"] = {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")}
         return {"evidence": [classify_evidence_item(item) for item in source_evidence], "findings": findings, "assessments": [assessment]}
     except AdverseNewsError as exc:
@@ -753,7 +753,7 @@ def digital_footprint_assessment(state: CDDState) -> dict[str, Any]:
             if unknown: raise DigitalFootprintError(f"Digital-footprint assessment cited unknown sources: {', '.join(sorted(unknown))}")
             overlay=draft.get("digital_footprint") or {}; overlay["screening_coverage"]={**overlay.get("screening_coverage",{}),"queries":result["queries"],"source_evidence_ids":[ids[x] for x in refs],"limitations":assessment["limitations"]}
             finding={key:draft.get(key) for key in ("title","summary","confidence","severity","potential_impact_risk","recommended_action_rfi")}
-            finding.update({"finding_id":f"finding:digital-footprint:{uuid4().hex}","schema_version":"finding/v1","category":"digital_footprint","subject":{"entity_id":result["company_inputs"].get("registration_number"),"entity_type":"company","name":result["company_inputs"]["company_name"]},"source":{"producer_type":"tool","producer_name":"digital_footprint_assessment","run_id":run_id,"created_at":result["evaluated_at"]},"relevant_evidence_ids":[ids[x] for x in refs],"digital_footprint":overlay})
+            finding.update({"finding_id":f"finding:digital-footprint:{uuid4().hex}","schema_version":"finding/v1","category":"digital_footprint","assessment_id":assessment["assessment_id"],"subject":{"entity_id":result["company_inputs"].get("registration_number"),"entity_type":"company","name":result["company_inputs"]["company_name"]},"source":{"producer_type":"tool","producer_name":"digital_footprint_assessment","run_id":run_id,"created_at":result["evaluated_at"]},"relevant_evidence_ids":[ids[x] for x in refs],"digital_footprint":overlay})
             _validate_finding(finding)
             findings.append(finding)
         return {"evidence":[classify_evidence_item(item) for item in evidence],"assessments":[assessment],"findings":findings}
@@ -799,7 +799,7 @@ def _assemble_adverse_news_assessment(
     if outcome not in {"completed_no_material_findings", "completed_inconclusive"} or not isinstance(draft.get("summary"), str) or not isinstance(draft.get("limitations"), list):
         raise AdverseNewsError("Adverse-news assessment returned an incomplete assessment")
     return {
-        "assessment_id": f"assessment:adverse-news:{uuid4().hex}",
+        "assessment_id": draft.get("assessment_id") or f"assessment:adverse-news:{uuid4().hex}",
         "assessment_type": "adverse_news",
         "schema_version": "adverse_news_assessment/v1",
         "tool": "adverse_news_screening",
@@ -810,7 +810,7 @@ def _assemble_adverse_news_assessment(
         "limitations": draft["limitations"],
         "screened_entities": entities,
         "queries": queries,
-        "source_evidence_ids": source_evidence_ids,
+        "source_evidence_ids": draft.get("source_evidence_ids") or source_evidence_ids,
         "entity_outcomes": outcomes,
     }
 
@@ -822,16 +822,22 @@ def _assemble_adverse_news_finding(
     run_id: str,
     overlay_definition: dict[str, Any],
     queries_by_entity: dict[str, str],
+    assessment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     entity = entities.get(str(draft.get("entity_key")))
     if not entity:
         raise AdverseNewsError("Adverse-news assessment returned an unknown entity")
-    refs = draft.get("source_refs")
+    refs = draft.get("relevant_evidence_ids") or draft.get("source_refs")
     if not isinstance(refs, list) or not refs:
         raise AdverseNewsError("Adverse-news finding must cite retained source references")
     unknown = {str(reference) for reference in refs} - set(source_ids)
     if unknown:
         raise AdverseNewsError(f"Adverse-news assessment cited unknown sources: {', '.join(sorted(unknown))}")
+    if assessment is not None:
+        if draft.get("assessment_id") != assessment["assessment_id"]:
+            raise AdverseNewsError("Adverse-news finding must link to its producing assessment")
+        if not set(refs).issubset(set(assessment["source_evidence_ids"])):
+            raise AdverseNewsError("Adverse-news finding evidence must be selected by its linked assessment")
     overlay = draft.get("adverse_news")
     required_overlay = overlay_definition.get("required") or []
     if not isinstance(overlay, dict) or any(field not in overlay for field in required_overlay):
@@ -868,6 +874,7 @@ def _assemble_adverse_news_finding(
             "finding_id": f"finding:adverse-news:{entity['key']}:{uuid4().hex}",
             "schema_version": "finding/v1",
             "category": "adverse_news",
+            "assessment_id": (assessment or {}).get("assessment_id") or draft.get("assessment_id") or f"assessment:adverse-news:{uuid4().hex}",
             "subject": {"entity_id": entity.get("entity_id"), "entity_type": entity["entity_type"], "name": entity["name"]},
             "source": {"producer_type": "tool", "producer_name": "adverse_news_screening", "run_id": run_id, "created_at": datetime.now(UTC).isoformat()},
             "relevant_evidence_ids": [source_ids[str(reference)] for reference in refs],

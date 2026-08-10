@@ -7,6 +7,60 @@ from typing import Any
 from uuid import uuid4
 
 
+def migrate_legacy_adverse_news(state: dict[str, Any]) -> bool:
+    """Normalize retained Adverse News artifacts on load without inventing facts."""
+    evidence = state.setdefault("evidence", [])
+    assessments = state.setdefault("assessments", [])
+    findings = [item for item in state.setdefault("findings", []) if isinstance(item, dict) and item.get("category") == "adverse_news"]
+    changed = False
+    legacy_assessments = state.pop("adverse_news_assessments", None)
+    if isinstance(legacy_assessments, list):
+        for item in legacy_assessments:
+            if not isinstance(item, dict):
+                continue
+            item = dict(item)
+            item.setdefault("assessment_type", "adverse_news")
+            if item.get("assessment_id") and not any(existing.get("assessment_id") == item["assessment_id"] for existing in assessments if isinstance(existing, dict)):
+                assessments.append(item)
+        changed = True
+    adverse_evidence = [item for item in evidence if isinstance(item, dict) and item.get("tool") == "adverse_news_screening"]
+    for item in adverse_evidence:
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        if isinstance(data.get("web_search_evidence"), dict):
+            continue
+        evidence_id = item.get("evidence_id")
+        if not evidence_id:
+            continue
+        record = {
+            "schema_version": "web_search_evidence/v1", "evidence_id": evidence_id, "evidence_type": "web_search_result",
+            "source": {"provider": item.get("source") or "Legacy CDD snapshot", "url": item.get("source_url") or data.get("url") or "", "title": item.get("description") or data.get("title") or "", "published_at": item.get("published_at") or data.get("published_date"), "retrieved_at": item.get("collected_at") or datetime.now(UTC).isoformat()},
+            "search": {"query": data.get("query") or "", "source_result_id": data.get("id") or evidence_id},
+            "content": {"excerpt": data.get("content")},
+            "context": {"tool": "adverse_news_screening", "subject_key": data.get("entity_key") or ""},
+        }
+        item["data"] = {**data, "web_search_evidence": record}
+        item["provenance"] = {**(item.get("provenance") or {}), "migration": "adverse_news_artifacts_v1"}
+        changed = True
+    adverse_assessments = [item for item in assessments if isinstance(item, dict) and item.get("assessment_type") == "adverse_news"]
+    for finding in findings:
+        if finding.get("assessment_id"):
+            continue
+        refs = [value for value in finding.get("relevant_evidence_ids") or [] if isinstance(value, str)]
+        candidates = [item for item in adverse_assessments if set(refs).issubset(set(item.get("source_evidence_ids") or []))]
+        assessment = candidates[-1] if len(candidates) == 1 else None
+        if assessment is None:
+            overlay = finding.get("adverse_news") if isinstance(finding.get("adverse_news"), dict) else {}
+            coverage = overlay.get("screening_coverage") if isinstance(overlay.get("screening_coverage"), dict) else {}
+            subject = finding.get("subject") if isinstance(finding.get("subject"), dict) else {}
+            created_at = finding.get("source", {}).get("created_at") if isinstance(finding.get("source"), dict) else None
+            assessment = {"assessment_id": f"assessment:adverse-news:migrated:{uuid4().hex}", "assessment_type": "adverse_news", "schema_version": "adverse_news_assessment/v1", "tool": "adverse_news_screening", "run_id": f"migration:adverse-news:{uuid4().hex}", "created_at": created_at or datetime.now(UTC).isoformat(), "outcome": "completed_with_findings", "summary": "Migrated adverse-news assessment reconstructed from retained finding evidence.", "limitations": ["Historical screening assessment was not retained; this record was reconstructed without new research."], "screened_entities": [{"key": "legacy:subject", "entity_type": subject.get("entity_type") or "unknown", "entity_id": subject.get("entity_id"), "name": subject.get("name") or "Unknown"}], "queries": coverage.get("queries") or [], "source_evidence_ids": refs, "entity_outcomes": [{"entity_key": "legacy:subject", "source_evidence_ids": refs, "summary": "Historical finding retained for review.", "limitations": ["Migrated from a legacy finding without entity-level assessment details."]}], "provenance": {"method": "adverse_news_artifacts_v1_migration"}}
+            assessments.append(assessment); adverse_assessments.append(assessment)
+        finding["assessment_id"] = assessment["assessment_id"]
+        finding["migration"] = {**(finding.get("migration") or {}), "method": "adverse_news_artifacts_v1_migration"}
+        changed = True
+    return changed
+
+
 def migrate_legacy_risk_flags(state: dict[str, Any]) -> bool:
     """Replace retired CSP flags with canonical records and discard ownership flags."""
     if "risk_flags" not in state:

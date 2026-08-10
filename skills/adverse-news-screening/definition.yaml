@@ -2,74 +2,94 @@ name: adverse-news-screening
 description: Assess material, attributable adverse-news search results using public-web evidence. Use when a CDD workflow needs evidence-grounded findings, confidence and severity assessment, or analyst actions and RFIs.
 input:
   search_terms: 'enforcement OR investigation OR fraud OR bribery OR corruption OR "money laundering" OR sanctions OR watchlist'
+evidence:
+  schema: web_search_evidence/v1
+  required:
+    - evidence_id
+    - evidence_type
+    - source
+    - search
+    - content
 assessment:
   schema: adverse_news_assessment/v1
   required:
+    - assessment_id
+    - source_evidence_ids
     - outcome
     - summary
     - limitations
     - entity_outcomes
-output:
-  schema: adverse_news/v1
-  required:
-    - screened_entity
-    - identity_match
-    - adverse_event
-    - screening_coverage
-  properties:
-    screened_entity:
-      required:
-        - entity_type
-        - name_used
-        - disambiguators_available
-        - disambiguators_used
-    identity_match:
-      required:
-        - status
-        - confidence
-        - rationale
-      status_values:
-        - matched
-        - ambiguous
-        - not_matched
-    adverse_event:
-      required:
-        - event_category
-        - summary
-        - legal_or_procedural_status
-        - event_date
-        - jurisdiction
-      event_categories:
-        - money_laundering
-        - terrorist_financing
-        - proliferation_financing
-        - sanctions_evasion_or_violation
-        - fraud
-        - bribery_or_corruption
-        - tax_evasion_or_tax_crime
-        - embezzlement_or_misappropriation
-        - market_abuse_or_insider_dealing
-        - cybercrime
-        - organised_crime_or_racketeering
-        - drug_trafficking
-        - human_trafficking_or_migrant_smuggling
-        - arms_trafficking
-        - illicit_trade_or_smuggling
-        - environmental_crime
-        - other_serious_crime
-      legal_or_procedural_status_values:
-        - allegation_or_media_report
-        - investigation
-        - charge_or_indictment
-        - prosecution_or_trial
-        - conviction
-        - civil_or_regulatory_action
-        - enforcement_penalty_or_settlement
-        - sanctions_designation
-        - acquittal_or_dismissal
-        - unknown
-    screening_coverage:
-      required:
-        - queries
-        - source_evidence_ids
-        - limitations
+  outcome_values:
+    - completed_no_material_findings
+    - completed_inconclusive
+  entity_outcome_required:
+    - entity_key
+    - source_evidence_ids
+    - summary
+    - limitations
+finding:
+  category: adverse_news
+  overlay:
+    schema: adverse_news/v1
+    required:
+      - screened_entity
+      - identity_match
+      - adverse_event
+      - screening_coverage
+    properties:
+      screened_entity:
+        required:
+          - entity_type
+          - name_used
+          - disambiguators_available
+          - disambiguators_used
+      identity_match:
+        required:
+          - status
+          - confidence
+          - rationale
+        status_values:
+          - matched
+          - ambiguous
+          - not_matched
+      adverse_event:
+        required:
+          - event_category
+          - summary
+          - legal_or_procedural_status
+          - event_date
+          - jurisdiction
+        event_categories:
+          - money_laundering
+          - terrorist_financing
+          - proliferation_financing
+          - sanctions_evasion_or_violation
+          - fraud
+          - bribery_or_corruption
+          - tax_evasion_or_tax_crime
+          - embezzlement_or_misappropriation
+          - market_abuse_or_insider_dealing
+          - cybercrime
+          - organised_crime_or_racketeering
+          - drug_trafficking
+          - human_trafficking_or_migrant_smuggling
+          - arms_trafficking
+          - illicit_trade_or_smuggling
+          - environmental_crime
+          - other_serious_crime
+        legal_or_procedural_status_values:
+          - allegation_or_media_report
+          - investigation
+          - charge_or_indictment
+          - prosecution_or_trial
+          - conviction
+          - civil_or_regulatory_action
+          - enforcement_penalty_or_settlement
+          - sanctions_designation
+          - acquittal_or_dismissal
+          - unknown
+      screening_coverage:
+        required:
+          - queries
+          - source_evidence_ids
+          - limitations

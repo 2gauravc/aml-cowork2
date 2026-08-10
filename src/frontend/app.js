@@ -2162,10 +2162,10 @@ function riskPresentation(risk) {
 }
 
 function AdverseNewsScreening({ cddState, onOpenTool }) {
-  const evidence = Array.isArray(cddState?.evidence) ? cddState.evidence : [];
-  const findings = (Array.isArray(cddState?.findings) ? cddState.findings : [])
-    .filter((finding) => finding.category === "adverse_news");
-  const assessment = adverseNewsAssessment(cddState);
+  const records = adverseNewsRecords(cddState);
+  const evidence = records.evidence;
+  const findings = records.findings;
+  const assessment = records.assessment;
 
   if (!assessment) {
     return (
@@ -2222,14 +2222,21 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
 }
 
 function adverseNewsRecords(cddState) {
+  const view = cddState?.tool_views?.adverse_news;
+  if (view?.schema_version === "adverse_news_view/v1") {
+    return { findings: view.findings || [], evidence: view.evidence || [], assessments: view.assessment ? [view.assessment] : [], assessment: view.assessment || null };
+  }
   return {
     findings: (cddState?.findings || []).filter((finding) => finding.category === "adverse_news"),
     evidence: (cddState?.evidence || []).filter((item) => item.tool === "adverse_news_screening"),
     assessments: assessmentsByType(cddState, "adverse_news"),
+    assessment: latestAssessment(cddState, "adverse_news"),
   };
 }
 
 function adverseNewsAssessment(result) {
+  const view = result?.tool_views?.adverse_news;
+  if (view?.schema_version === "adverse_news_view/v1") return view.assessment || null;
   const assessment = latestAssessment(result, "adverse_news");
   return assessment;
 }
@@ -2320,8 +2327,8 @@ function AdverseNewsFinding({ evidenceById, finding, popoverId, showAdverseDetai
         <strong>{`${subject}${finding.title ? ` — ${finding.title}` : ""}`}</strong>
         <span>{finding.summary || "No summary was recorded."}</span>
         <div className="adverse-news-finding-tags">
-          {showAdverseDetails && <span className="adverse-news-finding-tag identity-match-tag">{`Identity match: ${statusLabel(finding.adverse_news?.identity_match?.status)}`}</span>}
-          {showAdverseDetails && <span className="adverse-news-finding-tag adverse-event-tag">{`Adverse event: ${statusLabel(finding.adverse_news?.adverse_event?.event_category)}`}</span>}
+          {showAdverseDetails && <span className="adverse-news-finding-tag identity-match-tag">{`Identity match: ${statusLabel(finding.tags?.identity_match || finding.adverse_news?.identity_match?.status)}`}</span>}
+          {showAdverseDetails && <span className="adverse-news-finding-tag adverse-event-tag">{`Adverse event: ${statusLabel(finding.tags?.adverse_event || finding.adverse_news?.adverse_event?.event_category)}`}</span>}
           <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(finding.confidence?.level)}`}</span>
           <span className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}>{`Severity: ${statusLabel(finding.severity?.level)}`}</span>
           <small>{`Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</small>

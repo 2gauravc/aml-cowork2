@@ -9,7 +9,8 @@ from jsonschema import Draft202012Validator
 
 from src.backend.app import CDDStateLookupRequest, SESSIONS, _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready, load_completed_cdd_state
 from src.tools.adverse_news import load_finding_schema
-from src.utils.legacy_cdd_state import migrate_legacy_risk_flags
+from src.utils.legacy_cdd_state import migrate_legacy_adverse_news, migrate_legacy_risk_flags
+from src.utils.adverse_news_view import adverse_news_view
 
 
 def test_completed_pipeline_persists_the_full_graph_state() -> None:
@@ -123,6 +124,40 @@ def test_loading_a_migrated_legacy_snapshot_persists_it() -> None:
         response = asyncio.run(load_completed_cdd_state(CDDStateLookupRequest(session_id="migration-test", customer_name="Example Ltd", jurisdiction="GB")))
     assert "risk_flags" not in response["cdd_state"]
     assert response["cdd_state"]["findings"][-1]["category"] == "csp_address"
+    persist.assert_called_once()
+
+
+def test_legacy_adverse_news_artifacts_are_normalized_idempotently() -> None:
+    state = {
+        "evidence": [{"evidence_id": "evidence:adverse:1", "tool": "adverse_news_screening", "source": "Brave Search", "description": "Notice", "source_url": "https://example.test/notice", "collected_at": "2026-01-01T00:00:00Z", "data": {"id": "source:1", "entity_key": "ubo:0", "query": "Alex Chen", "content": "Notice"}}],
+        "assessments": [],
+        "findings": [{"finding_id": "finding:adverse:1", "category": "adverse_news", "subject": {"entity_type": "ultimate_beneficial_owner", "name": "Alex Chen"}, "relevant_evidence_ids": ["evidence:adverse:1"], "adverse_news": {"screening_coverage": {"queries": ["Alex Chen"]}}, "source": {"created_at": "2026-01-01T00:00:00Z"}}],
+    }
+    assert migrate_legacy_adverse_news(state) is True
+    finding = state["findings"][0]
+    assessment = state["assessments"][0]
+    assert finding["assessment_id"] == assessment["assessment_id"]
+    assert assessment["source_evidence_ids"] == ["evidence:adverse:1"]
+    assert state["evidence"][0]["data"]["web_search_evidence"]["schema_version"] == "web_search_evidence/v1"
+    assert migrate_legacy_adverse_news(state) is False
+
+
+def test_adverse_news_view_hides_storage_shape_from_the_ui() -> None:
+    state = {"assessments": [{"assessment_id": "assessment:adverse", "assessment_type": "adverse_news", "outcome": "completed_no_material_findings"}], "findings": [], "evidence": []}
+    view = adverse_news_view(state)
+    assert view["schema_version"] == "adverse_news_view/v1"
+    assert view["assessment"]["assessment_id"] == "assessment:adverse"
+
+
+def test_loading_legacy_adverse_news_persists_the_normalized_snapshot() -> None:
+    state = {"evidence": [{"evidence_id": "evidence:adverse:1", "tool": "adverse_news_screening", "data": {"id": "source:1"}}], "assessments": [], "findings": [{"finding_id": "finding:adverse:1", "category": "adverse_news", "subject": {"entity_type": "company", "name": "Example Ltd"}, "relevant_evidence_ids": ["evidence:adverse:1"]}]}
+    snapshot = {"saved_at": "2026-01-01T00:00:00Z", "identity": {"customer_name": "Example Ltd", "jurisdiction": "GB", "case_id": "1"}, "graph_state": state}
+    SESSIONS.clear()
+    to_thread = AsyncMock(side_effect=lambda func, *args, **kwargs: func(*args, **kwargs))
+    with patch("src.backend.app.get_completed_state", return_value=snapshot), patch("src.backend.app.save_completed_state", return_value={"saved_at": "2026-01-02T00:00:00Z", "identity": snapshot["identity"]}) as persist, patch("src.backend.app.asyncio.to_thread", to_thread):
+        response = asyncio.run(load_completed_cdd_state(CDDStateLookupRequest(session_id="adverse-migration-test", customer_name="Example Ltd", jurisdiction="GB")))
+    assert response["cdd_state"]["tool_views"]["adverse_news"]["schema_version"] == "adverse_news_view/v1"
+    assert response["cdd_state"]["findings"][0]["assessment_id"]
     persist.assert_called_once()
 
 

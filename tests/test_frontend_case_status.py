@@ -83,6 +83,8 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
     assert "function LinkedAdverseNewsText" in app
     assert "split(/(source:\\d+)/gi)" in app
     assert 'className="adverse-news-finding-tag confidence-tag"' in app
+    assert 'tool_views?.adverse_news' in app
+    assert 'adverse_news_view/v1' in app
     assert 'className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}' in app
     assert 'type="button"' in app
     assert "aria-expanded={sourcesOpen}" in app

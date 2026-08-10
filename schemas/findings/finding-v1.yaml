@@ -9,6 +9,7 @@ x-runtime-owned-fields:
   - finding_id
   - schema_version
   - category
+  - assessment_id
   - subject
   - source
   - relevant_evidence_ids
@@ -16,6 +17,7 @@ required:
   - finding_id
   - schema_version
   - category
+  - assessment_id
   - title
   - summary
   - subject
@@ -32,6 +34,9 @@ properties:
   schema_version:
     const: finding/v1
   category:
+    type: string
+    minLength: 1
+  assessment_id:
     type: string
     minLength: 1
   title:

@@ -1,0 +1,36 @@
+# Adapt names and controlled values for the tool. Generic finding fields belong
+# to schemas/findings/finding-v1.yaml, not the overlay below.
+input:
+  selected_entities: []
+  cdd_context: []
+
+evidence:
+  schema: web_search_evidence/v1
+  required:
+    - evidence_id
+    - evidence_type
+    - source
+    - search
+    - content
+
+assessment:
+  schema: example_assessment/v1
+  required:
+    - assessment_id
+    - source_evidence_ids
+    - outcome
+    - confidence
+    - explanation
+  properties:
+    outcome_values: []
+    confidence_levels: [low, medium, high]
+
+finding:
+  category: example_category
+  policy:
+    confidence: {}
+    severity: {}
+  overlay:
+    schema: example_finding_overlay/v1
+    required: []
+    properties: {}

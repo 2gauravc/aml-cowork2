@@ -1,0 +1,4 @@
+interface:
+  display_name: "CDD Node Development"
+  short_description: "Create or update evidence-based CDD LangGraph nodes."
+  default_prompt: "Use $cdd-node-development to create or update a CDD LangGraph node."

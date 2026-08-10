@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from src.agents.nodes import _assemble_adverse_news_finding, adverse_news_screening
 from src.backend.app import IndependentAdverseNewsRequest, assess_independent_adverse_news
-from src.tools.adverse_news import AdverseNewsError, _assessment_schema, build_search_queries, entities_for_screening, load_adverse_news_definition, load_finding_schema, search_adverse_news
+from src.tools.adverse_news import AdverseNewsError, _assessment_schema, build_search_queries, entities_for_screening, load_adverse_news_definition, load_finding_schema, main, search_adverse_news
 
 
 class AdverseNewsTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class AdverseNewsTests(unittest.TestCase):
 
     def test_assessment_schema_includes_nested_adverse_news_requirements(self) -> None:
         definition = load_adverse_news_definition()
-        schema = _assessment_schema(load_finding_schema(), definition["overlay"])
+        schema = _assessment_schema(load_finding_schema(), definition, "assessment:adverse-news:test", [{"evidence_id": "evidence:adverse-news:1"}])
         overlay = schema["properties"]["findings"]["items"]["properties"]["adverse_news"]
 
         self.assertEqual(overlay["required"], definition["overlay"]["required"])
@@ -40,7 +40,7 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertEqual(overlay["properties"]["screening_coverage"]["properties"]["limitations"]["type"], "array")
         self.assertEqual(overlay["properties"]["identity_match"]["required"], ["status", "confidence", "rationale"])
         self.assertEqual(overlay["properties"]["screening_coverage"]["required"], ["queries", "source_evidence_ids", "limitations"])
-        self.assertEqual(schema["properties"]["assessment"]["required"], ["outcome", "summary", "limitations", "entity_outcomes"])
+        self.assertEqual(schema["properties"]["assessment"]["required"], definition["assessment"]["required"])
 
     def test_entity_selection_uses_company_directors_and_ubos(self) -> None:
         entities = entities_for_screening(
@@ -85,7 +85,7 @@ class AdverseNewsTests(unittest.TestCase):
 
     def test_skill_requires_non_empty_search_terms_input(self) -> None:
         definition = load_adverse_news_definition()
-        with patch("src.tools.adverse_news.yaml.safe_load", return_value={"assessment": definition["assessment"], "output": definition["overlay"]}):
+        with patch("src.tools.adverse_news.yaml.safe_load", return_value={"assessment": definition["assessment"], "finding": {"overlay": definition["overlay"]}}):
             with self.assertRaisesRegex(AdverseNewsError, "input.search_terms"):
                 load_adverse_news_definition()
 
@@ -105,13 +105,21 @@ class AdverseNewsTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "BRAVE_API_KEY"):
                 search_adverse_news([])
 
+    @patch("src.agents.nodes.adverse_news_screening")
+    @patch("src.tools.adverse_news.load_application_env")
+    def test_cli_runs_the_node_for_named_entities(self, load_env, screen) -> None:
+        screen.return_value = {"assessments": [{"outcome": "completed_no_material_findings"}], "findings": []}
+        self.assertEqual(main(["--entity", "Leonardo DiCaprio"]), 0)
+        load_env.assert_called_once()
+        self.assertEqual(screen.call_args.args[0]["cdd"]["ownership_and_control"]["ubos"], [{"name": "Leonardo DiCaprio"}])
+
     @patch("src.agents.nodes.screen_adverse_news")
     def test_node_adds_evidence_and_a_valid_finding(self, screening) -> None:
         screening.return_value = {
             "entities": [{"key": "ultimate_beneficial_owner:0", "entity_type": "ultimate_beneficial_owner", "entity_id": "ubo-1", "name": "Alex Chen", "disambiguators": {"nationality": "Singapore"}}],
             "queries": [{"entity_key": "ultimate_beneficial_owner:0", "query": "Alex Chen enforcement"}],
-            "sources": [{"id": "source:1", "entity_key": "ultimate_beneficial_owner:0", "query": "Alex Chen enforcement", "title": "Regulatory notice", "url": "https://example.test/notice", "content": "Notice", "published_date": "2024-05-10"}],
-            "assessment": {"outcome": "completed_no_material_findings", "summary": "A material potential match requires review.", "limitations": ["Identity remains ambiguous."], "entity_outcomes": [{"entity_key": "ultimate_beneficial_owner:0", "summary": "Potential match retained for review.", "limitations": ["Identity remains ambiguous."]}]},
+            "sources": [{"id": "source:1", "evidence_id": "evidence:adverse-news:1", "entity_key": "ultimate_beneficial_owner:0", "query": "Alex Chen enforcement", "title": "Regulatory notice", "url": "https://example.test/notice", "content": "Notice", "published_date": "2024-05-10"}],
+            "assessment": {"assessment_id": "assessment:adverse-news:1", "source_evidence_ids": ["evidence:adverse-news:1"], "outcome": "completed_no_material_findings", "summary": "A material potential match requires review.", "limitations": ["Identity remains ambiguous."], "entity_outcomes": [{"entity_key": "ultimate_beneficial_owner:0", "source_evidence_ids": ["evidence:adverse-news:1"], "summary": "Potential match retained for review.", "limitations": ["Identity remains ambiguous."]}]},
             "drafts": [_draft()],
             "definition": {"path": "skills/adverse-news-screening/SKILL.md", "overlay": load_adverse_news_definition()["overlay"]},
             "evaluated_at": "2026-07-24T10:00:00+00:00",
@@ -132,6 +140,7 @@ class AdverseNewsTests(unittest.TestCase):
         assessment = result["assessments"][0]
         self.assertEqual(assessment["assessment_type"], "adverse_news")
         self.assertEqual(assessment["outcome"], "completed_with_findings")
+        self.assertEqual(finding["assessment_id"], assessment["assessment_id"])
         self.assertEqual(assessment["source_evidence_ids"], finding["relevant_evidence_ids"])
         evidence_ids = {item["evidence_id"] for item in result["evidence"]}
         self.assertTrue(set(finding["relevant_evidence_ids"]) <= evidence_ids)
@@ -142,7 +151,7 @@ class AdverseNewsTests(unittest.TestCase):
             "entities": [{"key": "company:0", "entity_type": "company", "name": "Example Ltd", "disambiguators": {}}],
             "queries": [{"entity_key": "company:0", "query": "Example Ltd adverse news"}],
             "sources": [],
-            "assessment": {"outcome": "completed_no_material_findings", "summary": "The retained results did not identify material attributable adverse news.", "limitations": ["Public-web coverage is limited."], "entity_outcomes": [{"entity_key": "company:0", "summary": "No material attributable adverse news was identified in retained results.", "limitations": ["Public-web coverage is limited."]}]},
+            "assessment": {"assessment_id": "assessment:adverse-news:1", "source_evidence_ids": [], "outcome": "completed_no_material_findings", "summary": "The retained results did not identify material attributable adverse news.", "limitations": ["Public-web coverage is limited."], "entity_outcomes": [{"entity_key": "company:0", "source_evidence_ids": [], "summary": "No material attributable adverse news was identified in retained results.", "limitations": ["Public-web coverage is limited."]}]},
             "drafts": [],
             "definition": {"path": "skills/adverse-news-screening/SKILL.md", "overlay": load_adverse_news_definition()["overlay"]},
             "evaluated_at": "2026-07-24T10:00:00+00:00",
@@ -187,7 +196,7 @@ class AdverseNewsTests(unittest.TestCase):
             _assemble_adverse_news_finding(
                 draft,
                 {"ultimate_beneficial_owner:0": {"key": "ultimate_beneficial_owner:0", "entity_type": "ultimate_beneficial_owner", "entity_id": "ubo-1", "name": "Alex Chen", "disambiguators": {"nationality": "Singapore"}}},
-                {"source:1": "evidence:adverse-news:1"},
+                {"evidence:adverse-news:1": "evidence:adverse-news:1"},
                 "run:adverse-news:test",
                 load_adverse_news_definition()["overlay"],
                 {"ultimate_beneficial_owner:0": "Alex Chen enforcement"},
@@ -212,7 +221,8 @@ class AdverseNewsTests(unittest.TestCase):
 def _draft() -> dict:
     return {
         "entity_key": "ultimate_beneficial_owner:0",
-        "source_refs": ["source:1"],
+        "assessment_id": "assessment:adverse-news:1",
+        "relevant_evidence_ids": ["evidence:adverse-news:1"],
         "title": "Potential regulatory matter involving UBO",
         "summary": "A public regulatory notice may concern the UBO.",
         "confidence": {"level": "medium", "rationale": "Name and nationality align.", "limitations": ["No date of birth in source."]},

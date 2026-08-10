@@ -37,7 +37,8 @@ from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
 from src.utils.case_status import sync_case_status
 from src.utils.cdd_state_store import CDDStateStoreError, get_completed_state, save_completed_state
-from src.utils.legacy_cdd_state import migrate_legacy_risk_flags
+from src.utils.legacy_cdd_state import migrate_legacy_adverse_news, migrate_legacy_risk_flags
+from src.utils.adverse_news_view import adverse_news_view
 from src.utils.environment import load_application_env
 from src.utils.s3_documents import (
     download_document_from_s3,
@@ -585,6 +586,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     graph_state = snapshot["graph_state"]
     migrated_rating = _migrate_legacy_risk_rating(graph_state)
     migrated_flags = migrate_legacy_risk_flags(graph_state)
+    migrated_adverse_news = migrate_legacy_adverse_news(graph_state)
     _normalise_document_state(graph_state)
     sync_case_status(graph_state, generation="completed")
     session["graph_state"] = graph_state
@@ -595,7 +597,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     session["pipeline_status"] = "complete"
     session["pipeline_progress"] = None
     saved_cdd_state = {"saved_at": snapshot.get("saved_at"), "identity": identity}
-    if migrated_rating or migrated_flags:
+    if migrated_rating or migrated_flags or migrated_adverse_news:
         try:
             saved_cdd_state = await asyncio.to_thread(
                 save_completed_state,
@@ -943,7 +945,7 @@ def _response(
         "account_location": session.get("account_location"),
         "case_id": session.get("case_id"),
         "cdd": state.get("cdd"),
-        "cdd_state": state,
+        "cdd_state": _cdd_state_view(state),
         "case_status": state.get("case_status"),
         "documents": state.get("documents", []),
         "findings": state.get("findings", []),
@@ -964,7 +966,14 @@ def _response(
 
 def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
     """Return the complete CDD state for the JSON workspace view."""
-    return _active_cdd_state(session) or {}
+    return _cdd_state_view(_active_cdd_state(session) or {})
+
+
+def _cdd_state_view(state: dict[str, Any]) -> dict[str, Any]:
+    """Add non-persisted stable tool views to an API state response."""
+    view = deepcopy(state)
+    view["tool_views"] = {**(view.get("tool_views") or {}), "adverse_news": adverse_news_view(state)}
+    return view
 
 
 def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
