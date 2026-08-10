@@ -17,6 +17,7 @@ from openai import OpenAI, OpenAIError
 
 from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
 from src.utils.environment import load_application_env
+from src.utils.tool_presentation import ToolPresentationError, compile_tool_presentation
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -46,7 +47,8 @@ def load_adverse_news_definition(path: str | Path = SKILL_PATH) -> dict[str, Any
     """Load the overlay declaration and instructions from the reusable skill."""
     try:
         instructions = Path(path).read_text(encoding="utf-8")
-        metadata, definition_path, definition_version = load_skill_definition(path)
+        metadata, definition_path, definition_version = load_skill_definition(path, "contract.yaml")
+        presentation, presentation_path, presentation_version = load_skill_definition(path, "presentation.yaml")
     except (OSError, SkillDefinitionError) as exc:
         raise AdverseNewsError(f"Adverse-news skill could not be loaded: {exc}") from exc
     finding = metadata.get("finding") if isinstance(metadata, dict) else None
@@ -61,18 +63,26 @@ def load_adverse_news_definition(path: str | Path = SKILL_PATH) -> dict[str, Any
         raise AdverseNewsError("Adverse-news skill must declare assessment.schema: adverse_news_assessment/v1")
     if assessment.get("required") != ["assessment_id", "source_evidence_ids", "outcome", "summary", "limitations", "entity_outcomes"]:
         raise AdverseNewsError("Adverse-news skill must declare the required adverse-news assessment fields")
-    presentation = metadata.get("presentation") if isinstance(metadata, dict) else None
-    if not isinstance(presentation, dict) or presentation.get("schema") != "tool_view/v1" or not isinstance(presentation.get("summary"), dict) or not isinstance(presentation.get("detailed"), dict):
+    if not isinstance(presentation, dict) or presentation.get("schema") != "tool_view/v1" or not isinstance(presentation.get("views"), dict):
         raise AdverseNewsError("Adverse-news skill must declare presentation.schema: tool_view/v1 with summary and detailed variants")
+    search_terms = _search_terms_from_metadata(metadata)
+    try:
+        presentation = compile_tool_presentation(presentation)
+    except ToolPresentationError as exc:
+        raise AdverseNewsError(f"Adverse-news presentation could not be compiled: {exc}") from exc
     return {
         "finding": finding,
         "overlay": output,
         "assessment": assessment,
         "presentation": presentation,
-        "input": {"search_terms": _search_terms_from_metadata(metadata)},
+        "presentation_path": presentation_path,
+        "presentation_version": presentation_version,
+        "input": {"search_terms": search_terms},
         "instructions": instructions.strip(),
         "path": definition_path,
         "definition_version": definition_version,
+        "contract_path": definition_path,
+        "contract_version": definition_version,
         "instructions_path": str(path),
     }
 

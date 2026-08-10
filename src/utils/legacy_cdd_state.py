@@ -43,22 +43,68 @@ def migrate_legacy_adverse_news(state: dict[str, Any]) -> bool:
         changed = True
     adverse_assessments = [item for item in assessments if isinstance(item, dict) and item.get("assessment_type") == "adverse_news"]
     for finding in findings:
-        if finding.get("assessment_id"):
-            continue
         refs = [value for value in finding.get("relevant_evidence_ids") or [] if isinstance(value, str)]
+        created_at = ((finding.get("source") or {}).get("created_at") if isinstance(finding.get("source"), dict) else None) or datetime.now(UTC).isoformat()
+        if not refs:
+            evidence_id = f"evidence:adverse-news:migrated:{uuid4().hex}"
+            evidence.append({
+                "evidence_id": evidence_id,
+                "tool": "adverse_news_screening",
+                "source": "Legacy CDD snapshot",
+                "description": "Migration record: the historical adverse-news finding retained no source evidence.",
+                "collected_at": created_at,
+                "data": {"entity_key": "legacy:subject", "web_search_evidence": {
+                    "schema_version": "web_search_evidence/v1", "evidence_id": evidence_id,
+                    "evidence_type": "web_search_result",
+                    "source": {"provider": "Legacy CDD snapshot", "url": "", "title": "Historical evidence unavailable", "published_at": None, "retrieved_at": created_at},
+                    "search": {"query": "", "source_result_id": evidence_id},
+                    "content": {"excerpt": None},
+                    "context": {"tool": "adverse_news_screening", "subject_key": "legacy:subject"},
+                }},
+                "provenance": {"migration": "adverse_news_artifacts_v1"},
+            })
+            refs = [evidence_id]
+            finding["relevant_evidence_ids"] = refs
+            changed = True
+        if finding.get("assessment_id"):
+            required = {"schema_version", "title", "summary", "confidence", "severity", "potential_impact_risk", "recommended_action_rfi", "source", "relevant_evidence_ids"}
+            if not required.issubset(finding):
+                _normalise_legacy_adverse_finding(finding, refs, finding["assessment_id"], created_at)
+                changed = True
+            continue
         candidates = [item for item in adverse_assessments if set(refs).issubset(set(item.get("source_evidence_ids") or []))]
         assessment = candidates[-1] if len(candidates) == 1 else None
         if assessment is None:
             overlay = finding.get("adverse_news") if isinstance(finding.get("adverse_news"), dict) else {}
             coverage = overlay.get("screening_coverage") if isinstance(overlay.get("screening_coverage"), dict) else {}
             subject = finding.get("subject") if isinstance(finding.get("subject"), dict) else {}
-            created_at = finding.get("source", {}).get("created_at") if isinstance(finding.get("source"), dict) else None
-            assessment = {"assessment_id": f"assessment:adverse-news:migrated:{uuid4().hex}", "assessment_type": "adverse_news", "schema_version": "adverse_news_assessment/v1", "tool": "adverse_news_screening", "run_id": f"migration:adverse-news:{uuid4().hex}", "created_at": created_at or datetime.now(UTC).isoformat(), "outcome": "completed_with_findings", "summary": "Migrated adverse-news assessment reconstructed from retained finding evidence.", "limitations": ["Historical screening assessment was not retained; this record was reconstructed without new research."], "screened_entities": [{"key": "legacy:subject", "entity_type": subject.get("entity_type") or "unknown", "entity_id": subject.get("entity_id"), "name": subject.get("name") or "Unknown"}], "queries": coverage.get("queries") or [], "source_evidence_ids": refs, "entity_outcomes": [{"entity_key": "legacy:subject", "source_evidence_ids": refs, "summary": "Historical finding retained for review.", "limitations": ["Migrated from a legacy finding without entity-level assessment details."]}], "provenance": {"method": "adverse_news_artifacts_v1_migration"}}
+            assessment = {"assessment_id": f"assessment:adverse-news:migrated:{uuid4().hex}", "assessment_type": "adverse_news", "schema_version": "adverse_news_assessment/v1", "tool": "adverse_news_screening", "run_id": f"migration:adverse-news:{uuid4().hex}", "created_at": created_at, "outcome": "completed_with_findings", "summary": "Migrated adverse-news assessment reconstructed from retained finding evidence.", "limitations": ["Historical screening assessment was not retained; this record was reconstructed without new research."], "screened_entities": [{"key": "legacy:subject", "entity_type": subject.get("entity_type") or "unknown", "entity_id": subject.get("entity_id"), "name": subject.get("name") or "Unknown"}], "queries": coverage.get("queries") or [], "source_evidence_ids": refs, "entity_outcomes": [{"entity_key": "legacy:subject", "source_evidence_ids": refs, "summary": "Historical finding retained for review.", "limitations": ["Migrated from a legacy finding without entity-level assessment details."]}], "provenance": {"method": "adverse_news_artifacts_v1_migration"}}
             assessments.append(assessment); adverse_assessments.append(assessment)
         finding["assessment_id"] = assessment["assessment_id"]
-        finding["migration"] = {**(finding.get("migration") or {}), "method": "adverse_news_artifacts_v1_migration"}
+        _normalise_legacy_adverse_finding(finding, refs, assessment["assessment_id"], created_at)
         changed = True
     return changed
+
+
+def _normalise_legacy_adverse_finding(finding: dict[str, Any], refs: list[str], assessment_id: str, created_at: str) -> None:
+    """Fill canonical generic fields without asserting historical event facts."""
+    subject = finding.get("subject") if isinstance(finding.get("subject"), dict) else {}
+    entity_type = str(subject.get("entity_type") or "unknown")
+    name = str(subject.get("name") or "Unknown")
+    finding.setdefault("finding_id", f"finding:adverse-news:migrated:{uuid4().hex}")
+    finding["schema_version"] = "finding/v1"
+    finding["assessment_id"] = assessment_id
+    finding["subject"] = {"entity_type": entity_type, "name": name, "entity_id": subject.get("entity_id")}
+    finding.setdefault("title", "Historical adverse-news finding")
+    finding.setdefault("summary", "Historical adverse-news finding retained for analyst review; its underlying assessment was not retained.")
+    finding.setdefault("confidence", {"level": "low", "rationale": "The historical record does not retain sufficient identity-attribution evidence to assess confidence.", "limitations": ["Migrated from a legacy record without a complete assessment."]})
+    finding.setdefault("severity", {"level": "not_applicable", "rationale": "The historical record does not retain an event category or legal/procedural status; severity has not been reassessed."})
+    finding.setdefault("potential_impact_risk", "The retained historical record may require renewed review because its underlying evidence and assessment are incomplete.")
+    finding.setdefault("recommended_action_rfi", {"internal_actions": ["Review the retained historical record and perform a new adverse-news assessment if the relationship remains in scope."], "rfi": []})
+    source = finding.get("source") if isinstance(finding.get("source"), dict) else {}
+    finding["source"] = {"producer_type": source.get("producer_type") if source.get("producer_type") in {"tool", "case_assessment"} else "tool", "producer_name": source.get("producer_name") or "adverse_news_screening", "run_id": source.get("run_id") or assessment_id, "created_at": source.get("created_at") or created_at}
+    finding["relevant_evidence_ids"] = refs
+    finding["migration"] = {**(finding.get("migration") or {}), "method": "adverse_news_artifacts_v1_migration", "limitations": ["Domain-specific identity and event metadata were not added because they were not retained in the historical record."]}
 
 
 def migrate_legacy_risk_flags(state: dict[str, Any]) -> bool:

@@ -33,7 +33,7 @@ Validate every returned ID, and require a finding's direct evidence IDs to be a 
 
 Keep `skills/<tool>/SKILL.md` short and policy-only: what is assessed, how to weigh domain facts, and when an outcome requires review. Do not put prompt wording, query construction, schema syntax, UI behavior, or runtime safety mechanics there.
 
-Use `skills/<tool>/definition.yaml` for the machine-readable contract. Start from [the definition template](references/definition-template.yaml). It must clearly separate:
+Use `skills/<tool>/contract.yaml` for the machine-readable artifact contract, and `skills/<tool>/presentation.yaml` for the machine-readable UI extension. Start from [the definition template](references/definition-template.yaml) for the contract. `contract.yaml` must clearly separate:
 
 - `input`: accepted CDD context and selected entities;
 - `evidence`: source-record type and normalization rules;
@@ -41,6 +41,8 @@ Use `skills/<tool>/definition.yaml` for the machine-readable contract. Start fro
 - `finding`: category and overlay facts only.
 
 Never duplicate generic finding fields in a domain overlay. `finding/v1` owns generic confidence, severity, actions/RFIs, provenance, assessment linkage, and relevant evidence IDs. The definition's finding section may define domain policy for those generic fields, but its overlay contains only tool-specific facts.
+
+`presentation.yaml` selects the shared evidence → assessment → finding view components for summary and detailed views. It may add domain tags, metrics, and entity-level sections, but must not repeat generic finding fields or embed frontend markup. A presentation-only edit changes the rendered view, not the stored artifact contract.
 
 ## Split responsibilities deliberately
 
@@ -85,9 +87,9 @@ Keep lower-level retrieval/model payloads behind explicit diagnostic options suc
 
 ## Implement in order
 
-1. Inspect the node, tool, `definition.yaml`, `SKILL.md`, shared schemas, state persistence, migration code, and the associated UI before editing.
+1. Inspect the node, tool, `contract.yaml`, `presentation.yaml`, `SKILL.md`, shared schemas, state persistence, migration code, and the associated UI before editing.
 2. Define or reuse a source-evidence schema. Normalize and validate raw provider results before prompt construction; assign canonical IDs at this boundary.
-3. Make the full assessment and overlay contracts explicit in `definition.yaml`; remove parallel hard-coded enums and duplicate generic fields.
+3. Make the full assessment and overlay contracts explicit in `contract.yaml`; remove parallel hard-coded enums and duplicate generic fields.
 4. Create assessments even for no-hit, clear, and unavailable runs. Make findings conditional on the policy outcome.
 5. Assemble canonical `finding/v1` records only after validating model-produced lineage. Preserve direct evidence citations.
 6. Update legacy-state migration so persisted historical records remain readable and conform to the current canonical contract.
