@@ -61,10 +61,14 @@ def load_adverse_news_definition(path: str | Path = SKILL_PATH) -> dict[str, Any
         raise AdverseNewsError("Adverse-news skill must declare assessment.schema: adverse_news_assessment/v1")
     if assessment.get("required") != ["assessment_id", "source_evidence_ids", "outcome", "summary", "limitations", "entity_outcomes"]:
         raise AdverseNewsError("Adverse-news skill must declare the required adverse-news assessment fields")
+    presentation = metadata.get("presentation") if isinstance(metadata, dict) else None
+    if not isinstance(presentation, dict) or presentation.get("schema") != "tool_view/v1" or not isinstance(presentation.get("summary"), dict) or not isinstance(presentation.get("detailed"), dict):
+        raise AdverseNewsError("Adverse-news skill must declare presentation.schema: tool_view/v1 with summary and detailed variants")
     return {
         "finding": finding,
         "overlay": output,
         "assessment": assessment,
+        "presentation": presentation,
         "input": {"search_terms": _search_terms_from_metadata(metadata)},
         "instructions": instructions.strip(),
         "path": definition_path,

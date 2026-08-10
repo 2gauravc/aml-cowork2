@@ -84,7 +84,7 @@ def test_adverse_news_screening_ui_uses_retained_coverage_and_accessible_source_
     assert "split(/(source:\\d+)/gi)" in app
     assert 'className="adverse-news-finding-tag confidence-tag"' in app
     assert 'tool_views?.adverse_news' in app
-    assert 'adverse_news_view/v1' in app
+    assert 'tool_view/v1' in app
     assert 'className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}' in app
     assert 'type="button"' in app
     assert "aria-expanded={sourcesOpen}" in app
@@ -106,8 +106,7 @@ def test_standalone_adverse_news_tool_filters_cdd_records_and_supports_both_mode
     assert "Next →" in app
     assert "Review in Adverse News tool" in app
     assert "showAdverseDetails" in app
-    assert 'Identity match: ${statusLabel(finding.adverse_news?.identity_match?.status)}' in app
-    assert 'Adverse event: ${statusLabel(finding.adverse_news?.adverse_event?.event_category)}' in app
+    assert '(finding.tags || []).map((tag)' in app
     assert 'if (value === "not_applicable") return "N/A";' in app
 
 

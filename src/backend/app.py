@@ -279,7 +279,8 @@ async def assess_independent_adverse_news(request: IndependentAdverseNewsRequest
         }
     }
     try:
-        return await asyncio.to_thread(adverse_news_screening, state)
+        result = await asyncio.to_thread(adverse_news_screening, state)
+        return {"tool_view": adverse_news_view(result)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Independent adverse-news screening failed: {exc}") from exc
 

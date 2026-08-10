@@ -85,7 +85,7 @@ class AdverseNewsTests(unittest.TestCase):
 
     def test_skill_requires_non_empty_search_terms_input(self) -> None:
         definition = load_adverse_news_definition()
-        with patch("src.tools.adverse_news.yaml.safe_load", return_value={"assessment": definition["assessment"], "finding": {"overlay": definition["overlay"]}}):
+        with patch("src.tools.adverse_news.yaml.safe_load", return_value={"assessment": definition["assessment"], "finding": {"overlay": definition["overlay"]}, "presentation": definition["presentation"]}):
             with self.assertRaisesRegex(AdverseNewsError, "input.search_terms"):
                 load_adverse_news_definition()
 
@@ -185,7 +185,8 @@ class AdverseNewsTests(unittest.TestCase):
         with patch("src.backend.app.adverse_news_screening", return_value={"evidence": [], "findings": []}) as screening, patch("src.backend.app.asyncio.to_thread", side_effect=run_inline):
             result = asyncio.run(assess_independent_adverse_news(IndependentAdverseNewsRequest(entity_names=["Alpha Ltd", "Beta Ltd"])))
 
-        self.assertEqual(result, {"evidence": [], "findings": []})
+        self.assertEqual(result["tool_view"]["schema_version"], "tool_view/v1")
+        self.assertEqual(result["tool_view"]["status"], "not_run")
         state = screening.call_args.args[0]
         self.assertEqual(state["cdd"]["ownership_and_control"]["ubos"], [{"name": "Alpha Ltd"}, {"name": "Beta Ltd"}])
 

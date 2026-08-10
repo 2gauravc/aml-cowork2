@@ -2162,12 +2162,10 @@ function riskPresentation(risk) {
 }
 
 function AdverseNewsScreening({ cddState, onOpenTool }) {
-  const records = adverseNewsRecords(cddState);
-  const evidence = records.evidence;
-  const findings = records.findings;
-  const assessment = records.assessment;
+  const view = adverseNewsRecords(cddState);
+  const summary = view?.summary;
 
-  if (!assessment) {
+  if (!summary) {
     return (
       <Section title="Adverse News Screening" collapsible>
         <p className="empty">Not run.</p>
@@ -2175,39 +2173,28 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
     );
   }
 
-  if (assessment.outcome === "unavailable") {
+  if (view.status === "unavailable") {
     return (
       <Section title="Adverse News Screening" collapsible>
-        <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p>
+        <p className="risk">{`Screening unavailable. ${summary.limitations?.[0] || "No reason was recorded."}`}</p>
       </Section>
     );
   }
 
-  const entities = Array.isArray(assessment.screened_entities) ? assessment.screened_entities : [];
-  const sourceCount = Array.isArray(assessment.source_evidence_ids) ? assessment.source_evidence_ids.length : 0;
-  const queryCount = Array.isArray(assessment.queries) ? assessment.queries.length : 0;
-  const evidenceById = Object.fromEntries(evidence.map((item) => [item.evidence_id, item]));
+  const evidenceById = Object.fromEntries((view.evidence || []).map((item) => [item.id, item]));
 
   return (
-    <Section title="Adverse News Screening" collapsible>
+    <Section title={summary.title} collapsible>
       <div className="adverse-news-summary">
-        <strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong>
-        <span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={evidence} /></span>
-        <span>{`Screened ${entities.length} ${entities.length === 1 ? "entity" : "entities"}:`}</span>
-        {entities.length ? (
-          <ul className="adverse-news-entity-list">
-            {entities.map((entity, index) => <li key={entity.key || `${entity.name || "entity"}-${index}`}>{entity.name || "Unnamed entity"}</li>)}
-          </ul>
-        ) : <span>None recorded.</span>}
-        <span>{`${entities.length} ${entities.length === 1 ? "entity was" : "entities were"} searched using ${queryCount} ${queryCount === 1 ? "query" : "queries"} — one query for each screened entity.`}</span>
-        <span>{`${sourceCount} unique ${sourceCount === 1 ? "source result was" : "source results were"} retained.`}</span>
-        {assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}
-        <span>{`Screened ${formatDateTime(assessment.created_at)}.`}</span>
+        <strong>{summary.status_labels?.[view.status] || view.status}</strong>
+        <span>{summary.text || "No material attributable adverse-news findings were identified in the retained results."}</span>
+        {(summary.metrics || []).map((metric) => <span key={metric.label}>{`${metric.label}: ${metric.value ?? "-"}`}</span>)}
+        {summary.limitations?.length ? <span>{`Limitations: ${summary.limitations.join(" ")}`}</span> : null}
         <button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Adverse News tool</button>
       </div>
-      {findings.length ? (
+      {summary.findings?.length ? (
         <div className="adverse-news-findings">
-          {findings.map((finding, index) => (
+          {summary.findings.map((finding, index) => (
             <AdverseNewsFinding
               evidenceById={evidenceById}
               finding={finding}
@@ -2223,22 +2210,11 @@ function AdverseNewsScreening({ cddState, onOpenTool }) {
 
 function adverseNewsRecords(cddState) {
   const view = cddState?.tool_views?.adverse_news;
-  if (view?.schema_version === "adverse_news_view/v1") {
-    return { findings: view.findings || [], evidence: view.evidence || [], assessments: view.assessment ? [view.assessment] : [], assessment: view.assessment || null };
-  }
-  return {
-    findings: (cddState?.findings || []).filter((finding) => finding.category === "adverse_news"),
-    evidence: (cddState?.evidence || []).filter((item) => item.tool === "adverse_news_screening"),
-    assessments: assessmentsByType(cddState, "adverse_news"),
-    assessment: latestAssessment(cddState, "adverse_news"),
-  };
+  return view?.schema_version === "tool_view/v1" ? view : null;
 }
 
 function adverseNewsAssessment(result) {
-  const view = result?.tool_views?.adverse_news;
-  if (view?.schema_version === "adverse_news_view/v1") return view.assessment || null;
-  const assessment = latestAssessment(result, "adverse_news");
-  return assessment;
+  return result?.tool_view?.schema_version === "tool_view/v1" ? result.tool_view : result?.schema_version === "tool_view/v1" ? result : null;
 }
 
 function LinkedAdverseNewsText({ text, evidence }) {
@@ -2254,19 +2230,24 @@ function LinkedAdverseNewsText({ text, evidence }) {
 
 function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, onLoadFromCdd, onModeChange, onNamesChange, onAssess }) {
   const [entityIndex, setEntityIndex] = useState(0);
-  const assessment = adverseNewsAssessment(result);
-  const entities = assessment?.screened_entities || [];
+  const view = adverseNewsAssessment(result);
+  const detailed = view?.detailed;
+  const entities = view?.entities || [];
   const entity = entities[entityIndex] || null;
   const entityName = entity?.name || "";
-  const findings = (result?.findings || []).filter((finding) => String(finding.subject?.name || "").toUpperCase() === entityName.toUpperCase());
-  const evidence = (result?.evidence || []).filter((item) => item.data?.entity_key === entity?.key);
-  const entityOutcome = (assessment?.entity_outcomes || []).find((outcome) => outcome.entity_key === entity?.key);
+  const findings = (detailed?.findings || []).filter((finding) => String(finding.subject || "").toUpperCase() === entityName.toUpperCase());
+  const evidence = (view?.evidence || []).filter((item) => item.entity_key === entity?.key);
+  const summarySection = presentationSection(detailed, "summary");
+  const entitiesSection = presentationSection(detailed, "entities");
+  const entityFindingsSection = presentationSection(detailed, "findings", "entity_sections");
+  const entityAssessmentSection = presentationSection(detailed, "assessment", "entity_sections");
+  const entityEvidenceSection = presentationSection(detailed, "evidence", "entity_sections");
 
   useEffect(() => setEntityIndex(0), [result, mode]);
 
   return (
     <>
-      <Section title="Adverse News">
+      <Section title={detailed?.title || "Adverse News"}>
         <div className="actions">
           <button className={mode === "cdd" ? "" : "secondary"} disabled={!canLoadFromCdd} onClick={() => { onModeChange("cdd"); onLoadFromCdd(); }}>Load from CDD</button>
           <button className={mode === "independent" ? "" : "secondary"} onClick={() => onModeChange("independent")}>Run independent Adverse News Check</button>
@@ -2283,23 +2264,23 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
 
       {result && (
         <>
-          <Section title="Screening Summary">
-            {assessment?.outcome === "unavailable" ? <p className="risk">{`Screening unavailable. ${assessment.limitations?.[0] || "No reason was recorded."}`}</p> : assessment ? <div className="adverse-news-summary"><strong>{assessment.outcome === "completed_with_findings" ? "Screening completed with findings" : "Screening completed"}</strong><span><LinkedAdverseNewsText text={assessment.summary || "No material attributable adverse-news findings were identified in the retained results."} evidence={result.evidence || []} /></span><span>{`${entities.length} ${entities.length === 1 ? "entity" : "entities"} screened; ${(assessment.source_evidence_ids || []).length} retained sources.`}</span>{assessment.limitations?.length ? <span>{`Limitations: ${assessment.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">No screening assessment is available.</p>}
+          <Section title={summarySection.title}>
+            {view?.status === "unavailable" ? <p className="risk">{`${detailed?.status_labels?.[view.status] || view.status}. ${detailed?.limitations?.[0] || ""}`}</p> : view ? <div className="adverse-news-summary"><strong>{detailed?.status_labels?.[view.status] || view.status}</strong><span>{detailed?.text || ""}</span>{(detailed?.metrics || []).map((metric) => <span key={metric.label}>{`${metric.label}: ${metric.value ?? "-"}`}</span>)}{detailed?.limitations?.length ? <span>{`Limitations: ${detailed.limitations.join(" ")}`}</span> : null}</div> : <p className="empty">{summarySection.empty_text}</p>}
           </Section>
           {entity && (
-            <Section title="Entity Screening">
+            <Section title={entitiesSection.title}>
               <div className="adverse-news-navigation">
                 <button className="secondary" disabled={entityIndex === 0} onClick={() => setEntityIndex((index) => index - 1)}>← Previous</button>
                 <strong>{`${entityIndex + 1} of ${entities.length} — ${entityName}`}</strong>
                 <button className="secondary" disabled={entityIndex === entities.length - 1} onClick={() => setEntityIndex((index) => index + 1)}>Next →</button>
               </div>
-              <h3>Assessment</h3>
-              <p><LinkedAdverseNewsText text={entityOutcome?.summary || "No entity-level assessment was recorded."} evidence={result.evidence || []} /></p>
-              {entityOutcome?.limitations?.length ? <p className="empty">{`Limitations: ${entityOutcome.limitations.join(" ")}`}</p> : null}
-              <h3>Findings</h3>
-              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} showAdverseDetails />) : <p className="empty">No material attributable adverse-news findings were identified in the retained results for this entity.</p>}
-              <h3>Evidence</h3>
-              {evidence.length ? <div className="csp-sources">{evidence.map((item) => <a key={item.evidence_id} href={item.source_url || item.data?.url} target="_blank" rel="noreferrer">{item.description || item.source_url || "Source"}</a>)}</div> : <p className="empty">No retained source evidence for this entity.</p>}
+              <h3>{entityFindingsSection.title}</h3>
+              {findings.length ? findings.map((finding, index) => <AdverseNewsFinding key={finding.id || index} finding={finding} evidenceById={Object.fromEntries((view.evidence || []).map((item) => [item.id, item]))} popoverId={`tool-adverse-news-${entityIndex}-${index}`} />) : <p className="empty">{entityFindingsSection.empty_text}</p>}
+              <h3>{entityAssessmentSection.title}</h3>
+              <p>{entity?.summary || entityAssessmentSection.empty_text}</p>
+              {entity?.limitations?.length ? <p className="empty">{`Limitations: ${entity.limitations.join(" ")}`}</p> : null}
+              <h3>{entityEvidenceSection.title}</h3>
+              {evidence.length ? <div className="csp-sources">{evidence.map((item) => <a key={item.id} href={item.url} target="_blank" rel="noreferrer">{item.title || item.url || "Source"}</a>)}</div> : <p className="empty">{entityEvidenceSection.empty_text}</p>}
             </Section>
           )}
         </>
@@ -2308,13 +2289,17 @@ function AdverseNewsTool({ mode, result, names, error, running, canLoadFromCdd, 
   );
 }
 
+function presentationSection(variant, id, collection = "sections") {
+  return (variant?.[collection] || []).find((section) => section.id === id) || { title: id, empty_text: "" };
+}
+
 function AdverseNewsFinding({ evidenceById, finding, popoverId, showAdverseDetails = false }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const sourceButtonRef = useRef(null);
-  const evidenceItems = (finding.relevant_evidence_ids || [])
+  const evidenceItems = (finding.evidence_ids || [])
     .map((evidenceId) => evidenceById[evidenceId])
     .filter(Boolean);
-  const subject = finding.subject?.name || "Screened entity";
+  const subject = finding.subject || "Screened entity";
 
   function closeSources({ returnFocus = false } = {}) {
     setSourcesOpen(false);
@@ -2327,11 +2312,8 @@ function AdverseNewsFinding({ evidenceById, finding, popoverId, showAdverseDetai
         <strong>{`${subject}${finding.title ? ` — ${finding.title}` : ""}`}</strong>
         <span>{finding.summary || "No summary was recorded."}</span>
         <div className="adverse-news-finding-tags">
-          {showAdverseDetails && <span className="adverse-news-finding-tag identity-match-tag">{`Identity match: ${statusLabel(finding.tags?.identity_match || finding.adverse_news?.identity_match?.status)}`}</span>}
-          {showAdverseDetails && <span className="adverse-news-finding-tag adverse-event-tag">{`Adverse event: ${statusLabel(finding.tags?.adverse_event || finding.adverse_news?.adverse_event?.event_category)}`}</span>}
-          <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(finding.confidence?.level)}`}</span>
-          <span className={`adverse-news-finding-tag severity-tag severity-${finding.severity?.level || "unknown"}`}>{`Severity: ${statusLabel(finding.severity?.level)}`}</span>
-          <small>{`Source: ${finding.source?.producer_name || "adverse_news_screening"}.`}</small>
+          {(finding.tags || []).map((tag) => <span key={tag.label} className={`adverse-news-finding-tag ${tag.tone || ""}-tag severity-${tag.tone === "severity" ? tag.value : "unknown"}`}>{`${tag.label}: ${statusLabel(tag.value)}`}</span>)}
+          <small>{`Source: ${finding.source || "adverse_news_screening"}.`}</small>
         </div>
       </div>
       <div className="adverse-news-source-control">
@@ -2370,10 +2352,9 @@ function AdverseNewsFinding({ evidenceById, finding, popoverId, showAdverseDetai
               <button type="button" className="adverse-news-source-close" onClick={() => closeSources({ returnFocus: true })} aria-label="Close sources">×</button>
             </div>
             {evidenceItems.length ? evidenceItems.map((item) => {
-              const source = item.data || {};
-              const url = item.source_url || source.url;
-              const title = item.description || source.title || url || "Source";
-              const publishedAt = item.published_at || source.published_date;
+              const url = item.url;
+              const title = item.title || url || "Source";
+              const publishedAt = item.published_at;
               return (
                 <div className="adverse-news-source" key={item.evidence_id}>
                   {url ? <a href={url} target="_blank" rel="noreferrer">{title}</a> : <span>{title}</span>}

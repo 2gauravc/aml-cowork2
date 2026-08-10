@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from src.backend.app import CDDStateLookupRequest, SESSIONS, _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready, load_completed_cdd_state
 from src.tools.adverse_news import load_finding_schema
 from src.utils.legacy_cdd_state import migrate_legacy_adverse_news, migrate_legacy_risk_flags
-from src.utils.adverse_news_view import adverse_news_view
+from src.utils.adverse_news_view import AdverseNewsViewError, adverse_news_view
+from src.tools.adverse_news import load_adverse_news_definition
 
 
 def test_completed_pipeline_persists_the_full_graph_state() -> None:
@@ -145,8 +147,22 @@ def test_legacy_adverse_news_artifacts_are_normalized_idempotently() -> None:
 def test_adverse_news_view_hides_storage_shape_from_the_ui() -> None:
     state = {"assessments": [{"assessment_id": "assessment:adverse", "assessment_type": "adverse_news", "outcome": "completed_no_material_findings"}], "findings": [], "evidence": []}
     view = adverse_news_view(state)
-    assert view["schema_version"] == "adverse_news_view/v1"
-    assert view["assessment"]["assessment_id"] == "assessment:adverse"
+    assert view["schema_version"] == "tool_view/v1"
+    assert view["status"] == "completed_no_material_findings"
+
+
+def test_presentation_label_edit_changes_the_compiled_view() -> None:
+    state = {"assessments": [{"assessment_id": "assessment:adverse", "assessment_type": "adverse_news", "outcome": "completed_no_material_findings", "summary": "Clear", "limitations": [], "screened_entities": [], "source_evidence_ids": []}], "findings": [], "evidence": []}
+    definition = load_adverse_news_definition()
+    definition["presentation"]["summary"]["metrics"][0]["label"] = "Subjects screened"
+    assert adverse_news_view(state, definition)["summary"]["metrics"][0]["label"] == "Subjects screened"
+
+
+def test_invalid_presentation_binding_is_rejected() -> None:
+    definition = load_adverse_news_definition()
+    definition["presentation"]["summary"]["text"] = "assessment.not_a_field"
+    with pytest.raises(AdverseNewsViewError, match="does not resolve"):
+        adverse_news_view({"assessments": [], "findings": [], "evidence": []}, definition)
 
 
 def test_loading_legacy_adverse_news_persists_the_normalized_snapshot() -> None:
@@ -156,7 +172,7 @@ def test_loading_legacy_adverse_news_persists_the_normalized_snapshot() -> None:
     to_thread = AsyncMock(side_effect=lambda func, *args, **kwargs: func(*args, **kwargs))
     with patch("src.backend.app.get_completed_state", return_value=snapshot), patch("src.backend.app.save_completed_state", return_value={"saved_at": "2026-01-02T00:00:00Z", "identity": snapshot["identity"]}) as persist, patch("src.backend.app.asyncio.to_thread", to_thread):
         response = asyncio.run(load_completed_cdd_state(CDDStateLookupRequest(session_id="adverse-migration-test", customer_name="Example Ltd", jurisdiction="GB")))
-    assert response["cdd_state"]["tool_views"]["adverse_news"]["schema_version"] == "adverse_news_view/v1"
+    assert response["cdd_state"]["tool_views"]["adverse_news"]["schema_version"] == "tool_view/v1"
     assert response["cdd_state"]["findings"][0]["assessment_id"]
     persist.assert_called_once()
 
