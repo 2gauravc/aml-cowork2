@@ -19,7 +19,7 @@ def adverse_news_view(state: dict[str, Any], definition: dict[str, Any] | None =
     findings = [item for item in state.get("findings") or [] if isinstance(item, dict) and item.get("category") == "adverse_news"]
     evidence = [item for item in state.get("evidence") or [] if isinstance(item, dict) and item.get("tool") == "adverse_news_screening"]
     context = {"entity_count": len((assessment or {}).get("screened_entities") or []), "source_count": len((assessment or {}).get("source_evidence_ids") or [])}
-    base = {"assessment": assessment or {"outcome": "not_run", "summary": None, "limitations": []}, "context": context}
+    base = {"assessment": {"outcome": "not_run", "summary": None, "limitations": [], **(assessment or {})}, "context": context}
     return {
         "schema_version": "tool_view/v1",
         "tool": "adverse_news",
