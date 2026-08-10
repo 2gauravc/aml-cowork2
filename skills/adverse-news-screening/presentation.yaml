@@ -1,0 +1,34 @@
+schema: tool_view/v1
+views:
+  summary:
+    title: Adverse News Screening
+    sections: [assessment, findings]
+  detailed:
+    title: Adverse News
+    sections: [assessment, findings, evidence]
+assessment:
+  extension:
+    entity_title: Entity Screening
+    metrics:
+      - label: Entities screened
+        value: context.entity_count
+      - label: Sources retained
+        value: context.source_count
+    entity_sections:
+      - id: findings
+        title: Findings
+        empty_text: No material attributable adverse-news findings were identified in the retained results for this entity.
+      - id: assessment
+        title: Assessment
+        text: entity.summary
+        empty_text: No entity-level assessment was recorded.
+      - id: evidence
+        title: Evidence
+        empty_text: No retained source evidence for this entity.
+finding:
+  extension:
+    tags:
+      - label: Identity match
+        value: finding.adverse_news.identity_match.status
+      - label: Adverse event
+        value: finding.adverse_news.adverse_event.event_category

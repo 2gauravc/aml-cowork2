@@ -1,0 +1,41 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: tool_view/v1
+title: Generic CDD tool presentation contract
+description: Shared display base for canonical evidence, assessments, and finding/v1 records.
+type: object
+required: [schema, views, assessment, finding]
+properties:
+  schema: {type: string, const: tool_view/v1}
+  views:
+    type: object
+    required: [summary, detailed]
+    additionalProperties: false
+    properties:
+      summary: {$ref: '#/$defs/view'}
+      detailed: {$ref: '#/$defs/view'}
+  evidence: {type: object}
+  assessment:
+    type: object
+    additionalProperties: false
+    properties:
+      extension: {$ref: '#/$defs/extension'}
+  finding:
+    type: object
+    additionalProperties: false
+    properties:
+      extension: {$ref: '#/$defs/extension'}
+$defs:
+  view:
+    type: object
+    required: [title, sections]
+    additionalProperties: false
+    properties:
+      title: {type: string, minLength: 1}
+      sections:
+        type: array
+        minItems: 1
+        items:
+          type: string
+          enum: [assessment, findings, evidence]
+  extension:
+    type: object

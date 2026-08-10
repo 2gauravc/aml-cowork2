@@ -703,7 +703,14 @@ def adverse_news_screening(state: CDDState) -> dict[str, Any]:
             run_id, result["evaluated_at"], bool(result["drafts"]),
         )
         findings = [_assemble_adverse_news_finding(draft, entities, source_ids, run_id, result["definition"]["overlay"], queries_by_entity, assessment) for draft in result["drafts"]]
-        assessment["definition"] = {"skill_path": result["definition"]["path"], "definition_version": result["definition"].get("definition_version")}
+        assessment["definition"] = {
+            "skill_path": result["definition"]["path"],
+            "definition_version": result["definition"].get("definition_version"),
+            "contract_path": result["definition"].get("contract_path"),
+            "contract_version": result["definition"].get("contract_version"),
+            "presentation_path": result["definition"].get("presentation_path"),
+            "presentation_version": result["definition"].get("presentation_version"),
+        }
         return {"evidence": [classify_evidence_item(item) for item in source_evidence], "findings": findings, "assessments": [assessment]}
     except AdverseNewsError as exc:
         evaluated_at = datetime.now(UTC).isoformat()

@@ -13,9 +13,9 @@ class SkillDefinitionError(RuntimeError):
     """Raised when a skill definition is missing or malformed."""
 
 
-def load_skill_definition(skill_path: str | Path) -> tuple[dict[str, Any], str, str]:
-    """Load sibling definition.yaml and return its stable content hash."""
-    definition_path = Path(skill_path).with_name("definition.yaml")
+def load_skill_definition(skill_path: str | Path, filename: str = "definition.yaml") -> tuple[dict[str, Any], str, str]:
+    """Load a named sibling YAML contract and return its stable content hash."""
+    definition_path = Path(skill_path).with_name(filename)
     try:
         raw = definition_path.read_bytes()
         value = yaml.safe_load(raw.decode("utf-8"))

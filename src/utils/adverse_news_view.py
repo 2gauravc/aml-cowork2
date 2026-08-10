@@ -68,7 +68,7 @@ def _finding_view(finding: dict[str, Any], tag_specs: list[Any]) -> dict[str, An
     for tag in tag_specs:
         if not isinstance(tag, dict) or not isinstance(tag.get("label"), str):
             raise AdverseNewsViewError("Presentation finding tag must declare a label")
-        tags.append({"label": tag["label"], "value": _resolve(tag.get("value"), {"finding": finding}), "tone": tag.get("tone")})
+        tags.append({"label": tag["label"], "value": _resolve_tag(tag.get("value"), finding), "tone": tag.get("tone")})
     return {"id": finding.get("finding_id"), "subject": (finding.get("subject") or {}).get("name") or "Screened entity", "title": finding.get("title"), "summary": finding.get("summary"), "tags": tags, "evidence_ids": finding.get("relevant_evidence_ids") or [], "source": (finding.get("source") or {}).get("producer_name")}
 
 
@@ -98,3 +98,13 @@ def _resolve(path: Any, values: dict[str, Any]) -> Any:
             raise AdverseNewsViewError(f"Presentation binding does not resolve: {path}")
         current = current[key]
     return current
+
+
+def _resolve_tag(path: Any, finding: dict[str, Any]) -> Any:
+    """Return an explicit display value when a historical record lacks a tag field."""
+    try:
+        return _resolve(path, {"finding": finding})
+    except AdverseNewsViewError:
+        if (finding.get("migration") or {}).get("method") == "adverse_news_artifacts_v1_migration":
+            return "Not retained"
+        raise

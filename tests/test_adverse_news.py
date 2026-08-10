@@ -6,6 +6,7 @@ import asyncio
 import os
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
 from src.agents.nodes import _assemble_adverse_news_finding, adverse_news_screening
 from src.backend.app import IndependentAdverseNewsRequest, assess_independent_adverse_news
@@ -22,6 +23,10 @@ class AdverseNewsTests(unittest.TestCase):
         self.assertIn("multiple independent sources materially corroborate", definition["instructions"])
         self.assertEqual(schema["$id"], "finding/v1")
         self.assertIn("relevant_evidence_ids", schema["required"])
+        self.assertEqual(Path(definition["path"]).name, "contract.yaml")
+        self.assertEqual(Path(definition["presentation_path"]).name, "presentation.yaml")
+        self.assertEqual([section["id"] for section in definition["presentation"]["detailed"]["sections"]], ["summary", "entities", "findings", "evidence"])
+        self.assertEqual([tag["label"] for tag in definition["presentation"]["detailed"]["finding_tags"]], ["Confidence", "Severity", "Identity match", "Adverse event"])
 
     def test_assessment_schema_includes_nested_adverse_news_requirements(self) -> None:
         definition = load_adverse_news_definition()
@@ -85,7 +90,8 @@ class AdverseNewsTests(unittest.TestCase):
 
     def test_skill_requires_non_empty_search_terms_input(self) -> None:
         definition = load_adverse_news_definition()
-        with patch("src.tools.adverse_news.yaml.safe_load", return_value={"assessment": definition["assessment"], "finding": {"overlay": definition["overlay"]}, "presentation": definition["presentation"]}):
+        raw_presentation = {"schema": "tool_view/v1", "views": {"summary": {"title": "Summary", "sections": ["assessment"]}, "detailed": {"title": "Detailed", "sections": ["assessment"]}}}
+        with patch("src.tools.adverse_news.yaml.safe_load", side_effect=[{"assessment": definition["assessment"], "finding": {"overlay": definition["overlay"]}}, raw_presentation]):
             with self.assertRaisesRegex(AdverseNewsError, "input.search_terms"):
                 load_adverse_news_definition()
 

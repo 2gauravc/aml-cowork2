@@ -141,6 +141,9 @@ def test_legacy_adverse_news_artifacts_are_normalized_idempotently() -> None:
     assert finding["assessment_id"] == assessment["assessment_id"]
     assert assessment["source_evidence_ids"] == ["evidence:adverse:1"]
     assert state["evidence"][0]["data"]["web_search_evidence"]["schema_version"] == "web_search_evidence/v1"
+    assert finding["confidence"]["level"] == "low"
+    assert finding["severity"]["level"] == "not_applicable"
+    assert not list(Draft202012Validator(load_finding_schema()).iter_errors(finding))
     assert migrate_legacy_adverse_news(state) is False
 
 
@@ -174,6 +177,7 @@ def test_loading_legacy_adverse_news_persists_the_normalized_snapshot() -> None:
         response = asyncio.run(load_completed_cdd_state(CDDStateLookupRequest(session_id="adverse-migration-test", customer_name="Example Ltd", jurisdiction="GB")))
     assert response["cdd_state"]["tool_views"]["adverse_news"]["schema_version"] == "tool_view/v1"
     assert response["cdd_state"]["findings"][0]["assessment_id"]
+    assert response["cdd_state"]["tool_views"]["adverse_news"]["detailed"]["findings"][0]["tags"][2]["value"] == "Not retained"
     persist.assert_called_once()
 
 
