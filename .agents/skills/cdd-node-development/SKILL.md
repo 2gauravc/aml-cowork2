@@ -77,6 +77,12 @@ Backend owns schema-version recognition, idempotent migration, compatibility ada
 
 When changing a tool, update the view-model adapter only when its user-visible representation changes. Test representative legacy and current snapshots against the same view model; do not require the browser to interpret historical storage shapes.
 
+## Provide a reproducible command-line tool
+
+Every user-facing assessment tool must provide a module CLI that loads the same application environment and executes the same production LangGraph node as the application. Its default JSON output must be the full canonical node result—`evidence`, `assessments`, and `findings`—so a user can reproduce what the UI receives from the command line.
+
+Keep lower-level retrieval/model payloads behind explicit diagnostic options such as `--raw` or `--show-schema`; never make them the default result. Add a CLI test that proves named inputs reach the production node and that `--help` documents the diagnostic modes.
+
 ## Implement in order
 
 1. Inspect the node, tool, `definition.yaml`, `SKILL.md`, shared schemas, state persistence, migration code, and the associated UI before editing.
@@ -86,7 +92,7 @@ When changing a tool, update the view-model adapter only when its user-visible r
 5. Assemble canonical `finding/v1` records only after validating model-produced lineage. Preserve direct evidence citations.
 6. Update legacy-state migration so persisted historical records remain readable and conform to the current canonical contract.
 7. Project artifacts through the stable view-model boundary, then make tool UI show the intended fields without changing the CDD-card presentation unless requested.
-8. Add focused tests, then run the affected node/tool, schema, persistence/migration, and frontend tests.
+8. Add focused tests, including the canonical CLI output path for user-facing tools, then run the affected node/tool, schema, persistence/migration, and frontend tests.
 
 Use [the implementation checklist](references/implementation-checklist.md) before handoff.
 
