@@ -1,0 +1,17 @@
+# This is a tool extension, compiled onto the shared tool_view/v1 base.
+# The base owns generic evidence, assessment status, confidence, and severity.
+schema: tool_view/v1
+views:
+  summary:
+    title: Example assessment
+    sections: [assessment, findings]
+  detailed:
+    title: Example tool
+    sections: [assessment, findings, evidence]
+assessment:
+  extension:
+    metrics: []
+    entity_sections: []
+finding:
+  extension:
+    tags: []

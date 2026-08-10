@@ -1,0 +1,44 @@
+name: digital-footprint
+description: Assess a company's public digital presence and business profile from retained web evidence. Use for evidence-grounded company footprint assessments, verification gaps, and actionable inconsistencies.
+input:
+  search_terms:
+    - company website services locations
+    - products services customers partners suppliers distributors
+    - recent business activity LinkedIn
+evidence:
+  schema: web_search_evidence/v1
+  required: [evidence_id, evidence_type, source, search, content]
+assessment:
+  schema: digital_footprint_assessment/v3
+  confidence_levels: [low, medium, high]
+  required:
+    - assessment_id
+    - source_evidence_ids
+    - outcome
+    - presence_and_visibility
+    - digital_business_profile
+    - confidence
+    - limitations
+  outcome_values: [completed_no_material_findings, completed_inconclusive]
+  presence_and_visibility:
+    title: Presence and Visibility
+    indicator_statuses: [present, absent, unknown]
+    overall_levels:
+      strong: A professional website, active LinkedIn, multiple independent references, and recent business activity are present.
+      moderate: A basic website and limited but credible presence are supported.
+      weak: Operational evidence is very limited or the website is outdated or incomplete.
+      none: No credible online presence is found.
+    dimensions:
+      - Professional website
+      - Active LinkedIn
+      - Multiple independent references
+      - Recent business activity
+      - Evidence of operations
+finding:
+  category: digital_footprint
+  policy:
+    confidence: Presence indicators and business-profile conclusions must be supported by the selected evidence; limited coverage lowers confidence.
+    severity: Use low for a limited verification gap and medium for a material inconsistency. Do not create a finding for a credible, consistent limited footprint.
+  overlay:
+    schema: digital_footprint/v1
+    required: [presence_and_visibility, digital_business_profile, screening_coverage]

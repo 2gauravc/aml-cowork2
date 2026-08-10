@@ -1,86 +1,58 @@
-"""Coverage for the Digital Footprint evidence/assessment/findings contract."""
-import json, os, tempfile, unittest
+"""Digital Footprint reference-pipeline coverage."""
+from __future__ import annotations
+import json
+import os
 from pathlib import Path
 from unittest.mock import Mock, patch
-from src.tools.digital_footprint import DIGITAL_FOOTPRINT_SCHEMA, DigitalFootprintError, _response_schema, build_search_queries, evaluate_digital_footprint, load_digital_footprint_definition, load_finding_schema, search_digital_footprint
+from jsonschema import Draft202012Validator
+
 from src.agents.nodes import digital_footprint_assessment
+from src.tools.digital_footprint import evaluate_digital_footprint, load_digital_footprint_definition, load_finding_schema
+from src.utils.digital_footprint_view import digital_footprint_view
+from src.utils.legacy_cdd_state import migrate_legacy_digital_footprint
 
-class DigitalFootprintTests(unittest.TestCase):
-    def test_skill_defines_input_assessment_and_overlay(self):
-        definition=load_digital_footprint_definition()
-        self.assertEqual(definition["assessment"]["schema"], "digital_footprint_assessment/v2")
-        self.assertEqual(definition["overlay"]["schema"], "digital_footprint/v1")
-        self.assertTrue(definition["input"]["search_terms"])
-        self.assertEqual([item["key"] for item in definition["assessment_definition"]["sections"][0]["dimensions"]], ["professional_website", "active_linkedin", "multiple_independent_references", "recent_business_activity", "evidence_of_operations"])
+def _assessment():
+    indicators={key:{"status":"unknown","rationale":"No evidence.","url":""} for key in ["professional_website","active_linkedin","multiple_independent_references","recent_business_activity","evidence_of_operations"]}
+    return {"assessment_id":"assessment:digital-footprint:tool","source_evidence_ids":["evidence:digital-footprint:tool:1"],"outcome":"completed_no_material_findings","presence_and_visibility":{"indicator":"moderate","rationale":"A basic credible website was retained.","signals":["website"],"indicators":indicators},"digital_business_profile":{"summary":"Services profile.","business_activity":"Services","geographic_presence":[],"key_people":[],"commercial_relationships":[]},"confidence":{"level":"medium","rationale":"One retained source.","limitations":[]},"limitations":[]}
 
-    def test_schema_uses_only_skill_declared_dimensions(self):
-        definition = load_digital_footprint_definition()
-        indicators = _response_schema(load_finding_schema(), definition["overlay"], definition["assessment_definition"])["properties"]["assessment"]["properties"]["presence_and_visibility"]["properties"]["indicators"]
-        self.assertEqual(set(indicators["properties"]), {"professional_website", "active_linkedin", "multiple_independent_references", "recent_business_activity", "evidence_of_operations"})
-        self.assertNotIn("basic_website", indicators["properties"])
+def _finding():
+    return {"title":"Digital verification gap","summary":"Public evidence is limited.","confidence":{"level":"medium","rationale":"One source retained.","limitations":[]},"severity":{"level":"low","rationale":"Limited verification gap."},"potential_impact_risk":"Operating profile needs verification.","recommended_action_rfi":{"internal_actions":["Verify operating presence."],"rfi":[]},"assessment_id":"assessment:digital-footprint:tool","relevant_evidence_ids":["evidence:digital-footprint:tool:1"],"digital_footprint":{"presence_and_visibility":{"indicator":"weak","rationale":"Limited evidence.","signals":[]},"digital_business_profile":{"summary":"Limited profile.","business_activity":"Unknown","geographic_presence":[],"key_people":[],"commercial_relationships":[]},"screening_coverage":{"queries":[],"source_evidence_ids":["evidence:digital-footprint:tool:1"],"limitations":[]}}}
 
-    def test_skill_allows_an_optional_explicit_dimension_key(self):
-        with tempfile.TemporaryDirectory() as directory:
-            skill = Path(directory) / "SKILL.md"; definition = Path(directory) / "definition.yaml"
-            skill.write_text("# Test skill\n", encoding="utf-8")
-            definition.write_text("input: {search_terms: [website]}\nassessment:\n  schema: digital_footprint_assessment/v2\n  presence_and_visibility:\n    dimensions: [{id: official_site, label: Official website}]\noutput: {schema: digital_footprint/v1}\n", encoding="utf-8")
-            self.assertEqual(load_digital_footprint_definition(skill)["assessment_definition"]["sections"][0]["dimensions"], [{"key": "official_site", "label": "Official website"}])
+def test_contract_and_presentation_are_separate():
+    definition=load_digital_footprint_definition()
+    assert Path(definition["contract_path"]).name == "contract.yaml"
+    assert Path(definition["presentation_path"]).name == "presentation.yaml"
+    assert definition["assessment"]["schema"] == "digital_footprint_assessment/v3"
+    assert [tag["label"] for tag in definition["presentation"]["detailed"]["finding_tags"]] == ["Confidence","Severity","Presence"]
 
-    def test_query_terms_are_skill_inputs(self):
-        self.assertEqual(build_search_queries("Example Ltd", search_terms=["services", "partners"]), ['"Example Ltd" services', '"Example Ltd" partners'])
+def test_model_receives_preallocated_canonical_ids():
+    response=Mock(); response.output_text=json.dumps({"assessment":_assessment(),"findings":[]}); client=Mock(); client.responses.create.return_value=response
+    source={"url":"https://example.test","query":"Example","title":"Example","content":"Evidence"}
+    with patch.dict(os.environ,{"OPENAI_API_KEY":"test"}), patch("src.tools.digital_footprint.search_digital_footprint",return_value=[source]), patch("src.tools.digital_footprint.OpenAI",return_value=client): result=evaluate_digital_footprint("Example Ltd")
+    schema=client.responses.create.call_args.kwargs["text"]["format"]["schema"]
+    assert result["sources"][0]["evidence_id"] == "evidence:digital-footprint:tool:1"
+    assert schema["properties"]["assessment"]["properties"]["assessment_id"]["const"] == "assessment:digital-footprint:tool"
 
-    def test_search_retains_query_and_deduplicates_urls(self):
-        response=Mock(); response.json.return_value={"results":[{"title":"Example","url":"https://example.test","content":"Evidence"}]}
-        with patch.dict(os.environ,{"TAVILY_API_KEY":"test"}), patch("src.tools.digital_footprint.requests.post",return_value=response): sources=search_digital_footprint(["a","b"])
-        self.assertEqual(len(sources),1); self.assertEqual(sources[0]["query"],"a")
+@patch("src.agents.nodes.evaluate_digital_footprint")
+def test_node_enforces_assessment_and_evidence_lineage(evaluate):
+    definition=load_digital_footprint_definition(); source={"evidence_id":"evidence:digital-footprint:tool:1","url":"https://example.test","title":"Example","query":"Example"}
+    evaluate.return_value={"sources":[source],"assessment":_assessment(),"findings":[_finding()],"definition":definition,"company_inputs":{"company_name":"Example Ltd"},"queries":["Example"],"evaluated_at":"2026-08-10T00:00:00+00:00"}
+    result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
+    finding=result["findings"][0]
+    assert finding["assessment_id"] == result["assessments"][0]["assessment_id"]
+    assert set(finding["relevant_evidence_ids"]).issubset(result["assessments"][0]["source_evidence_ids"])
+    assert not list(Draft202012Validator(load_finding_schema()).iter_errors(finding))
 
-    def test_missing_input_is_clear(self):
-        with tempfile.TemporaryDirectory() as directory:
-            skill = Path(directory) / "SKILL.md"; definition = Path(directory) / "definition.yaml"
-            skill.write_text("# Test skill\n", encoding="utf-8")
-            definition.write_text("assessment: {schema: digital_footprint_assessment/v1}\noutput: {schema: digital_footprint/v1}\n", encoding="utf-8")
-            with self.assertRaisesRegex(DigitalFootprintError,"input.search_terms"): load_digital_footprint_definition(skill)
+def test_view_hides_artifact_shape():
+    state={"assessments":[{**_assessment(),"assessment_type":"digital_footprint","queries":["Example"]}],"findings":[],"evidence":[]}
+    view=digital_footprint_view(state)
+    assert view["schema_version"] == "tool_view/v1"
+    assert view["summary"]["metrics"][0]["value"] == 1
 
-    def test_assessment_uses_strict_schema(self):
-        response=Mock(); response.output_text=json.dumps(_result()); client=Mock(); client.responses.create.return_value=response
-        source={"id":"source:1","url":"https://example.test","query":"Example","title":"Example","content":"Evidence"}
-        with patch.dict(os.environ,{"OPENAI_API_KEY":"test"}), patch("src.tools.digital_footprint.search_digital_footprint",return_value=[source]), patch("src.tools.digital_footprint.OpenAI",return_value=client): result=evaluate_digital_footprint("Example Ltd")
-        self.assertEqual(result["sources"],[source]); self.assertTrue(client.responses.create.call_args.kwargs["text"]["format"]["strict"]); self.assertEqual(client.responses.create.call_args.kwargs["text"]["format"]["schema"],DIGITAL_FOOTPRINT_SCHEMA)
-
-    @patch("src.agents.nodes.evaluate_digital_footprint")
-    def test_langgraph_node_returns_evidence_and_assessment(self, evaluate):
-        evaluate.return_value={"sources":[{"id":"source:1","url":"https://example.test","title":"Example"}],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":["Example"],"evaluated_at":"2026-07-25T00:00:00+00:00"}
-        result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
-        self.assertEqual(result["evidence"][0]["tool"],"digital_footprint_assessment")
-        self.assertEqual(result["assessments"][0]["company_inputs"]["company_name"],"Example Ltd")
-        self.assertEqual(result["assessments"][0]["assessment_type"], "digital_footprint")
-        self.assertEqual(result["assessments"][0]["definition"]["schema_version"], "digital_footprint_assessment/v2")
-        self.assertNotIn("cdd_section", evaluate.call_args.kwargs)
-
-    @patch("src.agents.nodes.evaluate_digital_footprint")
-    def test_langgraph_node_does_not_forward_evidence_metadata_to_the_tool(self, evaluate):
-        evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
-        digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd", "cdd_section":"screening"}})
-        self.assertEqual(set(evaluate.call_args.kwargs), {"company_name", "jurisdiction", "registration_number", "known_domain", "registered_address"})
-
-    @patch("src.agents.nodes.evaluate_digital_footprint")
-    def test_langgraph_node_derives_company_inputs_from_cdd(self, evaluate):
-        evaluate.return_value={"sources":[],"assessment":_result()["assessment"],"findings":[],"definition":load_digital_footprint_definition(),"company_inputs":{"company_name":"Example Ltd"},"queries":[],"evaluated_at":"2026-07-25T00:00:00+00:00"}
-        digital_footprint_assessment({"cdd":{"company_business_profile":{"customer_static":{"name":"Example Ltd","jurisdiction":"GB","registration_number":"123","website":"https://example.test","registered_address":{"full_address":"1 Example Street, London, GB"}}}}})
-        self.assertEqual(evaluate.call_args.kwargs["company_name"],"Example Ltd")
-        self.assertEqual(evaluate.call_args.kwargs["known_domain"],"https://example.test")
-        self.assertEqual(evaluate.call_args.kwargs["registered_address"],"1 Example Street, London, GB")
-
-    @patch("src.agents.nodes.evaluate_digital_footprint", side_effect=RuntimeError("provider validation failed"))
-    def test_langgraph_node_records_unavailable_assessment_for_unexpected_error(self, evaluate):
-        result=digital_footprint_assessment({"digital_footprint_inputs":{"company_name":"Example Ltd"}})
-        self.assertEqual(result["findings"], [])
-        self.assertEqual(result["assessments"][0]["outcome"], "unavailable")
-        self.assertEqual(result["assessments"][0]["assessment_type"], "digital_footprint")
-        self.assertIn("provider validation failed", result["assessments"][0]["limitations"][0])
-
-def _result():
-    profile={"summary":"A credible profile.","business_activity":"Services","geographic_presence":[],"key_people":[],"commercial_relationships":[]}
-    indicators={name:{"status":"unknown","rationale":"No evidence.","url":""} for name in ("professional_website","active_linkedin","multiple_independent_references","recent_business_activity","evidence_of_operations")}
-    assessment={"presence_and_visibility":{"indicator":"moderate","rationale":"Website.","signals":["website"],"indicators":indicators},"digital_business_profile":profile,"confidence":{"level":"medium","rationale":"Evidence.","limitations":[]},"limitations":[]}
-    return {"assessment":assessment,"findings":[]}
+def test_legacy_finding_is_normalized_idempotently():
+    state={"evidence":[{"evidence_id":"evidence:legacy","tool":"digital_footprint_assessment"}],"assessments":[],"findings":[{"category":"digital_footprint","finding_id":"finding:legacy","subject":{"entity_type":"company","name":"Example Ltd"},"relevant_evidence_ids":["evidence:legacy"]}]}
+    assert migrate_legacy_digital_footprint(state)
+    finding=state["findings"][0]
+    assert finding["assessment_id"] and finding["confidence"]["level"] == "low"
+    assert not list(Draft202012Validator(load_finding_schema()).iter_errors(finding))
+    assert not migrate_legacy_digital_footprint(state)

@@ -1,0 +1,20 @@
+schema: tool_view/v1
+views:
+  summary:
+    title: Digital Footprint
+    sections: [assessment, findings]
+  detailed:
+    title: Digital Footprint
+    sections: [assessment, findings, evidence]
+assessment:
+  extension:
+    metrics:
+      - label: Queries run
+        value: context.query_count
+      - label: Sources retained
+        value: context.source_count
+finding:
+  extension:
+    tags:
+      - label: Presence
+        value: finding.digital_footprint.presence_and_visibility.indicator

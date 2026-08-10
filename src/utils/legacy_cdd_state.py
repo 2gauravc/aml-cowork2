@@ -86,6 +86,31 @@ def migrate_legacy_adverse_news(state: dict[str, Any]) -> bool:
     return changed
 
 
+def migrate_legacy_digital_footprint(state: dict[str, Any]) -> bool:
+    """Make retained Digital Footprint findings safe for the canonical view."""
+    findings=[x for x in state.setdefault("findings", []) if isinstance(x,dict) and x.get("category")=="digital_footprint"]
+    assessments=state.setdefault("assessments", []); changed=False
+    for finding in findings:
+        if (finding.get("migration") or {}).get("method") == "digital_footprint_artifacts_v1_migration": continue
+        refs=[x for x in finding.get("relevant_evidence_ids") or [] if isinstance(x,str)]
+        assessment=next((x for x in reversed(assessments) if isinstance(x,dict) and x.get("assessment_type")=="digital_footprint" and set(refs).issubset(set(x.get("source_evidence_ids") or []))), None)
+        created=((finding.get("source") or {}).get("created_at") if isinstance(finding.get("source"),dict) else None) or datetime.now(UTC).isoformat()
+        if assessment is None:
+            assessment={"assessment_id":f"assessment:digital-footprint:migrated:{uuid4().hex}","assessment_type":"digital_footprint","schema_version":"digital_footprint_assessment/v3","tool":"digital_footprint_assessment","run_id":None,"created_at":created,"outcome":"completed_with_findings","summary":"Migrated Digital Footprint assessment reconstructed from retained finding data.","limitations":["Historical assessment detail was not retained; no new research was performed."],"queries":[],"source_evidence_ids":refs}
+            assessments.append(assessment)
+        subject=finding.get("subject") if isinstance(finding.get("subject"),dict) else {}
+        finding.setdefault("finding_id",f"finding:digital-footprint:migrated:{uuid4().hex}"); finding["schema_version"]="finding/v1"; finding["assessment_id"]=assessment["assessment_id"]
+        finding["subject"]={"entity_type":subject.get("entity_type") or "company","name":subject.get("name") or "Unknown","entity_id":subject.get("entity_id")}
+        finding.setdefault("title","Historical digital-footprint finding"); finding.setdefault("summary","Historical digital-footprint finding retained for analyst review.")
+        finding.setdefault("confidence",{"level":"low","rationale":"The retained historical record lacks sufficient assessment detail to reassess confidence.","limitations":["Migrated from a legacy Digital Footprint record."]})
+        finding.setdefault("severity",{"level":"not_applicable","rationale":"The retained historical record lacks sufficient detail to reassess severity."})
+        finding.setdefault("potential_impact_risk","The historical footprint concern may require renewed review because underlying assessment detail is incomplete.")
+        finding.setdefault("recommended_action_rfi",{"internal_actions":["Review the historical record and rerun Digital Footprint assessment if the relationship remains in scope."],"rfi":[]})
+        source=finding.get("source") if isinstance(finding.get("source"),dict) else {}; finding["source"]={"producer_type":source.get("producer_type") if source.get("producer_type") in {"tool","case_assessment"} else "tool","producer_name":source.get("producer_name") or "digital_footprint_assessment","run_id":source.get("run_id"),"created_at":source.get("created_at") or created}
+        finding["migration"]={**(finding.get("migration") or {}),"method":"digital_footprint_artifacts_v1_migration","limitations":["Missing historical Digital Footprint fields are displayed as not retained."]}; changed=True
+    return changed
+
+
 def _normalise_legacy_adverse_finding(finding: dict[str, Any], refs: list[str], assessment_id: str, created_at: str) -> None:
     """Fill canonical generic fields without asserting historical event facts."""
     subject = finding.get("subject") if isinstance(finding.get("subject"), dict) else {}

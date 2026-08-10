@@ -1607,10 +1607,10 @@ function DigitalFootprint({ mode, form, result, error, assessing, skill, skillLo
         <>
           <DigitalFootprintAssessment result={result} />
           <Section title="Findings">
-            {(result.findings || []).length ? (result.findings || []).map((finding, index) => <AdverseNewsFinding key={finding.finding_id || index} finding={finding} evidenceById={Object.fromEntries((result.evidence || []).map((item) => [item.evidence_id, item]))} popoverId={`digital-footprint-${index}`} />) : <p className="empty">No material digital-footprint findings were identified.</p>}
+            {((result.tool_view || result).detailed?.findings || result.findings || []).length ? ((result.tool_view || result).detailed?.findings || result.findings || []).map((finding, index) => <AdverseNewsFinding key={finding.id || finding.finding_id || index} finding={{...finding, finding_id: finding.id, relevant_evidence_ids: finding.evidence_ids, subject: {name: finding.subject}}} evidenceById={Object.fromEntries(((result.tool_view || result).evidence || result.evidence || []).map((item) => [item.id || item.evidence_id, item]))} popoverId={`digital-footprint-${index}`} />) : <p className="empty">No material digital-footprint findings were identified.</p>}
           </Section>
           <Section title="Sources">
-            <div className="csp-sources">{(result.evidence || []).map((source) => <div key={source.evidence_id}><a href={source.source_url || source.data?.url} target="_blank" rel="noreferrer">{source.description || source.source_url || "Source"}</a><small>{` — ${source.data?.query || ""}`}</small></div>)}</div>
+            <div className="csp-sources">{((result.tool_view || result).evidence || result.evidence || []).map((source) => <div key={source.id || source.evidence_id}><a href={source.url || source.source_url || source.data?.url} target="_blank" rel="noreferrer">{source.title || source.description || source.url || source.source_url || "Source"}</a><small>{` — ${source.data?.query || ""}`}</small></div>)}</div>
           </Section>
           <Section title="Digital Footprint JSON"><pre className="json-view">{JSON.stringify(result, null, 2)}</pre></Section>
           <Section title="CDD evidence">
@@ -1652,6 +1652,11 @@ function latestAssessment(result, assessmentType) {
 }
 
 function DigitalFootprintAssessment({ result }) {
+  const view = result?.tool_view?.schema_version === "tool_view/v1" ? result.tool_view : result?.schema_version === "tool_view/v1" ? result : null;
+  if (view) {
+    const detailed = view.detailed || {};
+    return <Section title={detailed.title || "Digital Footprint"}><div className="adverse-news-summary"><strong>{detailed.status_labels?.[view.status] || view.status || "Not run"}</strong><span>{detailed.text || "No assessment was recorded."}</span>{(detailed.metrics || []).map((metric) => <span key={metric.label}>{`${metric.label}: ${metric.value ?? "-"}`}</span>)}{detailed.limitations?.length ? <span>{`Limitations: ${detailed.limitations.join(" ")}`}</span> : null}</div></Section>;
+  }
   const assessment = latestAssessment(result, "digital_footprint");
   if (!assessment) return <Section title="Assessment"><p className="risk">Digital Footprint assessment unavailable.</p></Section>;
   const profile = assessment.digital_business_profile || {};
@@ -1659,6 +1664,8 @@ function DigitalFootprintAssessment({ result }) {
 }
 
 function digitalFootprintRecords(cddState) {
+  const view = cddState?.tool_views?.digital_footprint;
+  if (view?.schema_version === "tool_view/v1") return view;
   return {
     evidence: (cddState?.evidence || []).filter((item) => item.tool === "digital_footprint_assessment"),
     assessments: assessmentsByType(cddState, "digital_footprint"),
@@ -1668,6 +1675,10 @@ function digitalFootprintRecords(cddState) {
 
 function DigitalFootprintScreening({ cddState, onOpenTool }) {
   const result = digitalFootprintRecords(cddState);
+  if (result?.schema_version === "tool_view/v1") {
+    const summary = result.summary || {};
+    return <Section title={summary.title || "Digital Footprint"} collapsible><div className="adverse-news-summary"><strong>{summary.status_labels?.[result.status] || result.status || "Not run"}</strong><span>{summary.text || "No assessment was recorded."}</span>{(summary.metrics || []).map((metric) => <span key={metric.label}>{`${metric.label}: ${metric.value ?? "-"}`}</span>)}{summary.limitations?.length ? <span>{`Limitations: ${summary.limitations.join(" ")}`}</span> : null}<button className="secondary adverse-news-tool-link" onClick={onOpenTool}>Review in Digital Footprint tool</button></div></Section>;
+  }
   const assessment = latestAssessment(result, "digital_footprint");
 
   if (!assessment) {

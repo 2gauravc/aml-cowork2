@@ -1,6 +1,6 @@
 ---
 name: cdd-node-development
-description: Create or update a CDD LangGraph assessment node and its domain policy. Use when adding a CDD tool, changing an existing node or definition.yaml, designing evidence-assessment-finding lineage, implementing LLM response schemas, or updating related persistence, migrations, tests, and tool UI.
+description: Create or update a CDD LangGraph assessment node and its domain policy. Use when adding a CDD tool, changing its contract.yaml or presentation.yaml, designing evidence-assessment-finding lineage, implementing LLM response schemas, or updating related persistence, legacy-S3 migration, tests, and tool UI.
 ---
 
 # Create or update a CDD LangGraph node
@@ -33,7 +33,7 @@ Validate every returned ID, and require a finding's direct evidence IDs to be a 
 
 Keep `skills/<tool>/SKILL.md` short and policy-only: what is assessed, how to weigh domain facts, and when an outcome requires review. Do not put prompt wording, query construction, schema syntax, UI behavior, or runtime safety mechanics there.
 
-Use `skills/<tool>/contract.yaml` for the machine-readable artifact contract, and `skills/<tool>/presentation.yaml` for the machine-readable UI extension. Start from [the definition template](references/definition-template.yaml) for the contract. `contract.yaml` must clearly separate:
+Use `skills/<tool>/contract.yaml` for the machine-readable artifact contract, and `skills/<tool>/presentation.yaml` for the machine-readable UI extension. Start from [the contract template](references/contract-template.yaml) and [the presentation template](references/presentation-template.yaml). `contract.yaml` must clearly separate:
 
 - `input`: accepted CDD context and selected entities;
 - `evidence`: source-record type and normalization rules;
@@ -43,6 +43,8 @@ Use `skills/<tool>/contract.yaml` for the machine-readable artifact contract, an
 Never duplicate generic finding fields in a domain overlay. `finding/v1` owns generic confidence, severity, actions/RFIs, provenance, assessment linkage, and relevant evidence IDs. The definition's finding section may define domain policy for those generic fields, but its overlay contains only tool-specific facts.
 
 `presentation.yaml` selects the shared evidence → assessment → finding view components for summary and detailed views. It may add domain tags, metrics, and entity-level sections, but must not repeat generic finding fields or embed frontend markup. A presentation-only edit changes the rendered view, not the stored artifact contract.
+
+Keep their versions independent. Persist the contract path/version with the assessment; retain the presentation path/version separately for traceability. Do not make a presentation-only change require artifact migration, and do not let a contract change silently alter presentation semantics.
 
 ## Split responsibilities deliberately
 
@@ -79,6 +81,17 @@ Backend owns schema-version recognition, idempotent migration, compatibility ada
 
 When changing a tool, update the view-model adapter only when its user-visible representation changes. Test representative legacy and current snapshots against the same view model; do not require the browser to interpret historical storage shapes.
 
+## Migrate retained S3 state deliberately
+
+Before changing a contract or presentation, inspect historical S3 snapshots, existing load migrations, and every field the new view binds. A new UI tag is a compatibility change if old findings do not contain its source field.
+
+Use load-on-demand, idempotent migration: normalize the snapshot when it is loaded and save it back only when changed. Do not bulk-rewrite S3 records unless the user explicitly asks. Preserve retained facts; never invent identity matches, event categories, or risk conclusions to satisfy a newer schema. Instead:
+
+- reconstruct generic required fields only from retained facts and state clear migration limitations;
+- create a migration-context evidence record only when a canonical reference is required but historical source evidence is absent;
+- display unavailable domain fields as an explicit value such as “Not retained”; and
+- test the complete load → migrate → stable-view → persist path, then confirm a second load is unchanged.
+
 ## Provide a reproducible command-line tool
 
 Every user-facing assessment tool must provide a module CLI that loads the same application environment and executes the same production LangGraph node as the application. Its default JSON output must be the full canonical node result—`evidence`, `assessments`, and `findings`—so a user can reproduce what the UI receives from the command line.
@@ -87,14 +100,15 @@ Keep lower-level retrieval/model payloads behind explicit diagnostic options suc
 
 ## Implement in order
 
-1. Inspect the node, tool, `contract.yaml`, `presentation.yaml`, `SKILL.md`, shared schemas, state persistence, migration code, and the associated UI before editing.
+1. Inventory the node, tool, `contract.yaml`, `presentation.yaml`, `SKILL.md`, shared schemas, persisted/legacy state shapes, migration code, backend view adapter, and associated UI before editing.
 2. Define or reuse a source-evidence schema. Normalize and validate raw provider results before prompt construction; assign canonical IDs at this boundary.
 3. Make the full assessment and overlay contracts explicit in `contract.yaml`; remove parallel hard-coded enums and duplicate generic fields.
 4. Create assessments even for no-hit, clear, and unavailable runs. Make findings conditional on the policy outcome.
 5. Assemble canonical `finding/v1` records only after validating model-produced lineage. Preserve direct evidence citations.
-6. Update legacy-state migration so persisted historical records remain readable and conform to the current canonical contract.
-7. Project artifacts through the stable view-model boundary, then make tool UI show the intended fields without changing the CDD-card presentation unless requested.
-8. Add focused tests, including the canonical CLI output path for user-facing tools, then run the affected node/tool, schema, persistence/migration, and frontend tests.
+6. Define `presentation.yaml` by selecting shared evidence, assessment, and finding components, then add only domain-specific tags, metrics, and entity sections. Validate and compile it server-side.
+7. Update legacy-state migration and the stable view adapter together. Test every new binding against a representative historical snapshot and keep migration load-on-demand and idempotent.
+8. Project artifacts through the stable view-model boundary, then make tool UI show the intended fields without changing the CDD-card presentation unless requested.
+9. Add focused tests: canonical CLI output, artifact/lineage, contract and presentation validation, legacy load-and-second-load persistence, and frontend rendering.
 
 Use [the implementation checklist](references/implementation-checklist.md) before handoff.
 
@@ -102,4 +116,4 @@ Use [the implementation checklist](references/implementation-checklist.md) befor
 
 When changing a shared schema such as `finding/v1`, locate every producer and migration first. Do not make a generic field required until every canonical writer can populate it, or include those writer updates in the same change.
 
-Keep one domain tool as the reference implementation before applying a new pattern broadly. For the evidence → assessment → finding pattern, Adverse News is the current reference.
+Keep one domain tool as the reference implementation before applying a new pattern broadly. Adverse News is the current reference for evidence → assessment → finding, contract/presentation separation, server-side `tool_view/v1` compilation, and legacy-S3 compatibility.

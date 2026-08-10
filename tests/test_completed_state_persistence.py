@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 
 from src.backend.app import CDDStateLookupRequest, SESSIONS, _complete_pipeline_for_session, _migrate_legacy_risk_rating, _queue_resume_if_ready, _resume_if_ready, load_completed_cdd_state
 from src.tools.adverse_news import load_finding_schema
-from src.utils.legacy_cdd_state import migrate_legacy_adverse_news, migrate_legacy_risk_flags
+from src.utils.legacy_cdd_state import migrate_legacy_adverse_news, migrate_legacy_digital_footprint, migrate_legacy_risk_flags
 from src.utils.adverse_news_view import AdverseNewsViewError, adverse_news_view
 from src.tools.adverse_news import load_adverse_news_definition
 
@@ -178,6 +178,18 @@ def test_loading_legacy_adverse_news_persists_the_normalized_snapshot() -> None:
     assert response["cdd_state"]["tool_views"]["adverse_news"]["schema_version"] == "tool_view/v1"
     assert response["cdd_state"]["findings"][0]["assessment_id"]
     assert response["cdd_state"]["tool_views"]["adverse_news"]["detailed"]["findings"][0]["tags"][2]["value"] == "Not retained"
+    persist.assert_called_once()
+
+
+def test_loading_legacy_digital_footprint_persists_a_stable_view() -> None:
+    state = {"evidence": [{"evidence_id": "evidence:digital:1", "tool": "digital_footprint_assessment"}], "assessments": [], "findings": [{"finding_id": "finding:digital:1", "category": "digital_footprint", "subject": {"entity_type": "company", "name": "Example Ltd"}, "relevant_evidence_ids": ["evidence:digital:1"]}]}
+    snapshot = {"saved_at": "2026-01-01T00:00:00Z", "identity": {"customer_name": "Example Ltd", "jurisdiction": "GB", "case_id": "1"}, "graph_state": state}
+    SESSIONS.clear()
+    to_thread = AsyncMock(side_effect=lambda func, *args, **kwargs: func(*args, **kwargs))
+    with patch("src.backend.app.get_completed_state", return_value=snapshot), patch("src.backend.app.save_completed_state", return_value={"saved_at": "2026-01-02T00:00:00Z", "identity": snapshot["identity"]}) as persist, patch("src.backend.app.asyncio.to_thread", to_thread):
+        response = asyncio.run(load_completed_cdd_state(CDDStateLookupRequest(session_id="digital-migration-test", customer_name="Example Ltd", jurisdiction="GB")))
+    assert response["cdd_state"]["tool_views"]["digital_footprint"]["schema_version"] == "tool_view/v1"
+    assert response["cdd_state"]["findings"][0]["migration"]["method"] == "digital_footprint_artifacts_v1_migration"
     persist.assert_called_once()
 
 

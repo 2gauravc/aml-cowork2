@@ -1,4 +1,4 @@
-# Adapt names and controlled values for the tool. Generic finding fields belong
+# Adapt names and controlled values for the tool's contract.yaml. Generic finding fields belong
 # to schemas/findings/finding-v1.yaml, not the overlay below.
 input:
   selected_entities: []
