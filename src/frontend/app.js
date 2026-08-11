@@ -703,6 +703,15 @@ function App() {
     }
   }
 
+  function loadCspFromCdd() {
+    const customer = cdd?.company_business_profile?.customer_static || {};
+    setCspCompanyName(customer.name || "");
+    setCspAddress(customer.registered_address?.full_address || "");
+    setCspResult(cspRecords(cddState));
+    setCspError("");
+    setActiveWorkspace("csp");
+  }
+
   async function loadDigitalFootprintSkill() {
     if (digitalFootprintSkill || digitalFootprintSkillLoading) return;
     setDigitalFootprintSkillLoading(true);
@@ -1173,6 +1182,8 @@ function App() {
                 onAddressChange={setCspAddress}
                 onSkillToggle={(open) => { if (open) loadCspSkill(); }}
                 onAssess={assessCsp}
+                canLoadFromCdd={Boolean(cddState)}
+                onLoadFromCdd={loadCspFromCdd}
                 demoMode={demoMode}
               />
             ) : activeWorkspace === "digital-footprint" ? (
@@ -1508,13 +1519,31 @@ function CSPDetection({
   onAddressChange,
   onSkillToggle,
   onAssess,
+  canLoadFromCdd,
+  onLoadFromCdd,
   demoMode,
 }) {
-  const assessment = result?.assessment || {};
-  const presentation = result
-    ? riskPresentation({ category: "csp_address", evidence: result })
-    : null;
-  const severity = result?.finding_policy?.severity?.level || "not_applicable";
+  const [copyStatus, setCopyStatus] = useState("");
+  const view = result?.tool_view;
+  const detailed = view?.detailed;
+  const status = detailed?.status_labels?.[view?.status] || statusLabel(view?.status || "not_run");
+  const finding = detailed?.findings?.[0];
+  const tags = detailed?.assessment_tags || finding?.tags || [
+    { label: "Confidence", value: "Not retained", tone: "confidence" },
+    { label: "Severity", value: "not_applicable", tone: "severity" },
+  ];
+  const formattedResult = result ? JSON.stringify(result, null, 2) : "";
+
+  async function copyResultJson() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable");
+      await navigator.clipboard.writeText(formattedResult);
+      setCopyStatus("Copied JSON to clipboard.");
+    } catch {
+      setCopyStatus("Unable to copy JSON. Please select and copy it manually.");
+    }
+  }
+
   return (
     <>
       <Section title="CSP Detection">
@@ -1525,6 +1554,10 @@ function CSPDetection({
             <pre className="skill-content">{skill || "Open this section to load the current skill."}</pre>
           )}
         </details>
+
+        <div className="actions">
+          <button className="secondary" disabled={!canLoadFromCdd} onClick={onLoadFromCdd}>Load from CDD</button>
+        </div>
 
         <div className="csp-form">
           <input
@@ -1550,29 +1583,46 @@ function CSPDetection({
         <Section title="Assessment Result">
           <div className="risk csp-assessment-result">
             <div className="risk-content">
-              <strong>{presentation.title}</strong>
-              <span>{`Evaluation: ${presentation.evaluation}. ${presentation.summary}`}</span>
-              <p>{assessment.explanation}</p>
+              <strong>{detailed?.title || "CSP Detection"}</strong>
+              <span>{status}</span>
+              <p>{detailed?.text || "No assessment summary was retained."}</p>
               <div className="adverse-news-finding-tags">
-                <span className="adverse-news-finding-tag confidence-tag">{`Confidence: ${statusLabel(assessment.confidence)}`}</span>
-                <span className={`adverse-news-finding-tag severity-tag severity-${severity}`}>{`Severity: ${statusLabel(severity)}`}</span>
+                {tags.map((tag) => <span key={tag.label} className={`adverse-news-finding-tag ${tag.tone === "severity" ? `severity-tag severity-${tag.value}` : "confidence-tag"}`}>{`${tag.label}: ${statusLabel(tag.value)}`}</span>)}
               </div>
             </div>
           </div>
-          {(result.sources || []).length > 0 && (
+          {(view?.evidence || []).length > 0 && (
             <div className="csp-sources">
               <strong>Sources</strong>
-              {(result.sources || []).map((source, index) => (
+              {(view.evidence || []).map((source, index) => (
                 <a key={`${source.url || source.title}-${index}`} href={source.url} target="_blank" rel="noreferrer">
                   {source.title || source.url || "Source"}
                 </a>
               ))}
             </div>
           )}
+          <Section title="CSP Detection JSON" collapsible>
+            <div className="json-actions">
+              <button className="secondary" onClick={copyResultJson} aria-label="Copy CSP Detection JSON to clipboard">Copy JSON</button>
+              <span className="json-copy-status" role="status" aria-live="polite">{copyStatus}</span>
+            </div>
+            <pre className="json-view">{formattedResult}</pre>
+          </Section>
         </Section>
       )}
     </>
   );
+}
+
+function cspRecords(cddState) {
+  const view = cddState?.tool_views?.csp_address;
+  if (!view || view.schema_version !== "tool_view/v1") return null;
+  return {
+    evidence: (cddState?.evidence || []).filter((item) => item.tool === "csp_address_assessment"),
+    assessments: assessmentsByType(cddState, "csp_address"),
+    findings: (cddState?.findings || []).filter((finding) => finding.category === "csp_address"),
+    tool_view: view,
+  };
 }
 
 function DigitalFootprint({ mode, form, result, error, assessing, skill, skillLoading, onChange, onSkillToggle, onAssess, canLoadFromCdd, onLoadFromCdd, onModeChange, canAttach, attaching, onAttach, demoMode }) {

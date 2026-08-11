@@ -1,8 +1,13 @@
 name: csp-detector
-description: Assess whether a company's registered address appears to be used by a company service provider (CSP) using cited web-search evidence. Use when evaluating a CDD red flag for registered-office, virtual-office, formation-agent, registered-agent, or corporate-services indicators.
+description: Assess whether a company's registered address appears to be used by a company service provider (CSP) using cited web-search evidence.
+input:
+  required: [registered_address]
+evidence:
+  schema: web_search_evidence/v1
+  required: [evidence_id, evidence_type, source, search, content]
 assessment:
-  schema: csp_address_assessment/v1
-  required: [is_csp, confidence, explanation]
+  schema: csp_address_assessment/v2
+  required: [assessment_id, source_evidence_ids, is_csp, confidence, explanation, limitations]
   outcomes: ["yes", "no", "inconclusive"]
   confidence_levels: [low, medium, high]
 policy:
@@ -27,6 +32,9 @@ policy:
     no: Available evidence supports a non-CSP use and does not show credible shared-address or direct-provider indicators.
     inconclusive: Evidence is insufficient, contradictory, irrelevant, building-only, or unavailable.
 finding:
+  category: csp_address
+  policy:
+    confidence: Use the assessment's evidence-specific confidence and limitations.
   severity:
     level: not_applicable
     rationale: CSP address detection is an address-service indicator; it does not independently assess the severity of financial-crime risk.

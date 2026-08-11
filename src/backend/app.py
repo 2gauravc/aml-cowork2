@@ -20,13 +20,33 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from src.agents.chat_graph import run_chat_graph
-from src.agents.graph import PIPELINE_NODE_LABELS, resume_cdd_agent_state, run_cdd_agent_state
-from src.agents.nodes import adverse_news_screening, assess_cdd_completeness, assess_evidence_quality, assess_other_risk_factors, assess_risk_rating, assess_shell_company_risk, digital_footprint_assessment
+from src.agents.graph import (
+    PIPELINE_NODE_LABELS,
+    resume_cdd_agent_state,
+    run_cdd_agent_state,
+)
+from src.agents.nodes import (
+    adverse_news_screening,
+    assess_cdd_completeness,
+    assess_csp_address,
+    assess_evidence_quality,
+    assess_other_risk_factors,
+    assess_risk_rating,
+    assess_shell_company_risk,
+    digital_footprint_assessment,
+)
 from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
-from src.tools.case_review import CaseReviewError, generate_case_review_summary, unavailable_case_review
-from src.tools.csp_detector import CSPAssessmentError, evaluate_csp_address, load_csp_skill
+from src.tools.case_review import (
+    CaseReviewError,
+    generate_case_review_summary,
+    unavailable_case_review,
+)
+from src.tools.csp_detector import (
+    CSPAssessmentError,
+    load_csp_skill,
+)
 from src.tools.digital_footprint import load_digital_footprint_skill
 from src.tools.customer_static import get_customer_static_by_name
 from src.tools.document_extraction import classify_document, extract_document
@@ -36,9 +56,19 @@ from src.utils.kyc_cache import company_cache_subject, get_cache_source
 from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
 from src.utils.case_status import sync_case_status
-from src.utils.cdd_state_store import CDDStateStoreError, get_completed_state, save_completed_state
-from src.utils.legacy_cdd_state import migrate_legacy_adverse_news, migrate_legacy_digital_footprint, migrate_legacy_risk_flags
+from src.utils.cdd_state_store import (
+    CDDStateStoreError,
+    get_completed_state,
+    save_completed_state,
+)
+from src.utils.legacy_cdd_state import (
+    migrate_legacy_adverse_news,
+    migrate_legacy_csp_address,
+    migrate_legacy_digital_footprint,
+    migrate_legacy_risk_flags,
+)
 from src.utils.adverse_news_view import adverse_news_view
+from src.utils.csp_view import csp_view
 from src.utils.digital_footprint_view import digital_footprint_view
 from src.utils.environment import load_application_env
 from src.utils.s3_documents import (
@@ -48,7 +78,6 @@ from src.utils.s3_documents import (
     reusable_document_name,
     upload_document_to_s3,
 )
-
 
 load_application_env()
 
@@ -65,7 +94,9 @@ STANDALONE_DOCUMENT_CONTENT_TYPES = {
     "image/webp",
     "image/gif",
 }
-SANDBOX_CASES_PATH = PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
+SANDBOX_CASES_PATH = (
+    PROJECT_ROOT / "registry_list_of_mock_cases" / "kyc-sandbox-test-cases.json"
+)
 DEMO_CASE_PATH = PROJECT_ROOT / "demo_data" / "case_review_demo.json"
 
 app = FastAPI(title="WBL Bank CDD Chatbot")
@@ -245,13 +276,28 @@ async def load_demo_case(request: DemoLoadRequest) -> dict[str, Any]:
 async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
     """Run an isolated CSP assessment that does not change an active CDD case."""
     if _demo_mode_enabled():
-        raise HTTPException(status_code=400, detail="CSP assessment is disabled in Demo Mode; load the demo case to inspect fixture evidence.")
-    try:
-        return await asyncio.to_thread(
-            evaluate_csp_address,
-            request.registered_address,
-            company_name=request.company_name,
+        raise HTTPException(
+            status_code=400,
+            detail="CSP assessment is disabled in Demo Mode; load the demo case to inspect fixture evidence.",
         )
+    try:
+        result = await asyncio.to_thread(
+            assess_csp_address,
+            {
+                "cdd": {
+                    "company_business_profile": {
+                        "customer_static": {
+                            "name": request.company_name,
+                            "registered_address": {
+                                "full_address": request.registered_address
+                            },
+                        }
+                    }
+                }
+            },
+        )
+        records = {key: getattr(value, "value", value) for key, value in result.items()}
+        return {**records, "tool_view": csp_view(records)}
     except CSPAssessmentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -260,45 +306,69 @@ async def assess_csp(request: CSPAssessmentRequest) -> dict[str, Any]:
 async def assess_digital_footprint(request: DigitalFootprintRequest) -> dict[str, Any]:
     """Run standalone footprint research without reading or writing CDD session state."""
     if _demo_mode_enabled():
-        raise HTTPException(status_code=400, detail="Digital-footprint assessment is disabled in Demo Mode.")
+        raise HTTPException(
+            status_code=400,
+            detail="Digital-footprint assessment is disabled in Demo Mode.",
+        )
     try:
-        result = await asyncio.to_thread(digital_footprint_assessment, {"digital_footprint_inputs": request.model_dump()})
+        result = await asyncio.to_thread(
+            digital_footprint_assessment,
+            {"digital_footprint_inputs": request.model_dump()},
+        )
         return {**result, "tool_view": digital_footprint_view(result)}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/adverse-news/assess")
-async def assess_independent_adverse_news(request: IndependentAdverseNewsRequest) -> dict[str, Any]:
+async def assess_independent_adverse_news(
+    request: IndependentAdverseNewsRequest,
+) -> dict[str, Any]:
     """Run adverse-news screening without reading or changing an active CDD session."""
-    names = list(dict.fromkeys(name.strip() for name in request.entity_names if name.strip()))
+    names = list(
+        dict.fromkeys(name.strip() for name in request.entity_names if name.strip())
+    )
     if not names:
         raise HTTPException(status_code=400, detail="Provide at least one entity name")
     state = {
         "cdd": {
             "company_business_profile": {"customer_static": {}},
-            "ownership_and_control": {"members": {"controlling_members": []}, "ubos": [{"name": name} for name in names]},
+            "ownership_and_control": {
+                "members": {"controlling_members": []},
+                "ubos": [{"name": name} for name in names],
+            },
         }
     }
     try:
         result = await asyncio.to_thread(adverse_news_screening, state)
         return {"tool_view": adverse_news_view(result)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Independent adverse-news screening failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Independent adverse-news screening failed: {exc}"
+        ) from exc
 
 
 @app.post("/api/digital-footprint/attach")
-async def attach_digital_footprint(request: DigitalFootprintAttachRequest) -> dict[str, Any]:
+async def attach_digital_footprint(
+    request: DigitalFootprintAttachRequest,
+) -> dict[str, Any]:
     """Explicitly attach a client-held standalone result as CDD evidence."""
     session = SESSIONS.get(request.session_id)
     state = _active_cdd_state(session)
     if not state or not state.get("cdd"):
-        raise HTTPException(status_code=404, detail="No active CDD result for this session")
+        raise HTTPException(
+            status_code=404, detail="No active CDD result for this session"
+        )
     if session.get("demo_mode"):
-        raise HTTPException(status_code=400, detail="Digital-footprint attachment is disabled in Demo Mode.")
+        raise HTTPException(
+            status_code=400,
+            detail="Digital-footprint attachment is disabled in Demo Mode.",
+        )
     result = request.result or {}
     _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
-    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(
+        state, "assessments", result.get("assessments") or [], "assessment_id"
+    )
     _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     return _response(session, status="digital_footprint_attached")
 
@@ -319,9 +389,14 @@ async def extract_standalone_document(file: UploadFile = File(...)) -> dict[str,
 
     data = await file.read()
     if not data or len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Upload must be a document no larger than 20 MB")
+        raise HTTPException(
+            status_code=400, detail="Upload must be a document no larger than 20 MB"
+        )
     if not _is_supported_document_content(data, file.content_type):
-        raise HTTPException(status_code=400, detail="Uploaded file does not match its declared document type")
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file does not match its declared document type",
+        )
 
     DOCUMENT_EXTRACTION_STAGING_DIR.mkdir(parents=True, exist_ok=True)
     suffix = {
@@ -343,7 +418,9 @@ async def extract_standalone_document(file: UploadFile = File(...)) -> dict[str,
         )
         return {"classification": classification, "extraction": extraction}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Document extraction failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400, detail=f"Document extraction failed: {exc}"
+        ) from exc
     finally:
         path.unlink(missing_ok=True)
 
@@ -354,7 +431,9 @@ async def generate_standalone_idv_document(
 ) -> dict[str, Any]:
     """Generate a synthetic ID&V document without accessing a CDD session."""
     if _demo_mode_enabled():
-        raise HTTPException(status_code=400, detail="ID&V document generation is disabled in Demo Mode.")
+        raise HTTPException(
+            status_code=400, detail="ID&V document generation is disabled in Demo Mode."
+        )
 
     individual = {
         "name": request.full_name.strip(),
@@ -374,7 +453,9 @@ async def generate_standalone_idv_document(
             output_dir=STANDALONE_IDV_DOCUMENT_DIR,
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"ID&V document generation failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400, detail=f"ID&V document generation failed: {exc}"
+        ) from exc
 
     pdf_path = Path(artifact["pdf_path"])
     if not pdf_path.exists():
@@ -444,13 +525,24 @@ async def run_cdd_completeness(request: CDDCompletenessRequest) -> dict[str, Any
         return _response(session, status="demo_read_only")
     result = await asyncio.to_thread(assess_cdd_completeness, state)
     prior_assessment_ids = {
-        item.get("assessment_id") for item in state.get("assessments", [])
+        item.get("assessment_id")
+        for item in state.get("assessments", [])
         if item.get("assessment_type") == "cdd_completeness"
     }
-    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "cdd_completeness"]
-    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_assessment_ids]
+    state["assessments"] = [
+        item
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") != "cdd_completeness"
+    ]
+    state["findings"] = [
+        item
+        for item in state.get("findings", [])
+        if item.get("assessment_id") not in prior_assessment_ids
+    ]
     _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
-    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(
+        state, "assessments", result.get("assessments") or [], "assessment_id"
+    )
     _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     sync_case_status(state)
     return _response(session, status="cdd_completeness_completed")
@@ -466,11 +558,25 @@ async def run_evidence_quality(request: EvidenceQualityRequest) -> dict[str, Any
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
     result = await asyncio.to_thread(assess_evidence_quality, state)
-    prior_ids = {item.get("assessment_id") for item in state.get("assessments", []) if item.get("assessment_type") == "evidence_quality"}
-    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "evidence_quality"]
-    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_ids]
+    prior_ids = {
+        item.get("assessment_id")
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") == "evidence_quality"
+    }
+    state["assessments"] = [
+        item
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") != "evidence_quality"
+    ]
+    state["findings"] = [
+        item
+        for item in state.get("findings", [])
+        if item.get("assessment_id") not in prior_ids
+    ]
     _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
-    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(
+        state, "assessments", result.get("assessments") or [], "assessment_id"
+    )
     _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     sync_case_status(state)
     return _response(session, status="evidence_quality_completed")
@@ -486,11 +592,25 @@ async def run_other_risk_factors(request: OtherRiskFactorsRequest) -> dict[str, 
     if session.get("demo_mode"):
         return _response(session, status="demo_read_only")
     result = await asyncio.to_thread(assess_other_risk_factors, state)
-    prior_ids = {item.get("assessment_id") for item in state.get("assessments", []) if item.get("assessment_type") == "other_risk_factors"}
-    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "other_risk_factors"]
-    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_ids]
+    prior_ids = {
+        item.get("assessment_id")
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") == "other_risk_factors"
+    }
+    state["assessments"] = [
+        item
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") != "other_risk_factors"
+    ]
+    state["findings"] = [
+        item
+        for item in state.get("findings", [])
+        if item.get("assessment_id") not in prior_ids
+    ]
     _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
-    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(
+        state, "assessments", result.get("assessments") or [], "assessment_id"
+    )
     _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     sync_case_status(state)
     return _response(session, status="other_risk_factors_completed")
@@ -498,32 +618,62 @@ async def run_other_risk_factors(request: OtherRiskFactorsRequest) -> dict[str, 
 
 @app.post("/api/shell-company-risk/run")
 async def run_shell_company_risk(request: ShellCompanyRiskRequest) -> dict[str, Any]:
-    session = SESSIONS.get(request.session_id); state = _active_cdd_state(session)
-    if not state or not state.get("cdd"): raise HTTPException(status_code=404, detail="No CDD result for this session")
-    if session.get("demo_mode"): return _response(session, status="demo_read_only")
+    session = SESSIONS.get(request.session_id)
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
     result = await asyncio.to_thread(assess_shell_company_risk, state)
-    prior_ids = {item.get("assessment_id") for item in state.get("assessments", []) if item.get("assessment_type") == "shell_company_risk"}
-    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "shell_company_risk"]
-    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_ids]
-    _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id"); _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id"); _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
+    prior_ids = {
+        item.get("assessment_id")
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") == "shell_company_risk"
+    }
+    state["assessments"] = [
+        item
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") != "shell_company_risk"
+    ]
+    state["findings"] = [
+        item
+        for item in state.get("findings", [])
+        if item.get("assessment_id") not in prior_ids
+    ]
+    _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
+    _append_cdd_records(
+        state, "assessments", result.get("assessments") or [], "assessment_id"
+    )
+    _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
     sync_case_status(state)
     return _response(session, status="shell_company_risk_completed")
 
 
 @app.post("/api/risk-rating/run")
 async def run_risk_rating(request: RiskRatingRequest) -> dict[str, Any]:
-    session = SESSIONS.get(request.session_id); state = _active_cdd_state(session)
-    if not state or not state.get("cdd"): raise HTTPException(status_code=404, detail="No CDD result for this session")
-    if session.get("demo_mode"): return _response(session, status="demo_read_only")
+    session = SESSIONS.get(request.session_id)
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
     result = await asyncio.to_thread(assess_risk_rating, state)
-    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "risk_rating"]
-    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    state["assessments"] = [
+        item
+        for item in state.get("assessments", [])
+        if item.get("assessment_type") != "risk_rating"
+    ]
+    _append_cdd_records(
+        state, "assessments", result.get("assessments") or [], "assessment_id"
+    )
     sync_case_status(state)
     return _response(session, status="risk_rating_completed")
 
 
 @app.post("/api/case-review/decision")
-async def record_case_review_decision(request: CaseReviewDecisionRequest) -> dict[str, Any]:
+async def record_case_review_decision(
+    request: CaseReviewDecisionRequest,
+) -> dict[str, Any]:
     session = SESSIONS.get(request.session_id)
     if not _active_cdd_state(session):
         raise HTTPException(status_code=404, detail="No CDD result for this session")
@@ -555,7 +705,9 @@ async def run_pipeline(
 
 
 @app.post("/api/cdd-states/availability")
-async def completed_cdd_state_availability(request: CDDStateLookupRequest) -> dict[str, Any]:
+async def completed_cdd_state_availability(
+    request: CDDStateLookupRequest,
+) -> dict[str, Any]:
     try:
         snapshot = await asyncio.to_thread(
             get_completed_state,
@@ -589,6 +741,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     graph_state = snapshot["graph_state"]
     migrated_rating = _migrate_legacy_risk_rating(graph_state)
     migrated_flags = migrate_legacy_risk_flags(graph_state)
+    migrated_csp_address = migrate_legacy_csp_address(graph_state)
     migrated_adverse_news = migrate_legacy_adverse_news(graph_state)
     migrated_digital_footprint = migrate_legacy_digital_footprint(graph_state)
     _normalise_document_state(graph_state)
@@ -596,24 +749,37 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     session["graph_state"] = graph_state
     identity = snapshot["identity"]
     session["customer_name"] = identity.get("customer_name") or request.customer_name
-    session["jurisdiction"] = identity.get("jurisdiction") or _clean_jurisdiction(request.jurisdiction)
+    session["jurisdiction"] = identity.get("jurisdiction") or _clean_jurisdiction(
+        request.jurisdiction
+    )
     session["case_id"] = identity.get("case_id")
     session["pipeline_status"] = "complete"
     session["pipeline_progress"] = None
     saved_cdd_state = {"saved_at": snapshot.get("saved_at"), "identity": identity}
-    if migrated_rating or migrated_flags or migrated_adverse_news or migrated_digital_footprint:
+    if (
+        migrated_rating
+        or migrated_flags
+        or migrated_csp_address
+        or migrated_adverse_news
+        or migrated_digital_footprint
+    ):
         try:
-            saved_cdd_state = await asyncio.to_thread(
-                save_completed_state,
-                graph_state,
-                customer_name=session["customer_name"],
-                jurisdiction=session["jurisdiction"],
-                case_id=session["case_id"],
-            ) or saved_cdd_state
+            saved_cdd_state = (
+                await asyncio.to_thread(
+                    save_completed_state,
+                    graph_state,
+                    customer_name=session["customer_name"],
+                    jurisdiction=session["jurisdiction"],
+                    case_id=session["case_id"],
+                )
+                or saved_cdd_state
+            )
         except CDDStateStoreError as exc:
             session["state_persistence_error"] = str(exc)
     session["saved_cdd_state"] = saved_cdd_state
-    session["messages"].append({"role": "assistant", "content": "Loaded the saved completed CDD state."})
+    session["messages"].append(
+        {"role": "assistant", "content": "Loaded the saved completed CDD state."}
+    )
     return _response(session, status="complete")
 
 
@@ -622,8 +788,14 @@ def _migrate_legacy_risk_rating(graph_state: dict[str, Any]) -> bool:
     assessments = graph_state.get("assessments")
     if not isinstance(assessments, list):
         return False
-    current = [item for item in assessments if item.get("assessment_type") == "risk_rating"]
-    if len(current) == 1 and (current[0].get("provenance") or {}).get("method") == "deterministic_rule_based":
+    current = [
+        item for item in assessments if item.get("assessment_type") == "risk_rating"
+    ]
+    if (
+        len(current) == 1
+        and (current[0].get("provenance") or {}).get("method")
+        == "deterministic_rule_based"
+    ):
         return False
 
     result = assess_risk_rating(graph_state)
@@ -684,7 +856,9 @@ async def presign_document(request: DocumentPresignRequest) -> dict[str, Any]:
     bucket = storage.get("bucket")
     key = storage.get("key")
     if not bucket or not key:
-        raise HTTPException(status_code=400, detail="Document is missing S3 storage metadata")
+        raise HTTPException(
+            status_code=400, detail="Document is missing S3 storage metadata"
+        )
 
     expires_in_seconds = 15 * 60
     expires_at = datetime.now(UTC) + timedelta(seconds=expires_in_seconds)
@@ -718,32 +892,52 @@ async def upload_case_document(
 
     data = await file.read()
     if not data or len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Upload must be a PDF no larger than 20 MB")
+        raise HTTPException(
+            status_code=400, detail="Upload must be a PDF no larger than 20 MB"
+        )
     staging = DOCUMENT_STAGING_DIR / session_id
     staging.mkdir(parents=True, exist_ok=True)
-    path = staging / f"{uuid.uuid4()}-{_safe_file_name(file.filename or 'document.pdf')}"
+    path = (
+        staging / f"{uuid.uuid4()}-{_safe_file_name(file.filename or 'document.pdf')}"
+    )
     path.write_bytes(data)
     artifact = {"pdf_path": str(path), "source": "Provided by customer"}
     try:
         classification = await asyncio.to_thread(classify_document, path)
-        preview = await asyncio.to_thread(extract_document, artifact, classification=classification)
+        preview = await asyncio.to_thread(
+            extract_document, artifact, classification=classification
+        )
     except Exception as exc:
         path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=f"Unable to identify document: {exc}") from exc
+        raise HTTPException(
+            status_code=400, detail=f"Unable to identify document: {exc}"
+        ) from exc
 
-    requirement = _match_requirement(_open_document_requirements(state), classification, preview)
+    requirement = _match_requirement(
+        _open_document_requirements(state), classification, preview
+    )
     if not requirement:
         path.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail="No open document requirement matched this upload")
-    requirement.update({
-        "status": "received",
-        "gap": {"status": "resolved", "reason": ""},
-        "acquisition": {
-            "source": "customer_upload",
-            "artifact": {**artifact, "document_type": classification.get("document_type")},
-        },
-        "processing": {"classification": classification, "match": _match_summary(requirement, classification, preview)},
-    })
+        raise HTTPException(
+            status_code=422, detail="No open document requirement matched this upload"
+        )
+    requirement.update(
+        {
+            "status": "received",
+            "gap": {"status": "resolved", "reason": ""},
+            "acquisition": {
+                "source": "customer_upload",
+                "artifact": {
+                    **artifact,
+                    "document_type": classification.get("document_type"),
+                },
+            },
+            "processing": {
+                "classification": classification,
+                "match": _match_summary(requirement, classification, preview),
+            },
+        }
+    )
     try:
         await _queue_resume_if_ready(session)
     except Exception as exc:
@@ -751,7 +945,9 @@ async def upload_case_document(
             status_code=500,
             detail=f"Document was received, but processing could not continue: {session.get('pipeline_error') or exc}",
         ) from exc
-    return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
+    return _response(
+        session, status=session.get("pipeline_status", "awaiting_documents")
+    )
 
 
 @app.post("/api/documents/generate")
@@ -779,16 +975,20 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
                 output_dir=DOCUMENT_STAGING_DIR / request.session_id,
             )
         except Exception as exc:
-            subject_name = (requirement.get("subject") or {}).get("name") or "the required individual"
+            subject_name = (requirement.get("subject") or {}).get(
+                "name"
+            ) or "the required individual"
             raise HTTPException(
                 status_code=400,
                 detail=f"Unable to generate {requirement['document_type']} for {subject_name}: {exc}",
             ) from exc
-        requirement.update({
-            "status": "received",
-            "gap": {"status": "resolved", "reason": ""},
-            "acquisition": {"source": "generated", "artifact": artifact},
-        })
+        requirement.update(
+            {
+                "status": "received",
+                "gap": {"status": "resolved", "reason": ""},
+                "acquisition": {"source": "generated", "artifact": artifact},
+            }
+        )
     try:
         await _queue_resume_if_ready(session)
     except Exception as exc:
@@ -796,7 +996,9 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
             status_code=500,
             detail=f"Document was generated, but processing could not continue: {session.get('pipeline_error') or exc}",
         ) from exc
-    return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
+    return _response(
+        session, status=session.get("pipeline_status", "awaiting_documents")
+    )
 
 
 @app.post("/api/documents/process")
@@ -813,7 +1015,9 @@ async def process_case_documents(request: DocumentActionRequest) -> dict[str, An
             status_code=500,
             detail=f"Document processing could not continue: {session.get('pipeline_error') or exc}",
         ) from exc
-    return _response(session, status=session.get("pipeline_status", "awaiting_documents"))
+    return _response(
+        session, status=session.get("pipeline_status", "awaiting_documents")
+    )
 
 
 @app.get("/api/jurisdictions")
@@ -896,7 +1100,8 @@ def _is_supported_document_content(data: bytes, content_type: str) -> bool:
         "application/pdf": lambda value: value.lstrip().startswith(b"%PDF-"),
         "image/png": lambda value: value.startswith(b"\x89PNG\r\n\x1a\n"),
         "image/jpeg": lambda value: value.startswith(b"\xff\xd8\xff"),
-        "image/webp": lambda value: value.startswith(b"RIFF") and value[8:12] == b"WEBP",
+        "image/webp": lambda value: value.startswith(b"RIFF")
+        and value[8:12] == b"WEBP",
         "image/gif": lambda value: value.startswith((b"GIF87a", b"GIF89a")),
     }
     validator = signatures.get(content_type)
@@ -908,22 +1113,31 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
     try:
         fixture = json.loads(DEMO_CASE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail=f"Demo fixture could not be loaded: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Demo fixture could not be loaded: {exc}"
+        ) from exc
     session_id = session["session_id"]
     session.clear()
     session.update(deepcopy(fixture))
     session["graph_state"] = {
         key: session.pop(key)
         for key in (
-            "cdd", "documents", "evidence", "findings", "assessments",
-            "case_status", "case_assessment_summary",
+            "cdd",
+            "documents",
+            "evidence",
+            "findings",
+            "assessments",
+            "case_status",
+            "case_assessment_summary",
         )
         if key in session
     }
     legacy_requirements = session.pop("document_requirements", [])
     if legacy_requirements:
         state = session["graph_state"]
-        state.setdefault("documents", []).extend(_migrate_legacy_document_requirements(legacy_requirements))
+        state.setdefault("documents", []).extend(
+            _migrate_legacy_document_requirements(legacy_requirements)
+        )
     session["session_id"] = session_id
     session["demo_mode"] = True
     state = session.get("graph_state")
@@ -976,7 +1190,12 @@ def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
 def _cdd_state_view(state: dict[str, Any]) -> dict[str, Any]:
     """Add non-persisted stable tool views to an API state response."""
     view = deepcopy(state)
-    view["tool_views"] = {**(view.get("tool_views") or {}), "adverse_news": adverse_news_view(state), "digital_footprint": digital_footprint_view(state)}
+    view["tool_views"] = {
+        **(view.get("tool_views") or {}),
+        "adverse_news": adverse_news_view(state),
+        "csp_address": csp_view(state),
+        "digital_footprint": digital_footprint_view(state),
+    }
     return view
 
 
@@ -988,22 +1207,31 @@ def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
     return state
 
 
-def _append_cdd_records(state: dict[str, Any], key: str, records: list[dict[str, Any]], id_key: str) -> None:
+def _append_cdd_records(
+    state: dict[str, Any], key: str, records: list[dict[str, Any]], id_key: str
+) -> None:
     existing = state.setdefault(key, [])
     known_ids = {item.get(id_key) for item in existing if item.get(id_key)}
-    existing.extend(item for item in records if not item.get(id_key) or item.get(id_key) not in known_ids)
+    existing.extend(
+        item
+        for item in records
+        if not item.get(id_key) or item.get(id_key) not in known_ids
+    )
 
 
 def _open_document_requirements(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Return unresolved canonical document records eligible for officer action."""
     return [
-        document for document in state.get("documents", [])
+        document
+        for document in state.get("documents", [])
         if document.get("purpose") == "identity_verification"
         and document.get("status") in {"required", "located", "received"}
     ]
 
 
-def _migrate_legacy_document_requirements(requirements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _migrate_legacy_document_requirements(
+    requirements: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Read old persisted requirement records into the canonical document shape."""
     documents = []
     for index, requirement in enumerate(requirements):
@@ -1011,20 +1239,43 @@ def _migrate_legacy_document_requirements(requirements: list[dict[str, Any]]) ->
         cached = requirement.get("cache_document") or {}
         old_status = requirement.get("status")
         resolved = old_status in {"cache_found", "provided", "received", "processed"}
-        documents.append({
-            "document_id": f"legacy:{requirement.get('id') or index}",
-            "purpose": "company_profile" if requirement.get("document_type") == "registry_document" else "identity_verification",
-            "document_type": requirement.get("document_type"),
-            "subject": {"name": requirement.get("entity_name"), "case_common_id": individual.get("case_common_id")},
-            "requirement": {"accepted_types": individual.get("required_documents", [])},
-            "status": "processed" if old_status == "processed" else ("located" if resolved else "required"),
-            "gap": {"status": "resolved" if resolved else "outstanding", "reason": "" if resolved else "No acceptable document is available."},
-            "acquisition": {"source": requirement.get("source") or ("S3 document cache" if cached else None)},
-            "storage": cached.get("storage") or {},
-            "url": cached.get("url"),
-            "name": cached.get("name"),
-            "demo_url": requirement.get("demo_url"),
-        })
+        documents.append(
+            {
+                "document_id": f"legacy:{requirement.get('id') or index}",
+                "purpose": (
+                    "company_profile"
+                    if requirement.get("document_type") == "registry_document"
+                    else "identity_verification"
+                ),
+                "document_type": requirement.get("document_type"),
+                "subject": {
+                    "name": requirement.get("entity_name"),
+                    "case_common_id": individual.get("case_common_id"),
+                },
+                "requirement": {
+                    "accepted_types": individual.get("required_documents", [])
+                },
+                "status": (
+                    "processed"
+                    if old_status == "processed"
+                    else ("located" if resolved else "required")
+                ),
+                "gap": {
+                    "status": "resolved" if resolved else "outstanding",
+                    "reason": (
+                        "" if resolved else "No acceptable document is available."
+                    ),
+                },
+                "acquisition": {
+                    "source": requirement.get("source")
+                    or ("S3 document cache" if cached else None)
+                },
+                "storage": cached.get("storage") or {},
+                "url": cached.get("url"),
+                "name": cached.get("name"),
+                "demo_url": requirement.get("demo_url"),
+            }
+        )
     return documents
 
 
@@ -1035,10 +1286,16 @@ def _normalise_document_state(state: dict[str, Any]) -> None:
     for index, document in enumerate(list(documents)):
         if document.get("document_id"):
             continue
-        document_type = document.get("document_type") or document.get("category") or "unknown"
+        document_type = (
+            document.get("document_type") or document.get("category") or "unknown"
+        )
         documents[index] = {
             "document_id": f"legacy:stored:{index}:{document_type}",
-            "purpose": "company_profile" if document_type == "registry_document" else "identity_verification",
+            "purpose": (
+                "company_profile"
+                if document_type == "registry_document"
+                else "identity_verification"
+            ),
             "document_type": document_type,
             "subject": {"name": document.get("person_name")},
             "status": "located",
@@ -1049,7 +1306,11 @@ def _normalise_document_state(state: dict[str, Any]) -> None:
             "name": document.get("name"),
             "collected_at": document.get("collected_at"),
         }
-    known_ids = {document.get("document_id") for document in documents if document.get("document_id")}
+    known_ids = {
+        document.get("document_id")
+        for document in documents
+        if document.get("document_id")
+    }
     for document in _migrate_legacy_document_requirements(legacy_requirements):
         if document["document_id"] not in known_ids:
             documents.append(document)
@@ -1064,18 +1325,32 @@ def _normalise_document_state(state: dict[str, Any]) -> None:
         extract = legacy.get("extract") or {}
         document_type = (
             (legacy.get("classification") or {}).get("document_type")
-            or artifact.get("document_type") or extract.get("document_type") or "unknown"
+            or artifact.get("document_type")
+            or extract.get("document_type")
+            or "unknown"
         )
-        subject_name = artifact.get("person_name") or extract.get("full_name") or extract.get("name")
+        subject_name = (
+            artifact.get("person_name")
+            or extract.get("full_name")
+            or extract.get("name")
+        )
         document_id = (
-            "document:registry" if document_type == "registry_document"
+            "document:registry"
+            if document_type == "registry_document"
             else f"legacy:extract:{artifact.get('case_common_id') or index}:{document_type}"
         )
         update = {
             "document_id": document_id,
-            "purpose": "company_profile" if document_type == "registry_document" else "identity_verification",
+            "purpose": (
+                "company_profile"
+                if document_type == "registry_document"
+                else "identity_verification"
+            ),
             "document_type": document_type,
-            "subject": {"name": subject_name, "case_common_id": artifact.get("case_common_id")},
+            "subject": {
+                "name": subject_name,
+                "case_common_id": artifact.get("case_common_id"),
+            },
             "status": "processed",
             "gap": {"status": "resolved", "reason": ""},
             "acquisition": {"source": artifact.get("source"), "artifact": artifact},
@@ -1087,11 +1362,15 @@ def _normalise_document_state(state: dict[str, Any]) -> None:
                 "processed_at": legacy.get("processed_at"),
             },
         }
-        existing = next((item for item in documents if item.get("document_id") == document_id), None)
+        existing = next(
+            (item for item in documents if item.get("document_id") == document_id), None
+        )
         if existing is None:
             documents.append(update)
         else:
-            existing.update({key: value for key, value in update.items() if value not in ({}, None)})
+            existing.update(
+                {key: value for key, value in update.items() if value not in ({}, None)}
+            )
 
 
 def _artifact_for_processing(
@@ -1107,7 +1386,9 @@ def _match_requirement(
     extract: dict[str, Any],
 ) -> dict[str, Any] | None:
     document_type = classification.get("document_type")
-    extracted_name = _normalise_name(extract.get("full_name") or extract.get("name") or "")
+    extracted_name = _normalise_name(
+        extract.get("full_name") or extract.get("name") or ""
+    )
     candidates = []
     for requirement in requirements:
         if requirement.get("status") not in {"required", "located"}:
@@ -1115,7 +1396,9 @@ def _match_requirement(
         if requirement.get("document_type") != document_type:
             continue
         score = 0.65
-        if extracted_name and extracted_name == _normalise_name((requirement.get("subject") or {}).get("name") or ""):
+        if extracted_name and extracted_name == _normalise_name(
+            (requirement.get("subject") or {}).get("name") or ""
+        ):
             score += 0.35
         candidates.append((score, requirement))
     if not candidates:
@@ -1129,11 +1412,19 @@ def _match_summary(
     classification: dict[str, Any],
     extract: dict[str, Any],
 ) -> dict[str, Any]:
-    extracted_name = _normalise_name(extract.get("full_name") or extract.get("name") or "")
-    exact_name = extracted_name == _normalise_name((requirement.get("subject") or {}).get("name") or "")
+    extracted_name = _normalise_name(
+        extract.get("full_name") or extract.get("name") or ""
+    )
+    exact_name = extracted_name == _normalise_name(
+        (requirement.get("subject") or {}).get("name") or ""
+    )
     return {
         "confidence": 1.0 if exact_name else 0.65,
-        "reason": "document type and extracted name match" if exact_name else "document type match",
+        "reason": (
+            "document type and extracted name match"
+            if exact_name
+            else "document type match"
+        ),
         "classification": classification.get("document_type"),
     }
 
@@ -1190,8 +1481,10 @@ async def _resume_paused_pipeline(
     session: dict[str, Any], thread_id: str, documents: list[dict[str, Any]]
 ) -> None:
     """Run the potentially long post-document graph continuation in the background."""
+
     def publish_progress(progress: dict[str, Any]) -> None:
         session["pipeline_progress"] = progress
+
     try:
         result = await asyncio.to_thread(
             resume_cdd_agent_state,
@@ -1240,8 +1533,16 @@ async def _persist_completed_cdd_state(
         saved = await asyncio.to_thread(
             save_completed_state,
             graph_state,
-            customer_name=customer_name if customer_name is not None else session.get("customer_name") or "",
-            jurisdiction=jurisdiction if jurisdiction is not None else session.get("jurisdiction") or "",
+            customer_name=(
+                customer_name
+                if customer_name is not None
+                else session.get("customer_name") or ""
+            ),
+            jurisdiction=(
+                jurisdiction
+                if jurisdiction is not None
+                else session.get("jurisdiction") or ""
+            ),
             case_id=case_id if case_id is not None else session.get("case_id"),
         )
         if saved:
@@ -1253,7 +1554,10 @@ async def _persist_completed_cdd_state(
         LOGGER.exception("Completed CDD state was not persisted")
         session["state_persistence_error"] = str(exc)
         session["messages"].append(
-            {"role": "assistant", "content": f"CDD completed, but its S3 state could not be stored: {exc}"}
+            {
+                "role": "assistant",
+                "content": f"CDD completed, but its S3 state could not be stored: {exc}",
+            }
         )
 
 
@@ -1403,9 +1707,7 @@ def _registry_fetch_message(
     case_id: str | None = None,
 ) -> str:
     subject = (
-        company_cache_subject(jurisdiction, customer_name)
-        if jurisdiction
-        else None
+        company_cache_subject(jurisdiction, customer_name) if jurisdiction else None
     )
     if case_id:
         cache_source = get_cache_source("company-detail", [case_id], subject=subject)
@@ -1443,6 +1745,7 @@ async def _complete_pipeline_for_session(
     graph_thread_id: str,
 ) -> None:
     try:
+
         def publish_progress(progress: dict[str, Any]) -> None:
             # The graph runs in a worker thread; each update is a complete object so
             # polling clients never observe a partially-written progress payload.
@@ -1469,10 +1772,15 @@ async def _complete_pipeline_for_session(
         for message in graph_state.get("messages", []):
             content = getattr(message, "content", None)
             if content:
-                session["messages"].append({"role": "assistant", "content": str(content)})
+                session["messages"].append(
+                    {"role": "assistant", "content": str(content)}
+                )
 
         session["messages"].append(
-            {"role": "assistant", "content": _summary(cdd, graph_state.get("case_status", {}))}
+            {
+                "role": "assistant",
+                "content": _summary(cdd, graph_state.get("case_status", {})),
+            }
         )
 
         if generate_pdf:
@@ -1543,13 +1851,13 @@ async def _run_tool_for_session(
     state = _active_cdd_state(session)
     if state is not None:
         state.setdefault("evidence", []).append(
-        {
-            "source": "tool",
-            "tool": tool_name,
-            "description": f"Result from {tool_name}",
-            "relevance_tags": [tool_name],
-            "data": result,
-        }
+            {
+                "source": "tool",
+                "tool": tool_name,
+                "description": f"Result from {tool_name}",
+                "relevance_tags": [tool_name],
+                "data": result,
+            }
         )
     session["messages"].append(
         {"role": "assistant", "content": _tool_summary(tool_name, result)}
@@ -1577,9 +1885,7 @@ def _tool_summary(tool_name: str, result: dict[str, Any]) -> str:
         cases = result.get("returned_cases", [])
         if not cases:
             filters = result.get("filters", {})
-            filter_text = ", ".join(
-                f"{key}: {value}" for key, value in filters.items()
-            )
+            filter_text = ", ".join(f"{key}: {value}" for key, value in filters.items())
             lines.append(
                 "No matching sandbox entities found"
                 + (f" for {filter_text}." if filter_text else ".")
@@ -1637,7 +1943,9 @@ def _session_context(session: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _merge_session_args(args: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+def _merge_session_args(
+    args: dict[str, Any], session: dict[str, Any]
+) -> dict[str, Any]:
     merged = dict(args or {})
     if not merged.get("company_name") and not merged.get("customer_name"):
         merged["company_name"] = session.get("customer_name")
@@ -1649,7 +1957,9 @@ def _merge_session_args(args: dict[str, Any], session: dict[str, Any]) -> dict[s
 
 
 if DEMO_CASE_PATH.parent.exists():
-    app.mount("/demo-data", StaticFiles(directory=DEMO_CASE_PATH.parent), name="demo-data")
+    app.mount(
+        "/demo-data", StaticFiles(directory=DEMO_CASE_PATH.parent), name="demo-data"
+    )
 
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

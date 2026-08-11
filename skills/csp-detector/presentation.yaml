@@ -1,0 +1,16 @@
+schema: tool_view/v1
+views:
+  summary:
+    title: CSP Detection
+    sections: [assessment, findings]
+  detailed:
+    title: CSP Detection
+    sections: [assessment, findings, evidence]
+assessment:
+  extension:
+    metrics:
+      - label: Sources retained
+        value: context.source_count
+finding:
+  extension:
+    tags: []

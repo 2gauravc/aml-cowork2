@@ -16,9 +16,14 @@ ACTIVE_SKILLS = {
 def test_active_skills_keep_markdown_guidance_separate_from_definitions() -> None:
     for name in ACTIVE_SKILLS:
         skill_path = PROJECT_ROOT / "skills" / name / "SKILL.md"
-        definition, definition_path, version = load_skill_definition(skill_path)
+        filename = (
+            "contract.yaml"
+            if skill_path.with_name("contract.yaml").exists()
+            else "definition.yaml"
+        )
+        definition, definition_path, version = load_skill_definition(skill_path, filename)
         assert definition["name"] == name
-        assert Path(definition_path).name == "definition.yaml"
+        assert Path(definition_path).name == filename
         assert len(version) == 64
         assert not skill_path.read_text(encoding="utf-8").lstrip().startswith("---")
 

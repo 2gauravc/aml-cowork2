@@ -161,10 +161,19 @@ def test_shell_company_risk_checker_surfaces_existing_csp_record_without_duplica
 
 def test_csp_tool_shows_confidence_and_severity_tags() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
+    section = app[app.index("function CSPDetection("):app.index("function DigitalFootprint(")]
 
-    assert 'const severity = result?.finding_policy?.severity?.level || "not_applicable";' in app
-    assert 'Confidence: ${statusLabel(assessment.confidence)}' in app
-    assert 'Severity: ${statusLabel(severity)}' in app
+    assert "const view = result?.tool_view;" in section
+    assert "const detailed = view?.detailed;" in section
+    assert "detailed?.assessment_tags" in section
+    assert "view?.evidence" in section
+    assert "result?.assessment" not in section
+    assert "result.sources" not in section
+    assert "Load from CDD" in section
+    assert "CSP Detection JSON" in section
+    assert 'aria-label="Copy CSP Detection JSON to clipboard"' in section
+    assert "function cspRecords(cddState)" in app
+    assert 'tool_views?.csp_address' in app
 
 
 def test_cdd_maker_orders_assessment_cards_and_separates_findings_from_risk_rating() -> None:
