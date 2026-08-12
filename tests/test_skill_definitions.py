@@ -7,7 +7,7 @@ from src.utils.skill_definitions import SkillDefinitionError, load_skill_definit
 
 PROJECT_ROOT = Path(__file__).parents[1]
 ACTIVE_SKILLS = {
-    "adverse-news-screening", "case-assessment", "cdd-completeness", "csp-detector",
+    "adverse-news-screening", "case-checker", "cdd-completeness", "csp-detector",
     "digital-footprint", "evidence-quality", "other-risk-factors", "risk-rating",
     "shell-company-risk",
 }

@@ -308,7 +308,7 @@ def migrate_legacy_digital_footprint(state: dict[str, Any]) -> bool:
         finding["source"] = {
             "producer_type": (
                 source.get("producer_type")
-                if source.get("producer_type") in {"tool", "case_assessment"}
+                if source.get("producer_type") in {"tool", "case_assessment", "case_checker"}
                 else "tool"
             ),
             "producer_name": source.get("producer_name")
@@ -381,7 +381,7 @@ def _normalise_legacy_adverse_finding(
     finding["source"] = {
         "producer_type": (
             source.get("producer_type")
-            if source.get("producer_type") in {"tool", "case_assessment"}
+                if source.get("producer_type") in {"tool", "case_assessment", "case_checker"}
             else "tool"
         ),
         "producer_name": source.get("producer_name") or "adverse_news_screening",

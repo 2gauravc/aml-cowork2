@@ -13,6 +13,7 @@ from src.backend.app import (
     SESSIONS,
     _complete_pipeline_for_session,
     _migrate_legacy_risk_rating,
+    migrate_legacy_case_assessment_summary,
     _queue_resume_if_ready,
     _resume_if_ready,
     load_completed_cdd_state,
@@ -147,6 +148,14 @@ def test_document_state_migration_reports_change_once() -> None:
     assert migrate_legacy_document_state(state) is True
     assert state["documents"][0]["document_id"] == "legacy:stored:0:registry_document"
     assert migrate_legacy_document_state(state) is False
+
+
+def test_case_assessment_summary_migrates_to_case_checker_once() -> None:
+    state = {"case_assessment_summary": {"status": "available"}}
+
+    assert migrate_legacy_case_assessment_summary(state) is True
+    assert state == {"case_checker_summary": {"status": "available"}}
+    assert migrate_legacy_case_assessment_summary(state) is False
 
 
 def _legacy_csp_state(evaluation: str | None) -> dict:

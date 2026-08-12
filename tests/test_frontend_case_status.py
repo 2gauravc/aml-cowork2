@@ -115,7 +115,7 @@ def test_new_pipeline_run_clears_previous_cdd_display_and_document_links() -> No
 
     assert "function resetCddRunDisplay()" in app
     assert "setDocumentLinks({});" in app
-    assert "setCaseAssessmentSummary(null);" in app
+    assert "setCaseCheckerSummary(null);" in app
     assert "setPdfUrl(null);" in app
     assert 'if (data.status === "running") resetCddRunDisplay();' in app
     assert "const runEpoch = cddRunEpochRef.current;" in app

@@ -27,7 +27,7 @@ function App() {
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
   const [cddState, setCddState] = useState(null);
-  const [caseAssessmentSummary, setCaseAssessmentSummary] = useState(null);
+  const [caseCheckerSummary, setCaseCheckerSummary] = useState(null);
   const [caseReviewDecision, setCaseReviewDecision] = useState(null);
   const [reviewDecisionDraft, setReviewDecisionDraft] = useState("request_information");
   const [reviewNote, setReviewNote] = useState("");
@@ -247,7 +247,7 @@ function App() {
     setCdd(data.cdd || null);
     setCddState(data.cdd_state || null);
     setCaseStatus(data.case_status || { cdd_generation: "not_started" });
-    setCaseAssessmentSummary(data.case_assessment_summary || null);
+    setCaseCheckerSummary(data.case_checker_summary || null);
     setCaseReviewDecision(data.case_review_decision || null);
     if (data.demo_csp_result) setCspResult(data.demo_csp_result);
     setDocuments(data.documents || []);
@@ -275,7 +275,7 @@ function App() {
     setCdd(null);
     setCddState(null);
     setCaseStatus({ cdd_generation: "in_progress" });
-    setCaseAssessmentSummary(null);
+    setCaseCheckerSummary(null);
     setCaseReviewDecision(null);
     setReviewNote("");
     setDocuments([]);
@@ -429,17 +429,17 @@ function App() {
     }
   }
 
-  async function refreshCaseReview() {
+  async function refreshCaseChecker() {
     if (!sessionId || !cdd) return;
     setCaseReviewLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/case-review/refresh", {
+      const response = await fetch("/api/case-checker/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      applyResponse(await readJsonResponse(response, "Case Assessment refresh failed"));
+      applyResponse(await readJsonResponse(response, "Case Checker refresh failed"));
     } catch (err) {
       setError(err.message);
     } finally {

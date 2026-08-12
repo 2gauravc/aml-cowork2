@@ -22,10 +22,10 @@ from src.tools.customer_static import _fetch_customer_static
 from src.tools.document_extraction import classify_document, extract_document
 from src.tools.idv_policy import interpret_idv_policy
 from src.tools.idv_requirements import establish_idv_requirements as apply_idv_requirements
-from src.tools.case_review import (
-    CaseReviewError,
-    generate_case_review_summary,
-    unavailable_case_review,
+from src.tools.case_checker import (
+    CaseCheckerError,
+    generate_case_checker_summary,
+    unavailable_case_checker,
 )
 from src.tools.csp_assessment import assess_csp_address as build_csp_assessment
 from src.tools.adverse_news import AdverseNewsError, load_finding_schema, screen_adverse_news
@@ -1228,19 +1228,19 @@ def finalize_cdd(state: CDDState) -> dict[str, Any]:
     return {"cdd": cdd}
 
 
-def generate_case_review(state: CDDState) -> dict[str, Any]:
+def generate_case_checker(state: CDDState) -> dict[str, Any]:
     """Create a reviewer brief from completed CDD data without changing its outcome."""
     try:
-        summary = generate_case_review_summary(
+        summary = generate_case_checker_summary(
             cdd=state.get("cdd", {}),
             case_status=state.get("case_status", {}),
             findings=state.get("findings", []),
             evidence=state.get("evidence", []),
         )
-    except CaseReviewError as exc:
-        summary = unavailable_case_review(str(exc))
+    except CaseCheckerError as exc:
+        summary = unavailable_case_checker(str(exc))
     return {
-        "case_assessment_summary": summary,
+        "case_checker_summary": summary,
     }
 
 

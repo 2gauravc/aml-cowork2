@@ -44,7 +44,7 @@ def test_accepted_new_run_returns_no_previous_cdd_artifacts() -> None:
     assert response["documents"] == []
     assert response["findings"] == []
     assert response["assessments"] == []
-    assert response["case_assessment_summary"] is None
+    assert response["case_checker_summary"] is None
     assert response["case_review_decision"] is None
     assert response["pdf_url"] is None
     assert response["case_status"]["cdd_generation"] == "in_progress"
@@ -82,5 +82,5 @@ def test_response_without_a_cdd_state_is_empty() -> None:
 
     response = _response(session, status="complete")
 
-    assert response["case_assessment_summary"] is None
+    assert response["case_checker_summary"] is None
     assert response["cdd_state"] == {}

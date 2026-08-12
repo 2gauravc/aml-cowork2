@@ -38,10 +38,10 @@ from src.agents.nodes import (
 from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
 from src.tools.case_finder import find_test_cases
-from src.tools.case_review import (
-    CaseReviewError,
-    generate_case_review_summary,
-    unavailable_case_review,
+from src.tools.case_checker import (
+    CaseCheckerError,
+    generate_case_checker_summary,
+    unavailable_case_checker,
 )
 from src.tools.csp_detector import (
     CSPAssessmentError,
@@ -180,7 +180,7 @@ class CaseReviewDecisionRequest(BaseModel):
     note: str = Field(default="", max_length=4_000)
 
 
-class CaseReviewRefreshRequest(BaseModel):
+class CaseCheckerRefreshRequest(BaseModel):
     session_id: str
 
 
@@ -220,7 +220,7 @@ async def chat(
         session["messages"].append(
             {
                 "role": "assistant",
-                "content": "Demo Mode does not call external services. Load the demo case to explore the fixture-backed CDD and Case Assessment workflow.",
+                "content": "Demo Mode does not call external services. Load the demo case to explore the fixture-backed CDD and Case Checker workflow.",
             }
         )
         return _response(session, status="demo_read_only")
@@ -491,8 +491,8 @@ async def download_standalone_idv_document(artifact_id: str) -> FileResponse:
     )
 
 
-@app.post("/api/case-review/refresh")
-async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, Any]:
+@app.post("/api/case-checker/refresh")
+async def refresh_case_checker(request: CaseCheckerRefreshRequest) -> dict[str, Any]:
     session = SESSIONS.get(request.session_id)
     state = _active_cdd_state(session)
     if not state or not state.get("cdd"):
@@ -501,17 +501,17 @@ async def refresh_case_review(request: CaseReviewRefreshRequest) -> dict[str, An
         return _response(session, status="demo_read_only")
     try:
         summary = await asyncio.to_thread(
-            generate_case_review_summary,
+            generate_case_checker_summary,
             cdd=state["cdd"],
             case_status=state.get("case_status", {}),
             findings=state.get("findings", []),
             evidence=state.get("evidence", []),
         )
-    except CaseReviewError as exc:
-        summary = unavailable_case_review(str(exc))
-    state["case_assessment_summary"] = summary
+    except CaseCheckerError as exc:
+        summary = unavailable_case_checker(str(exc))
+    state["case_checker_summary"] = summary
     sync_case_status(state)
-    return _response(session, status="case_review_refreshed")
+    return _response(session, status="case_checker_refreshed")
 
 
 @app.post("/api/cdd-completeness/run")
@@ -809,8 +809,18 @@ def migrate_completed_cdd_state(graph_state: dict[str, Any]) -> dict[str, Any]:
         "adverse_news": migrate_legacy_adverse_news(graph_state),
         "digital_footprint": migrate_legacy_digital_footprint(graph_state),
         "document_state": migrate_legacy_document_state(graph_state),
+        "case_checker": migrate_legacy_case_assessment_summary(graph_state),
     }
     return {"changed": any(routines.values()), "routines": routines}
+
+
+def migrate_legacy_case_assessment_summary(graph_state: dict[str, Any]) -> bool:
+    """Retain historical Case Assessment output under the Case Checker name."""
+    legacy = graph_state.pop("case_assessment_summary", None)
+    if legacy is None or "case_checker_summary" in graph_state:
+        return legacy is not None and "case_checker_summary" in graph_state
+    graph_state["case_checker_summary"] = legacy
+    return True
 
 
 @app.post("/api/pdf")
@@ -1072,7 +1082,7 @@ def _clear_previous_cdd_run(session: dict[str, Any]) -> None:
         "graph_state",
         "graph_thread_id",
         "document_results",
-        "case_review_summary",
+        "case_checker_summary",
         "case_review_decision",
         "saved_cdd_state",
         "state_persistence_error",
@@ -1136,6 +1146,7 @@ def _load_demo_case(session: dict[str, Any]) -> dict[str, Any]:
             "assessments",
             "case_status",
             "case_assessment_summary",
+            "case_checker_summary",
         )
         if key in session
     }
@@ -1175,7 +1186,7 @@ def _response(
         "documents": state.get("documents", []),
         "findings": state.get("findings", []),
         "assessments": state.get("assessments", []),
-        "case_assessment_summary": state.get("case_assessment_summary"),
+        "case_checker_summary": state.get("case_checker_summary"),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
@@ -1211,6 +1222,7 @@ def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(state, dict):
         return None
     migrate_legacy_document_state(state)
+    migrate_legacy_case_assessment_summary(state)
     return state
 
 
