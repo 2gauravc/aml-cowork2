@@ -16,6 +16,7 @@ from src.backend.app import (
     _queue_resume_if_ready,
     _resume_if_ready,
     load_completed_cdd_state,
+    migrate_legacy_document_state,
 )
 from src.tools.adverse_news import load_finding_schema
 from src.utils.legacy_cdd_state import (
@@ -135,6 +136,17 @@ def test_loading_legacy_state_replaces_its_model_rating_with_the_rule_based_rati
     assert ratings[0]["rating"] == "low"
     assert ratings[0]["total_score"] == 0
     assert ratings[0]["provenance"] == {"method": "deterministic_rule_based"}
+
+
+def test_document_state_migration_reports_change_once() -> None:
+    state = {
+        "documents": [{"document_type": "registry_document", "source": "registry"}],
+        "cdd": {},
+    }
+
+    assert migrate_legacy_document_state(state) is True
+    assert state["documents"][0]["document_id"] == "legacy:stored:0:registry_document"
+    assert migrate_legacy_document_state(state) is False
 
 
 def _legacy_csp_state(evaluation: str | None) -> dict:

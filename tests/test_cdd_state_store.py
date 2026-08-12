@@ -7,7 +7,11 @@ from io import BytesIO
 import json
 from unittest.mock import MagicMock, patch
 
-from src.utils.cdd_state_store import get_completed_state, save_completed_state
+from src.utils.cdd_state_store import (
+    get_completed_state,
+    list_completed_state_keys,
+    save_completed_state,
+)
 
 
 def test_completed_state_round_trips_through_s3() -> None:
@@ -60,3 +64,16 @@ def test_state_store_defaults_to_the_configured_kyc_cache_bucket() -> None:
             save_completed_state({}, customer_name="Example Ltd", jurisdiction="GB", case_id=None)
 
     assert client.return_value.put_object.call_args.kwargs["Bucket"] == "cache-bucket"
+
+
+def test_listing_completed_states_paginates_and_honours_a_limit() -> None:
+    client = MagicMock()
+    client.get_paginator.return_value.paginate.return_value = [
+        {"Contents": [{"Key": "cdd-states/GB/one/completed.json"}]},
+        {"Contents": [{"Key": "cdd-states/GB/two/completed.json"}, {"Key": "cdd-states/GB/two/notes.json"}]},
+    ]
+    config = {"bucket": "state-bucket", "prefix": "cdd-states", "region": None}
+    with patch("src.utils.cdd_state_store.s3_client", return_value=client):
+        keys = list_completed_state_keys(config=config, prefix="cdd-states/GB", max_keys=2)
+
+    assert keys == ["cdd-states/GB/one/completed.json", "cdd-states/GB/two/completed.json"]

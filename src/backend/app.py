@@ -739,12 +739,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
         raise HTTPException(status_code=404, detail="No completed CDD state was found")
     session = _session(request.session_id)
     graph_state = snapshot["graph_state"]
-    migrated_rating = _migrate_legacy_risk_rating(graph_state)
-    migrated_flags = migrate_legacy_risk_flags(graph_state)
-    migrated_csp_address = migrate_legacy_csp_address(graph_state)
-    migrated_adverse_news = migrate_legacy_adverse_news(graph_state)
-    migrated_digital_footprint = migrate_legacy_digital_footprint(graph_state)
-    _normalise_document_state(graph_state)
+    migration = migrate_completed_cdd_state(graph_state)
     sync_case_status(graph_state, generation="completed")
     session["graph_state"] = graph_state
     identity = snapshot["identity"]
@@ -756,13 +751,7 @@ async def load_completed_cdd_state(request: CDDStateLookupRequest) -> dict[str, 
     session["pipeline_status"] = "complete"
     session["pipeline_progress"] = None
     saved_cdd_state = {"saved_at": snapshot.get("saved_at"), "identity": identity}
-    if (
-        migrated_rating
-        or migrated_flags
-        or migrated_csp_address
-        or migrated_adverse_news
-        or migrated_digital_footprint
-    ):
+    if migration["changed"]:
         try:
             saved_cdd_state = (
                 await asyncio.to_thread(
@@ -804,6 +793,24 @@ def _migrate_legacy_risk_rating(graph_state: dict[str, Any]) -> bool:
     ]
     graph_state["assessments"].extend(result["assessments"])
     return True
+
+
+def migrate_completed_cdd_state(graph_state: dict[str, Any]) -> dict[str, Any]:
+    """Run every load-path migration once and report the routines that changed state.
+
+    This is deliberately the single migration entry point for both application
+    loads and the operator bulk migration command.  Add future retained-state
+    migrations here rather than giving the batch command its own logic.
+    """
+    routines = {
+        "risk_rating": _migrate_legacy_risk_rating(graph_state),
+        "risk_flags": migrate_legacy_risk_flags(graph_state),
+        "csp_address": migrate_legacy_csp_address(graph_state),
+        "adverse_news": migrate_legacy_adverse_news(graph_state),
+        "digital_footprint": migrate_legacy_digital_footprint(graph_state),
+        "document_state": migrate_legacy_document_state(graph_state),
+    }
+    return {"changed": any(routines.values()), "routines": routines}
 
 
 @app.post("/api/pdf")
@@ -1203,7 +1210,7 @@ def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
     state = (session or {}).get("graph_state")
     if not isinstance(state, dict):
         return None
-    _normalise_document_state(state)
+    migrate_legacy_document_state(state)
     return state
 
 
@@ -1279,8 +1286,9 @@ def _migrate_legacy_document_requirements(
     return documents
 
 
-def _normalise_document_state(state: dict[str, Any]) -> None:
+def migrate_legacy_document_state(state: dict[str, Any]) -> bool:
     """Upgrade persisted pre-#72 document shapes in place on first read."""
+    before = deepcopy(state)
     legacy_requirements = state.pop("document_requirements", [])
     documents = state.setdefault("documents", [])
     for index, document in enumerate(list(documents)):
@@ -1371,6 +1379,7 @@ def _normalise_document_state(state: dict[str, Any]) -> None:
             existing.update(
                 {key: value for key, value in update.items() if value not in ({}, None)}
             )
+    return state != before
 
 
 def _artifact_for_processing(

@@ -92,6 +92,65 @@ def _config() -> dict[str, str | None] | None:
     }
 
 
+def completed_state_store_config() -> dict[str, str | None] | None:
+    """Return the configured completed-state location for operator tooling."""
+    return _config()
+
+
+def completed_state_s3_client(config: dict[str, str | None]) -> Any:
+    """Return the state-store client without exposing its configuration details."""
+    return _client(config)
+
+
+def list_completed_state_keys(
+    *, config: dict[str, str | None], prefix: str | None = None, max_keys: int | None = None
+) -> list[str]:
+    """List retained completed-state records under a bounded prefix."""
+    selected_prefix = (prefix or config["prefix"] or "").strip().strip("/")
+    root_prefix = str(config["prefix"]).strip().strip("/")
+    if selected_prefix != root_prefix and not selected_prefix.startswith(f"{root_prefix}/"):
+        raise CDDStateStoreError("The selected prefix must remain under CDD_STATE_S3_PREFIX")
+    keys: list[str] = []
+    paginator = _client(config).get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=config["bucket"], Prefix=selected_prefix):
+        for item in page.get("Contents") or []:
+            key = item.get("Key")
+            if isinstance(key, str) and key.endswith("/completed.json"):
+                keys.append(key)
+                if max_keys is not None and len(keys) >= max_keys:
+                    return keys
+    return keys
+
+
+def get_completed_state_by_key(
+    *, config: dict[str, str | None], key: str
+) -> dict[str, Any]:
+    """Read and minimally validate one retained snapshot selected by its S3 key."""
+    try:
+        response = _client(config).get_object(Bucket=config["bucket"], Key=key)
+        value = json.loads(response["Body"].read().decode("utf-8"))
+    except Exception as exc:
+        raise CDDStateStoreError(f"Unable to retrieve completed CDD state {key}: {exc}") from exc
+    if not isinstance(value, dict) or not isinstance(value.get("graph_state"), dict):
+        raise CDDStateStoreError("Stored CDD state is incomplete")
+    return value
+
+
+def put_completed_state_by_key(
+    *, config: dict[str, str | None], key: str, snapshot: dict[str, Any]
+) -> None:
+    """Persist a validated snapshot at its original key for the bulk migrator."""
+    try:
+        _client(config).put_object(
+            Bucket=config["bucket"],
+            Key=key,
+            Body=json.dumps(_json_safe(snapshot), ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as exc:
+        raise CDDStateStoreError(f"Unable to store completed CDD state {key}: {exc}") from exc
+
+
 def _key(config: dict[str, str | None], jurisdiction: str, customer_name: str) -> str:
     return f"{config['prefix']}/{jurisdiction.strip().upper()}/{_slug(customer_name)}/completed.json"
 
