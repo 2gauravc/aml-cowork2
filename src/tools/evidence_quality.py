@@ -18,7 +18,6 @@ class EvidenceQualityError(RuntimeError):
 
 def load_evidence_quality_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        instructions = Path(path).read_text(encoding="utf-8")
         metadata, definition_path, definition_version = load_skill_definition(path)
     except (OSError, SkillDefinitionError) as exc:
         raise EvidenceQualityError(f"Evidence Quality skill could not be loaded: {exc}") from exc
@@ -40,10 +39,8 @@ def load_evidence_quality_definition(path: str | Path = SKILL_PATH) -> dict[str,
         "claims": sorted(claims, key=lambda item: item.get("order", 0)),
         "dimensions": dimensions,
         "source_classes": metadata.get("source_classes") or {},
-        "instructions": instructions.strip(),
         "path": definition_path,
         "definition_version": definition_version,
-        "instructions_path": str(path),
     }
 
 

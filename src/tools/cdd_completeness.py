@@ -18,7 +18,6 @@ class CDDCompletenessError(RuntimeError):
 
 def load_cdd_completeness_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        instructions = Path(path).read_text(encoding="utf-8")
         metadata, definition_path, definition_version = load_skill_definition(path)
     except (OSError, SkillDefinitionError) as exc:
         raise CDDCompletenessError(f"CDD Completeness skill could not be loaded: {exc}") from exc
@@ -28,7 +27,7 @@ def load_cdd_completeness_definition(path: str | Path = SKILL_PATH) -> dict[str,
         raise CDDCompletenessError("CDD Completeness skill must declare assessment.schema")
     if not isinstance(checks, list) or len(checks) != 4 or any(not item.get("id") for item in checks if isinstance(item, dict)):
         raise CDDCompletenessError("CDD Completeness skill must declare four identified checks")
-    return {"assessment": assessment, "checks": sorted(checks, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": definition_path, "definition_version": definition_version, "instructions_path": str(path)}
+    return {"assessment": assessment, "checks": sorted(checks, key=lambda item: item.get("order", 0)), "path": definition_path, "definition_version": definition_version}
 
 
 def evaluate_cdd_completeness(state: dict[str, Any]) -> dict[str, Any]:

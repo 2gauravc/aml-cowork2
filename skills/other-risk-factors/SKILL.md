@@ -1,8 +1,7 @@
 
 # Other Risk Factors
 
-Create one assessment for every factor. Use only retained CDD fields, evidence IDs, and upstream assessment or finding IDs selected before evaluation. The configured terms, lists, and thresholds are the policy overlay and may be edited by an authorised policy owner.
-
-Create a normal `finding/v1` record only for `triggered` and `inconclusive` outcomes. Do not produce a duplicate Adverse News or Digital Footprint finding: reference those existing assessment and finding IDs only when they are relevant context.
-
-For high-risk industry, use a structured LLM classification against the configured definition and examples. Supply only the retained activity descriptions. Do not infer an activity from the customer name, add facts, or treat an example list as exhaustive. For AML-risk and tax-risk jurisdiction, first deterministically select retained links to a configured jurisdiction list. If none is selected, return `not_triggered` with a clear result. Otherwise use a structured LLM classification against the configured definition and only the retained business-profile, commercial-link, and (for AML risk) ownership/control inputs. Return the indexes of the retained jurisdiction links relied upon. Do not infer a link from a name alone. For ownership complexity, calculate the listed graph metrics before drafting an analyst-readable summary. For trust or nominee arrangements, inspect only the configured ownership evidence tools. Retain the matched term, exact field path, value, and evidence ID; do not trigger from an unlinked occurrence in a derived CDD payload. Absence of a retained indicator is not proof of absence; use `inconclusive` where the ownership record is incomplete.
+This is non-runtime explanatory documentation. The active factor definitions,
+lists, thresholds, and methods are in `definition.yaml`. Runtime consumes that
+definition and uses deterministic rules plus structured model calls where
+configured. Editing this Markdown does not change assessment outcomes.

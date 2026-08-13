@@ -24,7 +24,6 @@ class OtherRiskFactorsError(RuntimeError):
 
 def load_other_risk_factors_definition(path: str | Path = SKILL_PATH) -> dict[str, Any]:
     try:
-        instructions = Path(path).read_text(encoding="utf-8")
         metadata, definition_path, definition_version = load_skill_definition(path)
     except (OSError, SkillDefinitionError) as exc:
         raise OtherRiskFactorsError(f"Other Risk Factors skill could not be loaded: {exc}") from exc
@@ -37,7 +36,7 @@ def load_other_risk_factors_definition(path: str | Path = SKILL_PATH) -> dict[st
         raise OtherRiskFactorsError("Other Risk Factors skill must declare the five configured factors")
     if any(item.get("cdd_section") not in SECTIONS for item in factors):
         raise OtherRiskFactorsError("Every Other Risk Factors factor must declare a CDD section")
-    return {"assessment": assessment, "factors": sorted(factors, key=lambda item: item.get("order", 0)), "instructions": instructions.strip(), "path": definition_path, "definition_version": definition_version, "instructions_path": str(path)}
+    return {"assessment": assessment, "factors": sorted(factors, key=lambda item: item.get("order", 0)), "path": definition_path, "definition_version": definition_version}
 
 
 def evaluate_other_risk_factors(state: dict[str, Any]) -> dict[str, Any]:
