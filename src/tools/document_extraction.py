@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.utils.document_pipeline import REGISTRY_SOURCE_LABEL  # noqa: E402
 from src.utils.environment import load_application_env  # noqa: E402
+from src.utils.runtime_telemetry import invoke_model_with_telemetry  # noqa: E402
 
 load_application_env(PROJECT_ROOT / ".env")
 
@@ -143,7 +144,7 @@ def _run_schema_prompt(
     client = OpenAI()
     document_content = _document_input_content(pdf_path)
     try:
-        response = client.responses.create(
+        response = invoke_model_with_telemetry(client,
             model=DEFAULT_MODEL,
             input=[
                 {

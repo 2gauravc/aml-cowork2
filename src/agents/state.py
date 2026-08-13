@@ -210,6 +210,7 @@ class CDDState(TypedDict, total=False):
     assessments: Annotated[list[dict[str, Any]], add]
     case_status: CaseStatus
     case_checker_summary: dict[str, Any] | None
+    runtime_telemetry: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]
 
 
@@ -266,5 +267,6 @@ def new_cdd_state(
         "assessments": [],
         "case_status": {"cdd_generation": "in_progress"},
         "case_checker_summary": None,
+        "runtime_telemetry": {},
         "messages": [],
     }

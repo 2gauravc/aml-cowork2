@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 from openai import OpenAI, OpenAIError
+from src.utils.runtime_telemetry import invoke_model_with_telemetry
 
 from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
 
@@ -86,7 +87,7 @@ def _classify_industry(activity: str, factor: dict[str, Any]) -> dict[str, Any]:
     schema = {"type": "object", "additionalProperties": False, "properties": {"outcome": {"type": "string", "enum": ["triggered", "not_triggered", "inconclusive"]}, "rationale": {"type": "string"}, "risk_indicators": {"type": "array", "items": {"type": "string"}}}, "required": ["outcome", "rationale", "risk_indicators"]}
     prompt = "Classify the supplied business activity only. Do not use external knowledge about the named customer or add facts. Apply this AML risk definition and use the examples as illustrative, not exhaustive. Return triggered only where the retained description supports a high-risk-industry classification; return inconclusive if it is too vague.\n\n" + json.dumps({"risk_definition": factor.get("risk_definition"), "examples": factor.get("examples") or [], "business_activity": activity})
     try:
-        result = OpenAI().responses.create(model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "high_risk_industry", "schema": schema, "strict": True}})
+        result = invoke_model_with_telemetry(OpenAI(), model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "high_risk_industry", "schema": schema, "strict": True}})
         parsed = json.loads(result.output_text)
     except OpenAIError as exc:
         raise OtherRiskFactorsError(f"High-risk industry classification failed: {exc}") from exc
@@ -161,7 +162,7 @@ def _classify_tax_jurisdiction(inputs: dict[str, Any], factor: dict[str, Any]) -
     schema = {"type": "object", "additionalProperties": False, "properties": {"outcome": {"type": "string", "enum": ["triggered", "not_triggered", "inconclusive"]}, "rationale": {"type": "string"}, "matched_link_indexes": {"type": "array", "items": {"type": "integer", "minimum": 0}}}, "required": ["outcome", "rationale", "matched_link_indexes"]}
     prompt = "Assess only the supplied retained business-profile facts against the configured tax-risk jurisdiction definition. The policy_jurisdiction_links were deterministically matched to the configured tax-risk lists. Do not use external information about the customer, infer customers or suppliers, or invent jurisdictions. Return only indexes of the supplied policy_jurisdiction_links' underlying jurisdiction_links that support the conclusion. Return inconclusive where the retained facts cannot support a reliable conclusion.\n\n" + json.dumps({"risk_definition": factor.get("risk_definition"), "business_profile_inputs": inputs})
     try:
-        result = OpenAI().responses.create(model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "tax_risk_jurisdiction", "schema": schema, "strict": True}})
+        result = invoke_model_with_telemetry(OpenAI(), model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "tax_risk_jurisdiction", "schema": schema, "strict": True}})
         parsed = json.loads(result.output_text)
     except OpenAIError as exc:
         raise OtherRiskFactorsError(f"Tax-risk jurisdiction classification failed: {exc}") from exc
@@ -180,7 +181,7 @@ def _classify_aml_jurisdiction(inputs: dict[str, Any], factor: dict[str, Any]) -
     schema = {"type": "object", "additionalProperties": False, "properties": {"outcome": {"type": "string", "enum": ["triggered", "not_triggered", "inconclusive"]}, "rationale": {"type": "string"}, "matched_link_indexes": {"type": "array", "items": {"type": "integer", "minimum": 0}}}, "required": ["outcome", "rationale", "matched_link_indexes"]}
     prompt = "Assess only the supplied retained CDD facts against the configured AML-risk jurisdiction definition. The policy_jurisdiction_links were deterministically matched to the configured FATF lists. Do not use external information about the customer, infer counterparties, or invent jurisdictions. Return only indexes of the supplied policy_jurisdiction_links' underlying jurisdiction_links that support the conclusion. Return inconclusive where the retained facts cannot support a reliable conclusion.\n\n" + json.dumps({"risk_definition": factor.get("risk_definition"), "cdd_inputs": inputs})
     try:
-        result = OpenAI().responses.create(model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "aml_risk_jurisdiction", "schema": schema, "strict": True}})
+        result = invoke_model_with_telemetry(OpenAI(), model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "aml_risk_jurisdiction", "schema": schema, "strict": True}})
         parsed = json.loads(result.output_text)
     except OpenAIError as exc:
         raise OtherRiskFactorsError(f"AML-risk jurisdiction classification failed: {exc}") from exc

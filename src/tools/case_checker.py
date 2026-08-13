@@ -10,6 +10,7 @@ from typing import Any
 from openai import OpenAI, OpenAIError
 
 from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
+from src.utils.runtime_telemetry import invoke_model_with_telemetry
 
 
 DEFAULT_MODEL = (
@@ -131,7 +132,7 @@ def generate_case_checker_summary(
         f"{json.dumps(evidence_packet, ensure_ascii=False)}"
     )
     try:
-        response = OpenAI().responses.create(
+        response = invoke_model_with_telemetry(OpenAI(),
             model=DEFAULT_MODEL,
             input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
             text={

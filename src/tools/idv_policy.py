@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils.environment import load_application_env  # noqa: E402
+from src.utils.runtime_telemetry import invoke_model_with_telemetry  # noqa: E402
 
 load_application_env(PROJECT_ROOT / ".env")
 
@@ -77,7 +78,7 @@ def _run_policy_prompt(policy_text: str) -> dict[str, Any]:
 
     client = OpenAI()
     try:
-        response = client.responses.create(
+        response = invoke_model_with_telemetry(client,
             model=DEFAULT_MODEL,
             input=[
                 {
