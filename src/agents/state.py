@@ -32,6 +32,7 @@ class CaseMetadata(TypedDict, total=False):
 class Metadata(TypedDict, total=False):
     customer: CustomerMetadata
     kyc_case: CaseMetadata
+    evidence_plan: dict[str, Any]
 
 
 class CDDSection(TypedDict, total=False):
@@ -210,7 +211,6 @@ class CDDState(TypedDict, total=False):
     assessments: Annotated[list[dict[str, Any]], add]
     case_status: CaseStatus
     case_checker_summary: dict[str, Any] | None
-    runtime_telemetry: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]
 
 
@@ -220,6 +220,7 @@ def new_cdd_state(
     jurisdiction: str | None = None,
     account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
+    customer_information_source: str = "kyc_api",
 ) -> CDDState:
     """Create the minimal initial state for a CDD graph run."""
     customer: CustomerMetadata = {}
@@ -238,6 +239,11 @@ def new_cdd_state(
         "metadata": {
             "customer": customer,
             "kyc_case": kyc_case,
+            "evidence_plan": {
+                "customer_information_source": customer_information_source,
+                "kyc_authorized": customer_information_source in {"kyc_api", "hybrid"},
+                "entity_sources": {},
+            },
         },
         "cdd": {
             "started_at": datetime.now(UTC).isoformat(),
@@ -267,6 +273,5 @@ def new_cdd_state(
         "assessments": [],
         "case_status": {"cdd_generation": "in_progress"},
         "case_checker_summary": None,
-        "runtime_telemetry": {},
         "messages": [],
     }

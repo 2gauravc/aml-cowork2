@@ -26,6 +26,7 @@ if str(SRC_DIR) not in sys.path:
 from src.agents.nodes import (  # noqa: E402
     build_company_business_profile,
     build_ownership_and_control,
+    validate_ownership_resolution_node,
     collect_required_inputs,
     create_or_reuse_case,
     enrich_cdd_from_registry_document,
@@ -35,6 +36,10 @@ from src.agents.nodes import (  # noqa: E402
     adverse_news_screening,
     digital_footprint_assessment,
     process_available_documents,
+    request_company_profile_documents,
+    process_company_profile_documents,
+    select_customer_information_source,
+    customer_information_route,
     assess_csp_address,
     assess_cdd_completeness,
     assess_evidence_quality,
@@ -56,7 +61,6 @@ from src.utils.langgraph_debug import maybe_debug_node  # noqa: E402
 from src.utils.kyc_cache import company_cache_subject, get_cache_source  # noqa: E402
 from src.utils.environment import load_application_env  # noqa: E402
 from src.utils.pdf import render_cdd_pdf  # noqa: E402
-from src.utils.runtime_telemetry import run_node_with_telemetry  # noqa: E402
 
 
 load_application_env()
@@ -65,6 +69,7 @@ CHECKPOINTER = MemorySaver()
 
 PIPELINE_NODE_LABELS = {
     "collect_required_inputs": "Collecting Inputs",
+    "select_customer_information_source": "Selecting customer information source",
     "create_or_reuse_case": "Creating Case",
     "fetch_customer_static": "Fetching customer static information from KYC API",
     "fetch_org_chart": "Fetching org chart information from KYC API",
@@ -74,9 +79,12 @@ PIPELINE_NODE_LABELS = {
     "extract_registry_document": "Extracting from registry document",
     "enrich_cdd_from_registry_document": "Populating CDD from registry document",
     "build_ownership_and_control": "Populating CDD — Ownership & Control",
+    "validate_ownership_resolution": "Validating ownership resolution",
     "establish_idv_requirements": "Establishing ID&V requirements",
     "locate_available_documents": "Locating documents",
     "process_available_documents": "Processing available documents",
+    "request_company_profile_documents": "Requesting customer company-profile document",
+    "process_company_profile_documents": "Extracting customer company-profile document",
     "extract_idv_documents": "Extracting from ID&V documents",
     "digital_footprint_assessment": "Assessing digital footprint",
     "adverse_news_screening": "Screening adverse news",
@@ -216,12 +224,13 @@ def build_cdd_graph(
             node_name,
             _progress_node(
                 node_name,
-                run_node_with_telemetry(node_name, maybe_debug_node(node_name, func)),
+                maybe_debug_node(node_name, func),
                 progress_callback,
             ),
         )
 
     add_node("collect_required_inputs", collect_required_inputs)
+    add_node("select_customer_information_source", select_customer_information_source)
     add_node("create_or_reuse_case", create_or_reuse_case)
     add_node("fetch_customer_static", fetch_customer_static)
     add_node("fetch_org_chart", fetch_org_chart)
@@ -231,11 +240,14 @@ def build_cdd_graph(
     add_node("extract_registry_document", extract_registry_document)
     add_node("enrich_cdd_from_registry_document", enrich_cdd_from_registry_document)
     add_node("build_ownership_and_control", build_ownership_and_control)
+    add_node("validate_ownership_resolution", validate_ownership_resolution_node)
     add_node("establish_idv_requirements", establish_idv_requirements)
     add_node("locate_available_documents", locate_available_documents)
     add_node("process_available_documents", process_available_documents)
+    add_node("request_company_profile_documents", request_company_profile_documents)
+    add_node("process_company_profile_documents", process_company_profile_documents)
     # The interrupt node is an internal pause point, not a visible pipeline step.
-    graph.add_node("await_documents", run_node_with_telemetry("await_documents", await_documents))
+    graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
     add_node("digital_footprint_assessment", digital_footprint_assessment)
     add_node("adverse_news_screening", adverse_news_screening)
@@ -252,10 +264,16 @@ def build_cdd_graph(
         "collect_required_inputs",
         has_required_inputs,
         {
-            "ready": "create_or_reuse_case",
+            "ready": "select_customer_information_source",
             "missing_inputs": END,
         },
     )
+    graph.add_conditional_edges(
+        "select_customer_information_source",
+        customer_information_route,
+        {"kyc": "create_or_reuse_case", "documents": "request_company_profile_documents"},
+    )
+    graph.add_edge("request_company_profile_documents", "await_documents")
     graph.add_edge("create_or_reuse_case", "fetch_customer_static")
     graph.add_edge("fetch_customer_static", "fetch_org_chart")
     graph.add_edge("fetch_org_chart", "fetch_members")
@@ -264,11 +282,17 @@ def build_cdd_graph(
     graph.add_edge("generate_registry_document", "extract_registry_document")
     graph.add_edge("extract_registry_document", "enrich_cdd_from_registry_document")
     graph.add_edge("enrich_cdd_from_registry_document", "build_ownership_and_control")
-    graph.add_edge("build_ownership_and_control", "establish_idv_requirements")
+    graph.add_edge("build_ownership_and_control", "validate_ownership_resolution")
+    graph.add_edge("validate_ownership_resolution", "establish_idv_requirements")
     graph.add_edge("establish_idv_requirements", "locate_available_documents")
     graph.add_edge("locate_available_documents", "process_available_documents")
     graph.add_edge("process_available_documents", "await_documents")
-    graph.add_edge("await_documents", "extract_idv_documents")
+    graph.add_conditional_edges(
+        "await_documents",
+        customer_information_route,
+        {"kyc": "extract_idv_documents", "documents": "process_company_profile_documents"},
+    )
+    graph.add_edge("process_company_profile_documents", "build_ownership_and_control")
     graph.add_edge("extract_idv_documents", "digital_footprint_assessment")
     graph.add_edge("digital_footprint_assessment", "adverse_news_screening")
     graph.add_edge("adverse_news_screening", "assess_csp_address")
@@ -288,12 +312,14 @@ def run_cdd_agent(
     jurisdiction: str | None = None,
     account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
+    customer_information_source: str = "kyc_api",
 ) -> dict[str, Any]:
     result = run_cdd_agent_state(
         customer_name=customer_name,
         jurisdiction=jurisdiction,
         account_location=account_location,
         case_id=case_id,
+        customer_information_source=customer_information_source,
     )
     return result.get("cdd", {})
 
@@ -304,6 +330,7 @@ def run_cdd_agent_state(
     jurisdiction: str | None = None,
     account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: int | str | None = None,
+    customer_information_source: str = "kyc_api",
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     thread_id: str | None = None,
 ) -> dict[str, Any]:
@@ -314,6 +341,7 @@ def run_cdd_agent_state(
         jurisdiction=jurisdiction,
         account_location=account_location,
         case_id=case_id,
+        customer_information_source=customer_information_source,
     )
     return app.invoke(state, config={"configurable": {"thread_id": thread_id or str(uuid.uuid4())}})
 

@@ -41,6 +41,20 @@
         }
       },
       "required": ["full_address"]
+    },
+    "shareholders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "entity_type": {"type": "string", "enum": ["individual", "private_company", "listed_company", "government_entity", "trust", "foundation", "partnership", "unknown"]},
+          "ownership_percent": {"type": "number", "minimum": 0, "maximum": 100},
+          "role": {"type": "string"}
+        },
+        "required": ["name", "entity_type", "ownership_percent", "role"]
+      }
     }
   },
   "required": [
@@ -53,6 +67,7 @@
     "paid_up_capital",
     "activity_type",
     "incorporation_date",
-    "registered_address"
+    "registered_address",
+    "shareholders"
   ]
 }

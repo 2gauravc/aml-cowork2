@@ -48,6 +48,7 @@ from src.utils.s3_documents import (
     upload_document_to_s3,
 )
 from src.utils.kyc_cache import CacheSubject, company_cache_subject
+from src.utils.ownership_validation import validate_ownership_resolution
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -83,6 +84,101 @@ def has_required_inputs(state: CDDState) -> str:
     if customer.get("name") and customer.get("jurisdiction"):
         return "ready"
     return "missing_inputs"
+
+
+def customer_information_route(state: CDDState) -> str:
+    """Route only the customer layer; later entities retain their own source plan."""
+    source = (state.get("metadata", {}).get("evidence_plan") or {}).get(
+        "customer_information_source", "kyc_api"
+    )
+    return "documents" if source == "documents" else "kyc"
+
+
+def select_customer_information_source(state: CDDState) -> dict[str, Any]:
+    """Retain the operator's customer-level source choice as policy evidence."""
+    plan = deepcopy(state.get("metadata", {}).get("evidence_plan") or {})
+    source = plan.get("customer_information_source", "kyc_api")
+    return {
+        "evidence": [
+            _evidence(
+                tool="select_customer_information_source",
+                description="Recorded operator-selected customer information source",
+                source="Operator evidence plan",
+                data={"customer_information_source": source, "kyc_authorized": bool(plan.get("kyc_authorized"))},
+                relevance_tags=["evidence_plan", "customer_information_source"],
+            )
+        ]
+    }
+
+
+def request_company_profile_documents(state: CDDState) -> dict[str, Any]:
+    """Create the customer document requirement for a documents-first run."""
+    customer = state.get("metadata", {}).get("customer", {})
+    cdd = deepcopy(state.get("cdd", {}))
+    profile = cdd.setdefault("company_business_profile", {})
+    profile.setdefault("customer_static", {}).update({
+        "name": customer.get("name"),
+        "jurisdiction": customer.get("jurisdiction"),
+        "activity_type": "Synthetic demo commercial activity",
+    })
+    return {
+        "cdd": cdd,
+        "documents": [_document_record(
+            document_id="document:company-profile:customer",
+            purpose="company_profile",
+            document_type="registry_document",
+            subject={"name": customer.get("name"), "jurisdiction": customer.get("jurisdiction")},
+            requirement={
+                "required": True,
+                "reason": ["Customer information source: documents"],
+                "accepted_types": ["registry_document"],
+            },
+            status="required",
+            gap={"status": "outstanding", "reason": "A company profile or registry document is required."},
+            artifact={},
+        )],
+        "messages": [AIMessage(content="CDD is paused until a customer company-profile document is provided.")],
+    }
+
+
+def process_company_profile_documents(state: CDDState) -> dict[str, Any]:
+    """Extract the supplied company document and use it as canonical CDD evidence."""
+    document = next(
+        (item for item in state.get("documents", []) if item.get("purpose") == "company_profile"),
+        None,
+    )
+    if not document:
+        raise ValueError("A company-profile document is required")
+    artifact = (document.get("acquisition") or {}).get("artifact") or {}
+    if not artifact.get("pdf_path"):
+        raise ValueError("Company-profile document artifact is required")
+    classification = classify_document(artifact["pdf_path"])
+    if classification.get("document_type") != "registry_document":
+        raise ValueError("Company-profile document must be classified as a registry document")
+    extract = extract_document(artifact, classification=classification)
+    cdd = deepcopy(state.get("cdd", {}))
+    applied = apply_document_extract_to_cdd(cdd, extract)
+    profile = cdd.setdefault("company_business_profile", {})
+    static = profile.setdefault("customer_static", {})
+    static["status"] = _section_status(static, required=("name", "company_status"))
+    static["missing_items"] = _missing(static, ("name", "company_status"))
+    profile["status"] = static["status"]
+    profile["missing_items"] = static["missing_items"]
+    return {
+        "cdd": cdd,
+        "documents": [{
+            "document_id": document["document_id"], "status": "processed",
+            "gap": {"status": "resolved", "reason": ""},
+            "processing": {"classification": classification, "extract": extract, "applied_fields": applied, "processed_at": datetime.now(UTC).isoformat()},
+        }],
+        "evidence": [_evidence(
+            tool="extract_company_profile_document",
+            description="Classified and extracted customer company-profile document",
+            source="OpenAI document extraction",
+            data={"document_id": document["document_id"], "classification": classification, "extract": extract, "artifact": artifact},
+            relevance_tags=["document", "company_profile", "document_extraction"],
+        )],
+    }
 
 
 def create_or_reuse_case(state: CDDState) -> dict[str, Any]:
@@ -389,6 +485,12 @@ def build_ownership_and_control(state: CDDState) -> dict[str, Any]:
     members_result = _latest_evidence_data(state, "get_company_members_by_case_id") or {}
     org_result = _latest_evidence_data(state, "get_company_org_chart_by_case_id") or {}
 
+    document_extract = _latest_evidence_data(state, "extract_company_profile_document") or {}
+    document_owners = _document_ownership_nodes((document_extract.get("extract") or {}).get("shareholders") or [])
+    if not members_result and document_owners:
+        members_result = {"shareholders_and_beneficial_owners": document_owners, "controlling_members": [], "ultimate_beneficial_owners": []}
+    if not org_result and document_owners:
+        org_result = {"org_chart": {"name": (state.get("metadata", {}).get("customer") or {}).get("name"), "shareholders": document_owners}}
     ownership["members"] = {
         "status": "complete" if members_result and not members_result.get("error") else "incomplete",
         "missing_items": [] if members_result and not members_result.get("error") else ["members"],
@@ -419,6 +521,31 @@ def build_ownership_and_control(state: CDDState) -> dict[str, Any]:
     ownership["missing_items"] = missing_items
     ownership["notes"] = []
     return {"cdd": cdd}
+
+
+def validate_ownership_resolution_node(state: CDDState) -> dict[str, Any]:
+    """Persist graph-integrity checks before downstream CDD assessments."""
+    root = ((state.get("cdd") or {}).get("ownership_and_control") or {}).get("org_chart", {}).get("org_chart") or {}
+    result = validate_ownership_resolution(root)
+    return {
+        "evidence": [_evidence(
+            tool="validate_ownership_resolution",
+            description="Validated ownership graph integrity without changing extracted facts",
+            source="CDD ownership validation",
+            data=result,
+            relevance_tags=["ownership", "validation", "effective_ownership"],
+        )],
+        "assessments": [{
+            "assessment_id": f"assessment:ownership-validation:{uuid4().hex}",
+            "assessment_type": "ownership_resolution_validation",
+            "schema_version": "ownership_resolution_validation/v1",
+            "tool": "validate_ownership_resolution",
+            "outcome": result["outcome"],
+            "summary": "Ownership graph passed deterministic integrity checks." if result["outcome"] == "passed" else "Ownership graph requires review; see validation issues.",
+            "issues": result["issues"],
+            "terminals": result["terminals"],
+        }],
+    }
 
 
 def establish_idv_requirements(state: CDDState) -> dict[str, Any]:
@@ -483,8 +610,7 @@ def await_documents(state: CDDState) -> dict[str, Any]:
     """Pause the graph until every officer document requirement is available."""
     outstanding = [
         document for document in state.get("documents", [])
-        if document.get("purpose") == "identity_verification"
-        and (document.get("gap") or {}).get("status") == "outstanding"
+        if (document.get("gap") or {}).get("status") == "outstanding"
     ]
     if outstanding:
         interrupt({"status": "awaiting_documents", "requirements": outstanding})
@@ -1361,6 +1487,27 @@ def _latest_evidence_data(state: CDDState, tool: str) -> dict[str, Any] | None:
             if isinstance(data, dict):
                 return data
     return None
+
+
+def _document_ownership_nodes(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize constrained document ownership rows into the graph shape."""
+    nodes = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("name"):
+            continue
+        entity_type = row.get("entity_type")
+        node: dict[str, Any] = {
+            "name": row["name"],
+            "ownership": {"shares": row.get("ownership_percent")},
+            "officers": [],
+            "shareholders": [],
+        }
+        if entity_type == "individual":
+            node["nationality_id"] = "document"
+        else:
+            node["jurisdiction_id"] = "document"
+        nodes.append(node)
+    return nodes
 
 
 def _apply_idv_extracts(

@@ -23,6 +23,7 @@ function App() {
   const [customerName, setCustomerName] = useState("");
   const [jurisdiction, setJurisdiction] = useState("");
   const [accountLocation, setAccountLocation] = useState("");
+  const [customerInformationSource, setCustomerInformationSource] = useState("kyc_api");
   const [jurisdictions, setJurisdictions] = useState(FALLBACK_JURISDICTIONS);
   const [message, setMessage] = useState("");
   const [cdd, setCdd] = useState(null);
@@ -354,6 +355,7 @@ function App() {
           customer_name: customerName.trim(),
           jurisdiction: jurisdiction.trim(),
           account_location: accountLocation,
+          customer_information_source: customerInformationSource,
           generate_pdf: generatePdf,
         }),
       });
@@ -976,6 +978,15 @@ function App() {
                   <option value={code} key={code}>{code}</option>
                 ))}
               </select>
+              <select
+                aria-label="Customer information source"
+                value={customerInformationSource}
+                onChange={(event) => setCustomerInformationSource(event.target.value)}
+              >
+                <option value="kyc_api">KYC API first</option>
+                <option value="documents">Customer documents first</option>
+                <option value="hybrid">KYC API + documents</option>
+              </select>
               <button
                 disabled={pipelineLoading || (!demoMode && (!customerName.trim() || !jurisdiction || !accountLocation))}
                 onClick={() => runPipeline()}
@@ -999,7 +1010,7 @@ function App() {
               <div>
                 <strong>CDD paused — documents required</strong>
                 <p>
-                  {`${missingDocumentRequirements.length} required ID&V ${missingDocumentRequirements.length === 1 ? "document is" : "documents are"} unavailable.`}
+                  {`${missingDocumentRequirements.length} required ${missingDocumentRequirements.length === 1 ? "document is" : "documents are"} unavailable.`}
                   {" Generate the missing documents or upload them to continue the CDD pipeline."}
                 </p>
               </div>
@@ -1141,8 +1152,6 @@ function App() {
             onRunRiskRating={runRiskRating}
             demoMode={demoMode}
           />
-
-          <RuntimeTelemetry telemetry={cddState?.runtime_telemetry} />
 
           {showJson && cddState && (
             <Section title="CDDState JSON">
@@ -1342,20 +1351,6 @@ function CDDReviewCards({
       <RiskRating assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
     </>
   );
-}
-
-function RuntimeTelemetry({ telemetry }) {
-  if (!telemetry || telemetry.status === "not_retained") {
-    return <Section title="Run Telemetry" collapsible><p className="empty">Telemetry was not retained for this saved state.</p></Section>;
-  }
-  return <Section title="Run Telemetry" collapsible>
-    <table>
-      <thead><tr><th>Node</th><th>Status</th><th>Duration</th><th>Tokens</th></tr></thead>
-      <tbody>{(telemetry.nodes || []).map((node) => (
-        <tr key={`${node.node}-${node.started_at}`}><td>{statusLabel(node.node)}</td><td>{statusLabel(node.status)}</td><td>{typeof node.elapsed_ms === "number" ? `${node.elapsed_ms} ms` : "-"}</td><td>{node.tokens?.status === "available" ? node.tokens.total : "Not applicable"}</td></tr>
-      ))}</tbody>
-    </table>
-  </Section>;
 }
 
 function Findings({ findings, evidence }) {
@@ -1895,7 +1890,7 @@ function DocumentManagement({
 
       {missing.length > 0 && (
         <p className="document-required-note">
-          {`${missing.length} required document${missing.length === 1 ? " is" : "s are"} unavailable. Generate the missing ID&V documents or upload customer-provided PDFs; CDD resumes automatically once all requirements are available.`}
+          {`${missing.length} required document${missing.length === 1 ? " is" : "s are"} unavailable. Generate the missing documents or upload customer-provided PDFs; CDD resumes automatically once all requirements are available.`}
         </p>
       )}
 
@@ -1904,6 +1899,7 @@ function DocumentManagement({
           <thead>
             <tr>
               <th>Document Name</th>
+              <th>CDD Purpose</th>
               <th>Found in Cache</th>
               <th>Provided by Customer</th>
               <th>Processed</th>
@@ -1919,6 +1915,7 @@ function DocumentManagement({
               return (
                 <tr key={requirement.document_id}>
                   <td>{documentLabel(requirement.document_type)} — {(requirement.subject || {}).name}</td>
+                  <td>{requirement.purpose === "company_profile" ? "Customer company profile" : "Identity verification"}</td>
                   <td>
                     {foundInCache && cacheLink?.url ? (
                       <a className="download-link" href={cacheLink.url} target="_blank" rel="noreferrer">Yes</a>

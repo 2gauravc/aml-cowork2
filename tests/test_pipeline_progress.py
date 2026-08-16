@@ -31,16 +31,16 @@ class PipelineProgressTests(unittest.TestCase):
 
         self.assertEqual(len(updates), 1)
         self.assertEqual(updates[0]["node"], "fetch_org_chart")
-        self.assertEqual(updates[0]["node_number"], 4)
-        self.assertEqual(updates[0]["total_nodes"], 23)
+        self.assertEqual(updates[0]["node_number"], 5)
+        self.assertEqual(updates[0]["total_nodes"], 27)
         self.assertTrue(updates[0]["using_cache"])
         self.assertEqual(updates[0]["cache_source"], "s3")
         self.assertEqual(updates[0]["status"], "running")
 
     def test_final_pipeline_step_counts_cdd_finalization(self):
-        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_shell_company_risk") + 1, 20)
-        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_other_risk_factors") + 1, 21)
-        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_risk_rating") + 1, 22)
+        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_shell_company_risk") + 1, 24)
+        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_other_risk_factors") + 1, 25)
+        self.assertEqual(list(PIPELINE_NODE_LABELS).index("assess_risk_rating") + 1, 26)
         self.assertEqual(
             PIPELINE_NODE_LABELS["finalize_cdd"],
             "Completing CDD",
@@ -49,8 +49,8 @@ class PipelineProgressTests(unittest.TestCase):
         wrapped = _progress_node("finalize_cdd", lambda state: state, updates.append)
 
         self.assertEqual(wrapped({}), {})
-        self.assertEqual(updates[0]["node_number"], 23)
-        self.assertEqual(updates[0]["total_nodes"], 23)
+        self.assertEqual(updates[0]["node_number"], 27)
+        self.assertEqual(updates[0]["total_nodes"], 27)
 
     def test_failed_node_reports_error_before_reraising(self):
         updates = []

@@ -76,5 +76,14 @@
     <tr><td>Incorporation Date</td><td>{{ document.incorporation_date }}</td></tr>
     <tr><td>Registered Address</td><td>{{ document.registered_address.full_address }}</td></tr>
   </table>
+  {% if document.shareholders %}
+  <h2>Ownership</h2>
+  <table>
+    <tr><th>Owner</th><th>Entity Type</th><th>Direct Ownership</th><th>Role</th></tr>
+    {% for owner in document.shareholders %}
+    <tr><td>{{ owner.name }}</td><td>{{ owner.entity_type }}</td><td>{{ owner.ownership_percent }}%</td><td>{{ owner.role }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
 </body>
 </html>

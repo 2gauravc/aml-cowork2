@@ -58,12 +58,11 @@ def test_json_view_renders_the_complete_cdd_state() -> None:
     assert "JSON.stringify(cdd, null, 2)" not in app
 
 
-def test_cdd_ui_renders_runtime_telemetry_without_treating_it_as_evidence() -> None:
+def test_cdd_ui_does_not_render_removed_runtime_telemetry() -> None:
     app = (Path(__file__).parents[1] / "src" / "frontend" / "app.js").read_text(encoding="utf-8")
 
-    assert "<RuntimeTelemetry telemetry={cddState?.runtime_telemetry} />" in app
-    assert 'title="Run Telemetry"' in app
-    assert 'node.tokens?.status === "available"' in app
+    assert "RuntimeTelemetry" not in app
+    assert 'title="Run Telemetry"' not in app
 
 
 def test_json_view_has_an_accessible_copy_control() -> None:
@@ -226,7 +225,7 @@ def test_document_actions_poll_after_starting_a_background_resume() -> None:
     assert 'pipelineStatus === "awaiting_documents"' in app
     assert "CDD paused — documents required" in app
     assert 'setActiveWorkspace("generation")' in app
-    assert "Generate the missing ID&V documents or upload customer-provided PDFs" in app
+    assert "Generate the missing documents or upload customer-provided PDFs" in app
 
 
 def test_pipeline_form_collects_account_opening_location() -> None:

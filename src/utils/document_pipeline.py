@@ -11,6 +11,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from openai import OpenAI, OpenAIError
+
 from xhtml2pdf import pisa
 
 
@@ -158,6 +159,12 @@ def _registry_document_data(cdd: dict[str, Any]) -> dict[str, Any]:
             "full_address": _get_path(static, ("registered_address", "full_address"))
             or _demo_address(name, jurisdiction)
         },
+        "shareholders": [{
+            "name": f"{name} Beneficial Owner",
+            "entity_type": "individual",
+            "ownership_percent": 100,
+            "role": "Shareholder",
+        }],
     }
 
 

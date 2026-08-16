@@ -55,6 +55,7 @@ from src.tools.orgchart import get_company_org_chart_by_name
 from src.utils.kyc_cache import company_cache_subject, get_cache_source
 from src.utils.pdf import render_cdd_pdf
 from src.utils.idv_document_pipeline import generate_idv_document
+from src.utils.document_pipeline import generate_registry_document
 from src.utils.case_status import sync_case_status
 from src.utils.cdd_state_store import (
     CDDStateStoreError,
@@ -78,7 +79,6 @@ from src.utils.s3_documents import (
     reusable_document_name,
     upload_document_to_s3,
 )
-from src.utils.runtime_telemetry import telemetry_view
 
 load_application_env()
 
@@ -126,6 +126,7 @@ class PipelineRequest(BaseModel):
     account_location: Literal["SG", "HK", "GB"]
     case_id: str | None = None
     generate_pdf: bool = False
+    customer_information_source: Literal["kyc_api", "documents", "hybrid"] = "kyc_api"
 
 
 class CDDStateLookupRequest(BaseModel):
@@ -701,6 +702,7 @@ async def run_pipeline(
         account_location=request.account_location,
         case_id=request.case_id,
         generate_pdf=request.generate_pdf,
+        customer_information_source=request.customer_information_source,
         background_tasks=background_tasks,
     )
 
@@ -811,6 +813,7 @@ def migrate_completed_cdd_state(graph_state: dict[str, Any]) -> dict[str, Any]:
         "digital_footprint": migrate_legacy_digital_footprint(graph_state),
         "document_state": migrate_legacy_document_state(graph_state),
         "case_checker": migrate_legacy_case_assessment_summary(graph_state),
+        "runtime_telemetry": migrate_legacy_runtime_telemetry(graph_state),
     }
     return {"changed": any(routines.values()), "routines": routines}
 
@@ -822,6 +825,11 @@ def migrate_legacy_case_assessment_summary(graph_state: dict[str, Any]) -> bool:
         return legacy is not None and "case_checker_summary" in graph_state
     graph_state["case_checker_summary"] = legacy
     return True
+
+
+def migrate_legacy_runtime_telemetry(graph_state: dict[str, Any]) -> bool:
+    """Remove retired #116 operational telemetry from retained CDD state."""
+    return graph_state.pop("runtime_telemetry", None) is not None
 
 
 @app.post("/api/pdf")
@@ -919,7 +927,13 @@ async def upload_case_document(
         staging / f"{uuid.uuid4()}-{_safe_file_name(file.filename or 'document.pdf')}"
     )
     path.write_bytes(data)
-    artifact = {"pdf_path": str(path), "source": "Provided by customer"}
+    artifact = {
+        "pdf_path": str(path),
+        "source": "Provided by customer",
+        "source_type": "customer_provided",
+        "provenance": "customer_provided",
+        "synthetic": False,
+    }
     try:
         classification = await asyncio.to_thread(classify_document, path)
         preview = await asyncio.to_thread(
@@ -984,14 +998,21 @@ async def generate_missing_documents(request: DocumentActionRequest) -> dict[str
         if requirement.get("status") != "required":
             continue
         try:
-            artifact = await asyncio.to_thread(
-                generate_idv_document,
-                {
-                    **(requirement.get("subject") or {}),
-                    "selected_document_type": requirement["document_type"],
-                },
-                output_dir=DOCUMENT_STAGING_DIR / request.session_id,
-            )
+            if requirement.get("purpose") == "company_profile":
+                artifact = await asyncio.to_thread(
+                    generate_registry_document,
+                    (state.get("cdd") or {}),
+                    output_dir=DOCUMENT_STAGING_DIR / request.session_id,
+                )
+            else:
+                artifact = await asyncio.to_thread(
+                    generate_idv_document,
+                    {
+                        **(requirement.get("subject") or {}),
+                        "selected_document_type": requirement["document_type"],
+                    },
+                    output_dir=DOCUMENT_STAGING_DIR / request.session_id,
+                )
         except Exception as exc:
             subject_name = (requirement.get("subject") or {}).get(
                 "name"
@@ -1188,7 +1209,6 @@ def _response(
         "findings": state.get("findings", []),
         "assessments": state.get("assessments", []),
         "case_checker_summary": state.get("case_checker_summary"),
-        "runtime_telemetry": telemetry_view(state.get("runtime_telemetry")),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
@@ -1210,7 +1230,6 @@ def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
 def _cdd_state_view(state: dict[str, Any]) -> dict[str, Any]:
     """Add non-persisted stable tool views to an API state response."""
     view = deepcopy(state)
-    view["runtime_telemetry"] = telemetry_view(state.get("runtime_telemetry"))
     view["tool_views"] = {
         **(view.get("tool_views") or {}),
         "adverse_news": adverse_news_view(state),
@@ -1226,6 +1245,7 @@ def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     migrate_legacy_document_state(state)
     migrate_legacy_case_assessment_summary(state)
+    migrate_legacy_runtime_telemetry(state)
     return state
 
 
@@ -1242,12 +1262,11 @@ def _append_cdd_records(
 
 
 def _open_document_requirements(state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return unresolved canonical document records eligible for officer action."""
+    """Return unresolved canonical document records eligible for operator action."""
     return [
         document
         for document in state.get("documents", [])
-        if document.get("purpose") == "identity_verification"
-        and document.get("status") in {"required", "located", "received"}
+        if document.get("status") in {"required", "located", "received"}
     ]
 
 
@@ -1644,6 +1663,7 @@ async def _run_pipeline_for_session(
     account_location: Literal["SG", "HK", "GB"] | None = None,
     case_id: str | None = None,
     generate_pdf: bool = False,
+    customer_information_source: str = "kyc_api",
     background_tasks: BackgroundTasks | None = None,
 ) -> dict[str, Any]:
     if not customer_name or not jurisdiction or not account_location:
@@ -1677,6 +1697,7 @@ async def _run_pipeline_for_session(
         jurisdiction=jurisdiction,
         account_location=account_location,
         case_id=case_id,
+        customer_information_source=customer_information_source,
     )
     session["pipeline_status"] = "running"
     sync_case_status(session["graph_state"], generation="in_progress")
@@ -1692,10 +1713,14 @@ async def _run_pipeline_for_session(
     session["messages"].append(
         {
             "role": "assistant",
-            "content": _registry_fetch_message(
-                customer_name=customer_name,
-                jurisdiction=jurisdiction,
-                case_id=case_id,
+            "content": (
+                "Preparing customer document evidence..."
+                if customer_information_source == "documents"
+                else _registry_fetch_message(
+                    customer_name=customer_name,
+                    jurisdiction=jurisdiction,
+                    case_id=case_id,
+                )
             ),
         }
     )
@@ -1706,6 +1731,7 @@ async def _run_pipeline_for_session(
         "account_location": account_location,
         "case_id": case_id,
         "generate_pdf": generate_pdf,
+        "customer_information_source": customer_information_source,
         "graph_thread_id": session["graph_thread_id"],
     }
     if background_tasks is not None:
@@ -1766,6 +1792,7 @@ async def _complete_pipeline_for_session(
     account_location: Literal["SG", "HK", "GB"],
     case_id: str | None = None,
     generate_pdf: bool = False,
+    customer_information_source: str = "kyc_api",
     graph_thread_id: str,
 ) -> None:
     try:
@@ -1781,6 +1808,7 @@ async def _complete_pipeline_for_session(
             jurisdiction=jurisdiction,
             account_location=account_location,
             case_id=case_id,
+            customer_information_source=customer_information_source,
             progress_callback=publish_progress,
             thread_id=graph_thread_id,
         )
