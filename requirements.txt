@@ -3,6 +3,7 @@ jinja2
 langchain-core
 langchain-openai
 langgraph
+langsmith
 openai
 pydantic
 PyYAML

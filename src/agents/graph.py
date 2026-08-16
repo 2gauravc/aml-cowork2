@@ -56,7 +56,6 @@ from src.utils.langgraph_debug import maybe_debug_node  # noqa: E402
 from src.utils.kyc_cache import company_cache_subject, get_cache_source  # noqa: E402
 from src.utils.environment import load_application_env  # noqa: E402
 from src.utils.pdf import render_cdd_pdf  # noqa: E402
-from src.utils.runtime_telemetry import run_node_with_telemetry  # noqa: E402
 
 
 load_application_env()
@@ -216,7 +215,7 @@ def build_cdd_graph(
             node_name,
             _progress_node(
                 node_name,
-                run_node_with_telemetry(node_name, maybe_debug_node(node_name, func)),
+                maybe_debug_node(node_name, func),
                 progress_callback,
             ),
         )
@@ -235,7 +234,7 @@ def build_cdd_graph(
     add_node("locate_available_documents", locate_available_documents)
     add_node("process_available_documents", process_available_documents)
     # The interrupt node is an internal pause point, not a visible pipeline step.
-    graph.add_node("await_documents", run_node_with_telemetry("await_documents", await_documents))
+    graph.add_node("await_documents", await_documents)
     add_node("extract_idv_documents", extract_idv_documents)
     add_node("digital_footprint_assessment", digital_footprint_assessment)
     add_node("adverse_news_screening", adverse_news_screening)

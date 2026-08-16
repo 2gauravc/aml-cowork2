@@ -78,7 +78,6 @@ from src.utils.s3_documents import (
     reusable_document_name,
     upload_document_to_s3,
 )
-from src.utils.runtime_telemetry import telemetry_view
 
 load_application_env()
 
@@ -811,6 +810,7 @@ def migrate_completed_cdd_state(graph_state: dict[str, Any]) -> dict[str, Any]:
         "digital_footprint": migrate_legacy_digital_footprint(graph_state),
         "document_state": migrate_legacy_document_state(graph_state),
         "case_checker": migrate_legacy_case_assessment_summary(graph_state),
+        "runtime_telemetry": migrate_legacy_runtime_telemetry(graph_state),
     }
     return {"changed": any(routines.values()), "routines": routines}
 
@@ -822,6 +822,11 @@ def migrate_legacy_case_assessment_summary(graph_state: dict[str, Any]) -> bool:
         return legacy is not None and "case_checker_summary" in graph_state
     graph_state["case_checker_summary"] = legacy
     return True
+
+
+def migrate_legacy_runtime_telemetry(graph_state: dict[str, Any]) -> bool:
+    """Remove retired #116 operational telemetry from retained CDD state."""
+    return graph_state.pop("runtime_telemetry", None) is not None
 
 
 @app.post("/api/pdf")
@@ -1188,7 +1193,6 @@ def _response(
         "findings": state.get("findings", []),
         "assessments": state.get("assessments", []),
         "case_checker_summary": state.get("case_checker_summary"),
-        "runtime_telemetry": telemetry_view(state.get("runtime_telemetry")),
         "case_review_decision": session.get("case_review_decision"),
         "demo_csp_result": session.get("demo_csp_result"),
         "tool_results": session.get("tool_results", []),
@@ -1210,7 +1214,6 @@ def _cdd_state_snapshot(session: dict[str, Any]) -> dict[str, Any]:
 def _cdd_state_view(state: dict[str, Any]) -> dict[str, Any]:
     """Add non-persisted stable tool views to an API state response."""
     view = deepcopy(state)
-    view["runtime_telemetry"] = telemetry_view(state.get("runtime_telemetry"))
     view["tool_views"] = {
         **(view.get("tool_views") or {}),
         "adverse_news": adverse_news_view(state),
@@ -1226,6 +1229,7 @@ def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     migrate_legacy_document_state(state)
     migrate_legacy_case_assessment_summary(state)
+    migrate_legacy_runtime_telemetry(state)
     return state
 
 

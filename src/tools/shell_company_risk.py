@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 from openai import OpenAI, OpenAIError
-from src.utils.runtime_telemetry import invoke_model_with_telemetry
+from src.utils.langsmith_tracing import traced_openai_client
 
 from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
 
@@ -73,7 +73,7 @@ def _classify(inputs: dict[str, Any], factors: list[dict[str, Any]]) -> dict[str
     policy = [{key: factor[key] for key in ("id", "title", "risk_definition", "recent_incorporation_months") if key in factor} for factor in factors]
     prompt = "Assess each shell-company risk factor using only the supplied facts and policy. Do not infer missing facts. Return inconclusive only where retained facts cannot support a reliable conclusion; do not make foreign nationality alone a risk trigger.\n\n" + json.dumps({"policy": policy, "retained_facts": inputs})
     try:
-        response = invoke_model_with_telemetry(OpenAI(), model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "shell_company_risk", "schema": schema, "strict": True}})
+        response = traced_openai_client(OpenAI()).responses.create(model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "shell_company_risk", "schema": schema, "strict": True}})
         parsed = json.loads(response.output_text)
     except OpenAIError as exc:
         raise ShellCompanyRiskError(f"Shell Company Risk classification failed: {exc}") from exc

@@ -1142,8 +1142,6 @@ function App() {
             demoMode={demoMode}
           />
 
-          <RuntimeTelemetry telemetry={cddState?.runtime_telemetry} />
-
           {showJson && cddState && (
             <Section title="CDDState JSON">
               <div className="json-view-header">
@@ -1342,20 +1340,6 @@ function CDDReviewCards({
       <RiskRating assessments={assessmentsByType(cddState, "risk_rating")} loading={loading} demoMode={demoMode} onRun={onRunRiskRating} />
     </>
   );
-}
-
-function RuntimeTelemetry({ telemetry }) {
-  if (!telemetry || telemetry.status === "not_retained") {
-    return <Section title="Run Telemetry" collapsible><p className="empty">Telemetry was not retained for this saved state.</p></Section>;
-  }
-  return <Section title="Run Telemetry" collapsible>
-    <table>
-      <thead><tr><th>Node</th><th>Status</th><th>Duration</th><th>Tokens</th></tr></thead>
-      <tbody>{(telemetry.nodes || []).map((node) => (
-        <tr key={`${node.node}-${node.started_at}`}><td>{statusLabel(node.node)}</td><td>{statusLabel(node.status)}</td><td>{typeof node.elapsed_ms === "number" ? `${node.elapsed_ms} ms` : "-"}</td><td>{node.tokens?.status === "available" ? node.tokens.total : "Not applicable"}</td></tr>
-      ))}</tbody>
-    </table>
-  </Section>;
 }
 
 function Findings({ findings, evidence }) {

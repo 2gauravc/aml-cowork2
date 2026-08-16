@@ -18,7 +18,7 @@ from openai import OpenAI, OpenAIError
 from src.utils.skill_definitions import SkillDefinitionError, load_skill_definition
 from src.utils.environment import load_application_env
 from src.utils.tool_presentation import ToolPresentationError, compile_tool_presentation
-from src.utils.runtime_telemetry import invoke_model_with_telemetry
+from src.utils.langsmith_tracing import traced_openai_client
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -178,7 +178,7 @@ def assess_adverse_news(entities: list[dict[str, Any]], sources: list[dict[str, 
               f"Adverse News skill:\n{definition['instructions']}\n\n"
               f"Entities:\n{json.dumps(entities, ensure_ascii=False)}\n\nSources:\n{json.dumps([source['evidence'] for source in sources], ensure_ascii=False)}")
     try:
-        response = invoke_model_with_telemetry(OpenAI(), model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "adverse_news_assessment", "schema": schema, "strict": True}})
+        response = traced_openai_client(OpenAI()).responses.create(model=DEFAULT_MODEL, input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}], text={"format": {"type": "json_schema", "name": "adverse_news_assessment", "schema": schema, "strict": True}})
         parsed = json.loads(response.output_text)
     except OpenAIError as exc:
         raise AdverseNewsError(f"Adverse-news assessment failed: {exc}") from exc
