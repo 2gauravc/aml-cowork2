@@ -155,3 +155,57 @@ def test_members_ubo_claims_are_reconciled_with_the_ownership_graph() -> None:
     assessment = result["assessments"][0]
     assert assessment["outcome"] == "incomplete"
     assert assessment["retained_ubo_claims"][0]["name"] == "Existing Owner"
+
+
+def test_sc_engineering_direct_ubo_layer_is_resolved_from_kyc_org_chart() -> None:
+    """Regression case from retained SC Engineering state (KYC case 1000002142)."""
+    state = _state([])
+    state["cdd"]["ownership_and_control"]["ubos"] = [
+        {"name": "Chin Eng Lee", "case_common_id": 1000002144, "effective_shareholding_percent": 34},
+        {"name": "Chong Chwee Seng", "case_common_id": 1000002145, "effective_shareholding_percent": 33},
+        {"name": "David Soon Kin Mun", "case_common_id": 1000002146, "effective_shareholding_percent": 33},
+    ]
+    state["evidence"] = [
+        {
+            "evidence_id": "evidence:org:sc-engineering",
+            "tool": "get_company_org_chart_by_case_id",
+            "source": "KYC API",
+            "data": {
+                "org_chart": {
+                    "name": "SC ENGINEERING PRIVATE LIMITED",
+                    "shareholders": [
+                        {"name": "Chin Eng Lee", "role": "Shareholder", "case_common_id": 1000002144, "ownership": {"effective_percentage": 34, "shares": 34}},
+                        {"name": "Chong Chwee Seng", "role": "Shareholder", "case_common_id": 1000002145, "ownership": {"effective_percentage": 33, "shares": 33}},
+                        {"name": "David Soon Kin Mun", "role": "Shareholder", "case_common_id": 1000002146, "ownership": {"effective_percentage": 33, "shares": 33}},
+                    ],
+                }
+            },
+        },
+        {
+            "evidence_id": "evidence:members:sc-engineering",
+            "tool": "get_company_members_by_case_id",
+            "source": "KYC API",
+            "data": {
+                "ultimate_beneficial_owners": [
+                    {"name": "LEE CHIN ENG", "member_type": "Individual", "case_common_id": 1000002144},
+                    {"name": "CHONG CHWEE SENG", "member_type": "Individual", "case_common_id": 1000002145},
+                    {"name": "DAVID SOON KIN MUN", "member_type": "Individual", "case_common_id": 1000002146},
+                ]
+            },
+        },
+    ]
+
+    result = unwrap_ownership(state)
+    assessment = result["assessments"][0]
+
+    assert assessment["outcome"] == "complete"
+    assert [(ubo["case_common_id"], ubo["effective_shareholding_percent"]) for ubo in assessment["ubo_list"]] == [
+        (1000002144, 34.0),
+        (1000002145, 33.0),
+        (1000002146, 33.0),
+    ]
+    assert assessment["corporate_shareholders_over_10_percent"] == []
+    assert assessment["unresolved_branches"] == []
+    assert result["findings"] == []
+    normalized_org_chart = next(item for item in result["evidence"] if item["source"] == "KYC API")
+    assert len(normalized_org_chart["data"]["ownership_relationships"]) == 3

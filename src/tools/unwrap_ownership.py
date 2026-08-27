@@ -57,7 +57,8 @@ def unwrap_ownership(state: dict[str, Any]) -> dict[str, Any]:
     now = datetime.now(UTC).isoformat()
     assessment_id = f"assessment:unwrap-ownership:{uuid4().hex}"
     sources = _ownership_sources(state)
-    normalized, source_ids = _normalize_sources(sources, now)
+    entity_types = _source_entity_types(sources)
+    normalized, source_ids = _normalize_sources(sources, now, entity_types)
     retained_evidence, retained_ubo_claims = _retained_ubo_evidence(state, now)
     retained_ubo_claims = _unique_claims([
         *retained_ubo_claims,
@@ -70,7 +71,7 @@ def unwrap_ownership(state: dict[str, Any]) -> dict[str, Any]:
     if listed:
         assessment = _assessment(assessment_id, run_id, now, definition, source_ids, "listed_company_exception", [], [listed], [], [])
         return {"evidence": normalized, "assessments": [assessment], "findings": []}
-    rows, gaps = _ownership_rows(sources)
+    rows, gaps = _ownership_rows(sources, entity_types)
     if not rows:
         outcome = "unavailable" if not source_ids else "incomplete"
         limitation = "No supported ownership relationships were retained." if source_ids else "No ownership evidence is available."
@@ -95,7 +96,9 @@ def _ownership_sources(state: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in state.get("evidence") or [] if isinstance(item, dict) and item.get("tool") in {"get_company_org_chart_by_case_id", "unwrap_ownership_document", "get_company_members_by_case_id"}]
 
 
-def _normalize_sources(sources: list[dict[str, Any]], now: str) -> tuple[list[dict[str, Any]], list[str]]:
+def _normalize_sources(
+    sources: list[dict[str, Any]], now: str, entity_types: dict[tuple[str, str], str]
+) -> tuple[list[dict[str, Any]], list[str]]:
     records, ids = [], []
     for source in sources:
         source_id = str(source.get("evidence_id") or "")
@@ -103,7 +106,11 @@ def _normalize_sources(sources: list[dict[str, Any]], now: str) -> tuple[list[di
             continue
         ids.append(source_id)
         data = source.get("data") if isinstance(source.get("data"), dict) else {}
-        normalized = {"schema_version": "ownership_source_evidence/v1", "source_evidence_id": source_id, "entities": data.get("entities") or [], "ownership_relationships": data.get("ownership_relationships") or [], "source_citations": data.get("source_citations") or [{"evidence_id": source_id}], "extraction_limitations": data.get("extraction_limitations") or []}
+        entities = data.get("entities") or []
+        relationships = data.get("ownership_relationships") or []
+        if source.get("tool") == "get_company_org_chart_by_case_id":
+            entities, relationships = _normalize_org_chart(data.get("org_chart") or {}, entity_types)
+        normalized = {"schema_version": "ownership_source_evidence/v1", "source_evidence_id": source_id, "entities": entities, "ownership_relationships": relationships, "source_citations": data.get("source_citations") or [{"evidence_id": source_id}], "extraction_limitations": data.get("extraction_limitations") or []}
         _validate_evidence(normalized)
         records.append({"evidence_id": f"evidence:ownership-normalized:{source_id.split(':')[-1]}", "source": source.get("source") or "CDD evidence", "tool": "unwrap_ownership", "description": "Normalized ownership source evidence", "collected_at": now, "relevance_tags": ["ownership", "normalized"], "data": normalized})
     return records, ids
@@ -151,13 +158,15 @@ def _ubo_claim_gaps(retained_claims: list[dict[str, Any]], resolved_ubos: list[d
     return [{"kind": "retained_ubo_conflict", "entity": "Retained CDD UBO claims", "reason": "Retained CDD UBO claims do not match the UBOs resolved from current ownership evidence.", "retained_ubo_count": len(retained), "resolved_ubo_count": len(resolved)}]
 
 
-def _ownership_rows(sources: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _ownership_rows(
+    sources: list[dict[str, Any]], entity_types: dict[tuple[str, str], str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     gaps: list[dict[str, Any]] = []
     for source in sources:
         data = source.get("data") if isinstance(source.get("data"), dict) else {}
         if source.get("tool") == "get_company_org_chart_by_case_id":
-            source_rows, source_gaps = _rows_from_org_chart(data.get("org_chart") or {})
+            source_rows, source_gaps = _rows_from_org_chart(data.get("org_chart") or {}, entity_types)
             rows.extend(source_rows)
             gaps.extend(source_gaps)
         document_rows, document_gaps = _rows_from_document(data.get("ownership_relationships") or [])
@@ -166,7 +175,9 @@ def _ownership_rows(sources: list[dict[str, Any]]) -> tuple[list[dict[str, Any]]
     return rows, gaps
 
 
-def _rows_from_org_chart(root: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _rows_from_org_chart(
+    root: dict[str, Any], entity_types: dict[tuple[str, str], str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     gaps: list[dict[str, Any]] = []
 
@@ -187,7 +198,7 @@ def _rows_from_org_chart(root: dict[str, Any]) -> tuple[list[dict[str, Any]], li
             key = (str(child.get("case_common_id") or ""), name.casefold())
             seen[key] = seen.get(key, 0) + 1
             effective = parent_effective * direct / 100 if direct is not None else None
-            row = {"name": child.get("name"), "type": _entity_type(child), "case_common_id": child.get("case_common_id"), "direct_shareholding_percent": direct, "effective_shareholding_percent": _round(effective), "ownership_layer": layer}
+            row = {"name": child.get("name"), "type": _entity_type(child, entity_types), "case_common_id": child.get("case_common_id"), "direct_shareholding_percent": direct, "effective_shareholding_percent": _round(effective), "ownership_layer": layer}
             rows.append(row)
             child_layer = f"{layer} → {name}"
             if row["type"] == "Company" and _pct(row) > 10 and not (child.get("shareholders") or []):
@@ -199,6 +210,49 @@ def _rows_from_org_chart(root: dict[str, Any]) -> tuple[list[dict[str, Any]], li
 
     visit(root, 100.0, str(root.get("name") or "Customer"))
     return rows, gaps
+
+
+def _source_entity_types(sources: list[dict[str, Any]]) -> dict[tuple[str, str], str]:
+    """Build a stable-ID type index from complementary KYC source sections."""
+    types: dict[tuple[str, str], str] = {}
+    for source in sources:
+        data = source.get("data") if isinstance(source.get("data"), dict) else {}
+        candidates: list[Any] = []
+        if source.get("tool") == "get_company_members_by_case_id":
+            for field in ("controlling_members", "shareholders_and_beneficial_owners", "ultimate_beneficial_owners"):
+                candidates.extend(data.get(field) or [])
+        if source.get("tool") == "get_company_org_chart_by_case_id":
+            root = data.get("org_chart") if isinstance(data.get("org_chart"), dict) else {}
+            candidates.extend(root.get("others") or [])
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            entity_type = _entity_type(candidate)
+            if entity_type != "Unknown":
+                types[_identity_key(candidate)] = entity_type
+    return types
+
+
+def _normalize_org_chart(
+    root: dict[str, Any], entity_types: dict[tuple[str, str], str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Convert the provider's nested ownership tree into canonical source evidence."""
+    entities: list[dict[str, Any]] = []
+    relationships: list[dict[str, Any]] = []
+
+    def visit(node: dict[str, Any], owner: str | None = None) -> None:
+        name = node.get("name")
+        if name:
+            entities.append({"name": name, "case_common_id": node.get("case_common_id"), "type": _entity_type(node, entity_types)})
+        for child in node.get("shareholders") or []:
+            if not isinstance(child, dict):
+                continue
+            direct = _direct_pct(child)
+            relationships.append({"owner_name": child.get("name"), "owner_id": child.get("case_common_id"), "owner_type": _entity_type(child, entity_types), "owned_entity": name or owner, "direct_shareholding_percent": direct, "effective_shareholding_percent": direct})
+            visit(child, name)
+
+    visit(root)
+    return entities, relationships
 
 
 def _rows_from_document(relations: list[Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -275,12 +329,16 @@ def _direct_row_pct(row: dict[str, Any]) -> float | None:
         return None
 
 
-def _entity_type(node: dict[str, Any]) -> str:
+def _entity_type(
+    node: dict[str, Any], entity_types: dict[tuple[str, str], str] | None = None
+) -> str:
     value = str(node.get("type") or node.get("member_type") or "").casefold()
     if value in {"company", "corporate"}:
         return "Company"
     if value in {"individual", "person"}:
         return "Individual"
+    if entity_types:
+        return entity_types.get(_identity_key(node), "Unknown")
     return "Unknown"
 
 
@@ -289,7 +347,10 @@ def _round(value: float | None) -> float | None:
 
 
 def _identity_key(row: dict[str, Any]) -> tuple[str, str]:
-    return (str(row.get("case_common_id") or ""), str(row.get("name") or "").casefold())
+    case_common_id = row.get("case_common_id")
+    if case_common_id not in (None, ""):
+        return ("case_common_id", str(case_common_id))
+    return ("name", str(row.get("name") or "").casefold())
 
 
 def _validate_evidence(value: dict[str, Any]) -> None:
