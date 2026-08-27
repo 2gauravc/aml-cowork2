@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from src.agents.graph import run_cdd_agent_state
 from src.agents.qa import answer_cdd_question
+from src.agents.nodes import unwrap_ownership
 from src.tools.case_finder import find_test_cases
 from src.tools.csp_assessment import assess_csp_address
 from src.tools.customer_static import get_customer_static_by_name
@@ -91,6 +92,10 @@ class CSPAddressArgs(BaseModel):
         default=None,
         description="Address to assess. Omit only when the active CDD already has a registered address.",
     )
+
+
+class UnwrapOwnershipArgs(BaseModel):
+    pass
     company_name: str | None = Field(
         default=None,
         description="Optional legal company name; defaults to the active CDD customer name.",
@@ -135,6 +140,10 @@ Available workflows:
 - Use get_company_members_by_name for directors/shareholders/members.
 - Use get_company_org_chart_by_name for ownership/org chart information.
 - Use run_full_cdd_pipeline for a full CDD run.
+- Use unwrap_ownership for an explicit ownership/UBO request after a CDD state exists.
+  When its outcome is incomplete or conflicting, report any returned corporate
+  shareholders as retained/direct evidence, not as confirmed ultimate ownership.
+  Never say there are no corporate shareholders when the tool returns one.
 - Use generate_pdf only after a CDD exists.
 - Use get_document_information for any question about required, missing, uploaded,
   available, pending, matched, or processed documents and ID&V. It is the
@@ -328,6 +337,8 @@ def _execute_tool_call(name: str, args: dict[str, Any], session: dict[str, Any])
             )
         if name == "run_full_cdd_pipeline":
             return _run_full_cdd_tool(args=args, session=session)
+        if name == "unwrap_ownership":
+            return _run_ownership_tool(session=session)
         if name == "generate_pdf":
             return _generate_pdf_tool(session=session)
         if name == "get_document_information":
@@ -395,6 +406,12 @@ def _tool_specs() -> list[StructuredTool]:
             description="Run the full CDD pipeline for a company and jurisdiction.",
             func=lambda **kwargs: kwargs,
             args_schema=FullCddArgs,
+        ),
+        StructuredTool.from_function(
+            name="unwrap_ownership",
+            description="Unwrap ownership from retained registry-document or KYC ownership evidence. Returns a neutral ownership assessment, UBO list, corporate shareholders over 10%, and any review gaps.",
+            func=lambda: {},
+            args_schema=UnwrapOwnershipArgs,
         ),
         StructuredTool.from_function(
             name="generate_pdf",
@@ -732,6 +749,49 @@ def _run_full_cdd_tool(*, args: dict[str, Any], session: dict[str, Any]) -> dict
     }
 
 
+def _run_ownership_tool(*, session: dict[str, Any]) -> dict[str, Any]:
+    state = session.get("graph_state")
+    if not isinstance(state, dict) or not state.get("cdd"):
+        return {"error": {"message": "Start or load a CDD case before unwrapping ownership."}}
+    result = unwrap_ownership(state)
+    prior_ids = {item.get("assessment_id") for item in state.get("assessments", []) if item.get("assessment_type") == "ownership_unwrap"}
+    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "ownership_unwrap"]
+    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_ids]
+    state.setdefault("evidence", []).extend(result.get("evidence") or [])
+    state.setdefault("assessments", []).extend(result.get("assessments") or [])
+    state.setdefault("findings", []).extend(result.get("findings") or [])
+    state["cdd"] = result.get("cdd") or state["cdd"]
+    state["orchestration"] = result.get("orchestration") or state.get("orchestration", {})
+    sync_case_status(state)
+    assessment = result["assessments"][0]
+    corporate_shareholders = assessment["corporate_shareholders_over_10_percent"]
+    provisional = assessment["outcome"] in {"incomplete", "conflicting_sources"}
+    return {
+        "outcome": assessment["outcome"],
+        "ubo_list": assessment["ubo_list"],
+        "corporate_shareholders_over_10_percent": corporate_shareholders,
+        "retained_corporate_shareholders_over_10_percent": corporate_shareholders if provisional else [],
+        "corporate_shareholder_status": "retained_not_fully_unwrapped" if provisional and corporate_shareholders else "confirmed",
+        "conclusion": _ownership_conclusion(assessment),
+        "information_gaps": assessment["unresolved_branches"],
+        "assessment_id": assessment["assessment_id"],
+    }
+
+
+def _ownership_conclusion(assessment: dict[str, Any]) -> str:
+    corporates = assessment.get("corporate_shareholders_over_10_percent") or []
+    if assessment.get("outcome") in {"incomplete", "conflicting_sources"} and corporates:
+        names = ", ".join(
+            f"{item.get('name')} ({item.get('effective_shareholding_percent')}%)"
+            for item in corporates
+        )
+        return (
+            "Ownership cannot be confirmed until the reconciliation issues are resolved. "
+            f"Retained direct corporate shareholder evidence: {names}."
+        )
+    return "Ownership result is based on the retained evidence and assessment outcome."
+
+
 def _generate_pdf_tool(*, session: dict[str, Any]) -> dict[str, Any]:
     state = session.get("graph_state") or {}
     if not state.get("cdd"):
@@ -749,7 +809,7 @@ def _record_tool_result(session: dict[str, Any], tool_name: str, result: dict[st
         return
 
     session.setdefault("tool_results", []).append({"tool": tool_name, "data": result})
-    if tool_name == "list_jurisdictions":
+    if tool_name in {"list_jurisdictions", "unwrap_ownership"}:
         return
     state = session.get("graph_state")
     if not isinstance(state, dict):

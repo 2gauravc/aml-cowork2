@@ -1,0 +1,12 @@
+id: standard_company_cdd
+version: 1
+required_outcomes:
+  - company_profile
+  - unwrapped_ownership
+  - ubo_list
+  - corporate_shareholders_over_10_percent
+priority:
+  - company_profile
+  - unwrapped_ownership
+  - ubo_list
+  - corporate_shareholders_over_10_percent

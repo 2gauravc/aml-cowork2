@@ -34,6 +34,7 @@ from src.agents.nodes import (
     assess_risk_rating,
     assess_shell_company_risk,
     digital_footprint_assessment,
+    unwrap_ownership,
 )
 from src.agents.state import new_cdd_state
 from src.agents.qa import answer_cdd_question
@@ -66,10 +67,12 @@ from src.utils.legacy_cdd_state import (
     migrate_legacy_csp_address,
     migrate_legacy_digital_footprint,
     migrate_legacy_risk_flags,
+    migrate_legacy_orchestration,
 )
 from src.utils.adverse_news_view import adverse_news_view
 from src.utils.csp_view import csp_view
 from src.utils.digital_footprint_view import digital_footprint_view
+from src.utils.ownership_view import ownership_view
 from src.utils.environment import load_application_env
 from src.utils.s3_documents import (
     download_document_from_s3,
@@ -201,6 +204,10 @@ class ShellCompanyRiskRequest(BaseModel):
 
 
 class RiskRatingRequest(BaseModel):
+    session_id: str
+
+
+class OwnershipUnwrapRequest(BaseModel):
     session_id: str
 
 
@@ -423,6 +430,46 @@ async def extract_standalone_document(file: UploadFile = File(...)) -> dict[str,
         ) from exc
     finally:
         path.unlink(missing_ok=True)
+
+
+@app.post("/api/ownership/documents/upload")
+async def upload_ownership_document(
+    session_id: str = Form(...), file: UploadFile = File(...)
+) -> dict[str, Any]:
+    """Retain an analyst registry document as ownership evidence for the harness."""
+    session = SESSIONS.get(session_id)
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
+    if file.content_type not in STANDALONE_DOCUMENT_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported ownership-document format")
+    data = await file.read()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Upload must be a document no larger than 20 MB")
+    if not _is_supported_document_content(data, file.content_type):
+        raise HTTPException(status_code=400, detail="Uploaded file does not match its declared document type")
+    suffix = {"application/pdf": ".pdf", "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}[file.content_type]
+    staging = DOCUMENT_EXTRACTION_STAGING_DIR / session_id
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / f"{uuid.uuid4()}-ownership{suffix}"
+    path.write_bytes(data)
+    try:
+        artifact = {"pdf_path": str(path), "source": "Analyst registry document"}
+        classification = await asyncio.to_thread(classify_document, path)
+        if classification.get("document_type") != "registry_document":
+            raise HTTPException(status_code=422, detail="Ownership evidence must be a registry document")
+        extract = await asyncio.to_thread(extract_document, artifact, classification=classification)
+    except HTTPException:
+        path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Unable to extract ownership evidence: {exc}") from exc
+    evidence_id = f"evidence:ownership-document:{uuid.uuid4().hex}"
+    state.setdefault("evidence", []).append({"evidence_id": evidence_id, "source": "Analyst registry document", "tool": "unwrap_ownership_document", "description": "Analyst-provided registry document extracted for ownership unwrapping", "collected_at": datetime.now(UTC).isoformat(), "relevance_tags": ["ownership", "registry_document", "analyst_upload"], "data": {"artifact": artifact, "classification": classification, "entities": [], "ownership_relationships": extract.get("ownership_relationships") or [], "source_citations": [{"document": file.filename or path.name}], "extraction_limitations": []}})
+    return {**_response(session, status="ownership_document_retained"), "ownership_evidence_id": evidence_id}
 
 
 @app.post("/api/idv-document-generation/generate")
@@ -670,6 +717,28 @@ async def run_risk_rating(request: RiskRatingRequest) -> dict[str, Any]:
     return _response(session, status="risk_rating_completed")
 
 
+@app.post("/api/ownership/unwrap")
+async def run_ownership_unwrap(request: OwnershipUnwrapRequest) -> dict[str, Any]:
+    """Run the document-first ownership skill against retained case evidence."""
+    session = SESSIONS.get(request.session_id)
+    state = _active_cdd_state(session)
+    if not state or not state.get("cdd"):
+        raise HTTPException(status_code=404, detail="No CDD result for this session")
+    if session.get("demo_mode"):
+        return _response(session, status="demo_read_only")
+    result = await asyncio.to_thread(unwrap_ownership, state)
+    prior_ids = {item.get("assessment_id") for item in state.get("assessments", []) if item.get("assessment_type") == "ownership_unwrap"}
+    state["assessments"] = [item for item in state.get("assessments", []) if item.get("assessment_type") != "ownership_unwrap"]
+    state["findings"] = [item for item in state.get("findings", []) if item.get("assessment_id") not in prior_ids]
+    _append_cdd_records(state, "evidence", result.get("evidence") or [], "evidence_id")
+    _append_cdd_records(state, "assessments", result.get("assessments") or [], "assessment_id")
+    _append_cdd_records(state, "findings", result.get("findings") or [], "finding_id")
+    state["cdd"] = result.get("cdd") or state["cdd"]
+    state["orchestration"] = result.get("orchestration") or state.get("orchestration", {})
+    sync_case_status(state)
+    return _response(session, status="ownership_unwrapped")
+
+
 @app.post("/api/case-review/decision")
 async def record_case_review_decision(
     request: CaseReviewDecisionRequest,
@@ -811,6 +880,7 @@ def migrate_completed_cdd_state(graph_state: dict[str, Any]) -> dict[str, Any]:
         "document_state": migrate_legacy_document_state(graph_state),
         "case_checker": migrate_legacy_case_assessment_summary(graph_state),
         "runtime_telemetry": migrate_legacy_runtime_telemetry(graph_state),
+        "orchestration": migrate_legacy_orchestration(graph_state),
     }
     return {"changed": any(routines.values()), "routines": routines}
 
@@ -1219,6 +1289,7 @@ def _cdd_state_view(state: dict[str, Any]) -> dict[str, Any]:
         "adverse_news": adverse_news_view(state),
         "csp_address": csp_view(state),
         "digital_footprint": digital_footprint_view(state),
+        "unwrap_ownership": ownership_view(state),
     }
     return view
 
@@ -1230,6 +1301,7 @@ def _active_cdd_state(session: dict[str, Any] | None) -> dict[str, Any] | None:
     migrate_legacy_document_state(state)
     migrate_legacy_case_assessment_summary(state)
     migrate_legacy_runtime_telemetry(state)
+    migrate_legacy_orchestration(state)
     return state
 
 

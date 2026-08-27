@@ -1,0 +1,20 @@
+schema: tool_view/v1
+views:
+  summary:
+    title: Ownership unwrapping
+    sections: [assessment, findings]
+  detailed:
+    title: Ownership and control
+    sections: [assessment, findings, evidence]
+assessment:
+  extension:
+    metrics:
+      - label: UBOs identified
+        value: context.ubo_count
+      - label: Corporate shareholders >10%
+        value: context.corporate_shareholder_count
+finding:
+  extension:
+    tags:
+      - label: Reason
+        value: finding.ownership_review.reason

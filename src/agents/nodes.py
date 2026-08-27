@@ -35,6 +35,7 @@ from src.tools.evidence_quality import EvidenceQualityError, evaluate_evidence_q
 from src.tools.other_risk_factors import OtherRiskFactorsError, evaluate_other_risk_factors
 from src.tools.shell_company_risk import ShellCompanyRiskError, evaluate_shell_company_risk
 from src.tools.risk_rating import RiskRatingError, evaluate_risk_rating
+from src.tools.unwrap_ownership import unwrap_ownership as evaluate_ownership_unwrap
 from src.tools.members import _fetch_company_members
 from src.tools.orgchart import _fetch_company_org_chart
 from src.utils.create_case import BASE_URL, CLIENT_ID, CLIENT_SECRET, KycClient, create_company_case
@@ -48,6 +49,7 @@ from src.utils.s3_documents import (
     upload_document_to_s3,
 )
 from src.utils.kyc_cache import CacheSubject, company_cache_subject
+from src.utils.cdd_policy import evaluate_case_actions
 
 
 def collect_required_inputs(state: CDDState) -> dict[str, Any]:
@@ -419,6 +421,31 @@ def build_ownership_and_control(state: CDDState) -> dict[str, Any]:
     ownership["missing_items"] = missing_items
     ownership["notes"] = []
     return {"cdd": cdd}
+
+
+def unwrap_ownership(state: CDDState) -> dict[str, Any]:
+    """Run the document-first ownership skill and project its neutral result."""
+    result = evaluate_ownership_unwrap(state)
+    cdd = deepcopy(state.get("cdd", {}))
+    ownership = cdd.setdefault("ownership_and_control", {})
+    assessment = result["assessments"][0]
+    resolved = assessment.get("outcome") in {"complete", "listed_company_exception"}
+    if resolved:
+        ownership["ubos"] = assessment.get("ubo_list") or []
+        ownership["shareholders_over_10_percent"] = assessment.get(
+            "corporate_shareholders_over_10_percent"
+        ) or []
+    else:
+        # A failed reconciliation must not erase previously retained CDD facts.
+        ownership["retained_ubo_claims"] = assessment.get("retained_ubo_claims") or ownership.get("ubos") or []
+    ownership["status"] = "complete" if resolved else "incomplete"
+    ownership["missing_items"] = ["ownership evidence"] if ownership["status"] == "incomplete" else []
+    orchestration = deepcopy(state.get("orchestration") or {})
+    history = list(orchestration.get("execution_history") or [])
+    history.append({"action": "unwrap_ownership", "assessment_id": assessment["assessment_id"], "outcome": assessment["outcome"], "completed_at": assessment["created_at"]})
+    plan = evaluate_case_actions({**state, "assessments": [*state.get("assessments", []), *result["assessments"]], "cdd": cdd})
+    orchestration.update({"policy_id": plan["policy_id"], "current_action": None, "completed_actions": [*orchestration.get("completed_actions", []), "unwrap_ownership"], "eligible_actions": plan["eligible_actions"], "information_gaps": assessment.get("unresolved_branches") or plan["information_gaps"], "execution_history": history})
+    return {**result, "cdd": cdd, "orchestration": orchestration}
 
 
 def establish_idv_requirements(state: CDDState) -> dict[str, Any]:

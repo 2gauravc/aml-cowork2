@@ -1,0 +1,35 @@
+name: unwrap-ownership
+input:
+  required: [company_identity]
+  evidence_options: [registry_document, kyc_members, kyc_org_chart]
+  requires: [company_identity]
+  produces: [unwrapped_ownership, ubo_list, corporate_shareholders_over_10_percent]
+evidence:
+  schema: ownership_source_evidence/v1
+  required: [evidence_id, entities, ownership_relationships, source_citations, extraction_limitations]
+assessment:
+  schema: ownership_unwrap_assessment/v1
+  required:
+    - assessment_id
+    - source_evidence_ids
+    - outcome
+    - ownership_paths
+    - ubo_list
+    - corporate_shareholders_over_10_percent
+    - unresolved_branches
+    - limitations
+  outcome_values: [complete, listed_company_exception, incomplete, unavailable, conflicting_sources]
+  reconciliation:
+    direct_ownership_total_percent: 100
+    tolerance_percent: 0.01
+finding:
+  category: ownership_review
+  policy:
+    confidence: Evidence quality and any unresolved branch determine confidence.
+    severity: Ownership ambiguity requires review but is not itself a financial-crime conclusion.
+  overlay:
+    schema: ownership_review/v1
+    required: [reason, unresolved_branches]
+    properties:
+      reason: {type: string}
+      unresolved_branches: {type: array}

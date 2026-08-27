@@ -7,6 +7,28 @@ from typing import Any
 from uuid import uuid4
 
 
+def migrate_legacy_orchestration(state: dict[str, Any]) -> bool:
+    """Add non-factual harness bookkeeping to historical CDD snapshots."""
+    defaults = {
+        "policy_id": "standard_company_cdd",
+        "eligible_actions": [],
+        "planned_actions": [],
+        "completed_actions": [],
+        "information_gaps": [],
+        "execution_history": [],
+    }
+    orchestration = state.get("orchestration")
+    if not isinstance(orchestration, dict):
+        state["orchestration"] = defaults
+        return True
+    changed = False
+    for key, value in defaults.items():
+        if key not in orchestration:
+            orchestration[key] = value
+            changed = True
+    return changed
+
+
 def migrate_legacy_adverse_news(state: dict[str, Any]) -> bool:
     """Normalize retained Adverse News artifacts on load without inventing facts."""
     evidence = state.setdefault("evidence", [])

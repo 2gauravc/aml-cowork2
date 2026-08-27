@@ -210,6 +210,7 @@ class CDDState(TypedDict, total=False):
     assessments: Annotated[list[dict[str, Any]], add]
     case_status: CaseStatus
     case_checker_summary: dict[str, Any] | None
+    orchestration: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]
 
 
@@ -259,6 +260,14 @@ def new_cdd_state(
                 "notes": [],
                 "required_individuals": [],
             },
+        },
+        "orchestration": {
+            "policy_id": "standard_company_cdd",
+            "eligible_actions": [],
+            "planned_actions": [],
+            "completed_actions": [],
+            "information_gaps": [],
+            "execution_history": [],
         },
         "documents": [],
         "evidence": [],

@@ -41,6 +41,21 @@
         }
       },
       "required": ["full_address"]
+    },
+    "ownership_relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "owner_name": {"type": "string"},
+          "owner_type": {"type": "string", "enum": ["Individual", "Company", "Unknown"]},
+          "direct_shareholding_percent": {"type": "number"},
+          "effective_shareholding_percent": {"type": "number"},
+          "source_page": {"type": "string"}
+        },
+        "required": ["owner_name", "owner_type", "direct_shareholding_percent", "effective_shareholding_percent", "source_page"]
+      }
     }
   },
   "required": [
@@ -53,6 +68,7 @@
     "paid_up_capital",
     "activity_type",
     "incorporation_date",
-    "registered_address"
+    "registered_address",
+    "ownership_relationships"
   ]
 }
