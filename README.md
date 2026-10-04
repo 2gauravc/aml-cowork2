@@ -1,6 +1,7 @@
 # How to get started
 
-Open the application at [http://54.88.224.180/](http://54.88.224.180/).
+For installation and local run instructions, see [install.md](install.md). You
+will need AWS account credentials.
 
 ## Select a case
 
