@@ -12,15 +12,20 @@ python -m pip install -r requirements.lock
 
 ### Set up `.env`
 
+For the fixture-backed Demo Mode, leave `DEMO_MODE=true` and do not add any
+credentials or S3 settings.
+
+To run live workflows - continue:
+
 Copy the example file, then add the credentials needed for live mode. Keep
 `.env` private: it is ignored by Git and must never be committed.
 
 ```bash
 cp .env.example .env
 ```
+Set `DEMO_MODE=false`
 
-Set `DEMO_MODE=false` to run live workflows. The required credentials and their
-sources are:
+The required credentials and their sources are:
 
 - `KYCCLIENTID` and `KYCCLIENTSECRET` — request KYC sandbox/API access from
   [Know Your Customer Developers](https://knowyourcustomer.com/developers/access/).
