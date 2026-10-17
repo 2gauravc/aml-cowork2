@@ -1,9 +1,23 @@
 # Unwrap ownership
 
-Assess ownership and control using retained, attributable evidence. Prefer an
-analyst-provided registry document when it supplies the necessary facts. Use
-KYC members or an ownership chart only to fill a stated gap; retain both
-sources and do not silently resolve a conflict.
+Assess ownership and control using retained, attributable evidence. Apply this
+evidence-source hierarchy when selecting and weighing ownership information:
+
+1. KYC API: the primary source for structured ownership relationships and
+   stable entity identifiers.
+2. Registry document: a primary or corroborating source when it is current,
+   authoritative, and sufficiently detailed.
+3. Customer-provided declaration or other document: supplementary evidence
+   that may fill a gap or explain a discrepancy.
+
+Use the highest available applicable source, but retain every source claim and
+its provenance. 
+When sources agree, treat them as corroborating. 
+When they conflict, do not silently replace or discard the lower-ranked source. 
+
+Record a reconciliation gap in the assessment and create a reconciliation finding for
+human review. A customer declaration or other supplementary document must not
+independently resolve a material ownership conflict.
 
 Calculate effective shareholding deterministically across supported ownership
 paths. A UBO is a natural person with strictly more than 25% effective

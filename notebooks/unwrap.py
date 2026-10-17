@@ -25,8 +25,8 @@ BASE_URL = os.getenv("KYCBASEURL", "https://api.knowyourcustomer.dev")
 CLIENT_ID = os.getenv("KYCCLIENTID")
 CLIENT_SECRET = os.getenv("KYCCLIENTSECRET")
 
-ISO = "SG"
-QUERY = "SC ENGINEERING PRIVATE LIMITED"
+ISO = "CN"
+QUERY = "Yangtze River Manufacturing Co Ltd"
 
 
 class KycClient:
